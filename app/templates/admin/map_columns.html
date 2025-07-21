@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Passo 2: Mapeamento de Colunas</h2>
+    <p>Associe as colunas do seu arquivo aos campos do sistema. O campo <strong>CPF</strong> é obrigatório.</p>
+    
+    <!-- Alerta para erros de validação -->
+    <div id="validation-alert" class="alert alert-danger" style="display: none;"></div>
+
+    <form action="{{ url_for('main.upload_step2_process') }}" method="POST" id="mapping-form">
+        <input type="hidden" name="temp_filename" value="{{ temp_filename }}">
+        <input type="hidden" name="produto_id" value="{{ produto_id }}">
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 5%;">Incluir</th>
+                        <th style="width: 5%;">Coluna</th>
+                        <th style="width: 40%;">Nome da Coluna (do Arquivo)</th>
+                        <th style="width: 20%;">Mapear para Campo do Sistema</th>
+                        <th>Exemplo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for i, header in enumerate(headers) %}
+                    <tr>
+                        <td class="text-center">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input include-toggle" type="checkbox" role="switch" name="include_column_{{ i }}" checked>
+                            </div>
+                        </td>
+                        <td class="text-center">{{ i }}</td>
+                        <td class="fw-bold">
+                            {{ header }}
+                            <input type="hidden" name="header_name_{{ i }}" value="{{ header }}">
+                        </td>
+                        <td>
+                            <select name="mapping_{{ i }}" class="form-select form-select-sm mapping-select">
+                                <option value="Ignorar">-- Ignorar esta coluna --</option>
+                                {% for field in system_fields %}
+                                    <option value="{{ field }}" 
+                                    {% if existing_mapping and existing_mapping.get(field) == header %}
+                                        selected
+                                    {% elif not existing_mapping and field.lower() in header.lower() %}
+                                        selected
+                                    {% endif %}>
+                                        {{ field | replace('_', ' ') | title }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td><small class="text-muted">{{ sample_rows[0].get(header, '') if sample_rows else '' }}</small></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-body bg-light">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="save_layout" id="save_layout">
+                    <label class="form-check-label" for="save_layout">
+                        <strong>Salvar este mapeamento como um novo Layout para uso futuro</strong>
+                    </label>
+                </div>
+                <div id="layout-name-container" style="display: none;">
+                    <input type="text" name="layout_name" class="form-control" placeholder="Dê um nome para este layout (ex: Mailing Banco X - Consignado)">
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center">
+            <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-secondary btn-lg">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-lg">Validar e Importar Leads</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saveLayoutCheckbox = document.getElementById('save_layout');
+    const layoutNameContainer = document.getElementById('layout-name-container');
+
+    if (saveLayoutCheckbox) {
+        saveLayoutCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                layoutNameContainer.style.display = 'block';
+                layoutNameContainer.querySelector('input').required = true;
+            } else {
+                layoutNameContainer.style.display = 'none';
+                layoutNameContainer.querySelector('input').required = false;
+            }
+        });
+    }
+
+    // ===== LÓGICA DE VALIDAÇÃO COM CORREÇÃO DE BUG VISUAL =====
+    const form = document.getElementById('mapping-form');
+    const validationAlert = document.getElementById('validation-alert');
+
+    form.addEventListener('submit', function(event) {
+        // Reseta o estado de erro
+        validationAlert.style.display = 'none';
+        validationAlert.textContent = '';
+        document.querySelectorAll('.mapping-select').forEach(select => {
+            select.classList.remove('is-invalid');
+        });
+
+        const selectedValues = new Map();
+        let hasError = false;
+        let firstInvalidField = null;
+
+        document.querySelectorAll('.mapping-select').forEach(select => {
+            const selectedValue = select.value;
+            if (selectedValue !== 'Ignorar') {
+                if (selectedValues.has(selectedValue)) {
+                    hasError = true;
+                    const originalSelect = selectedValues.get(selectedValue);
+                    
+                    select.classList.add('is-invalid');
+                    originalSelect.classList.add('is-invalid');
+                    
+                    if (!firstInvalidField) {
+                        firstInvalidField = originalSelect;
+                    }
+
+                    validationAlert.textContent = `Erro: O campo do sistema "${selectedValue.replace(/_/g, ' ').toUpperCase()}" foi mapeado para mais de uma coluna.`;
+                } else {
+                    selectedValues.set(selectedValue, select);
+                }
+            }
+        });
+
+        // Validação dos campos obrigatórios
+        const requiredFields = ['cpf']; // Adicione outros campos aqui se necessário
+        for (const field of requiredFields) {
+            if (!selectedValues.has(field)) {
+                hasError = true;
+                // Encontra o dropdown correspondente para destacar, se possível
+                document.querySelectorAll('.mapping-select').forEach(select => {
+                    if (select.querySelector(`option[value="${field}"]`)) {
+                        // Não marca como inválido, pois não é um erro de seleção, mas de omissão.
+                    }
+                });
+                validationAlert.textContent = `Erro: O campo obrigatório "${field.toUpperCase()}" não foi mapeado.`;
+                break; // Mostra um erro de cada vez
+            }
+        }
+
+        if (hasError) {
+            event.preventDefault(); // Impede o envio do formulário
+            validationAlert.style.display = 'block'; // Mostra o alerta de erro
+            
+            // Foca no primeiro campo com erro e rola a tela até ele
+            if (firstInvalidField) {
+                firstInvalidField.focus();
+            } else {
+                window.scrollTo(0, 0); // Rola para o topo se não houver um campo específico
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

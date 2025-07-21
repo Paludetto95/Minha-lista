@@ -1,0 +1,30 @@
+<!-- app/templates/admin/manage_layouts.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Gerenciamento de Layouts</h2>
+    <p>Esta página está funcionando!</p>
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Nome do Layout</th>
+                <th>Produto Associado</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for layout in layouts %}
+            <tr>
+                <td>{{ layout.name }}</td>
+                <td>{{ layout.produto.name if layout.produto else 'N/A' }}</td>
+                <td>
+                    <!-- Adicionar botões de ação aqui depois -->
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

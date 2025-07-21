@@ -1,0 +1,100 @@
+<!-- templates/admin/manage_tabulations.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Gerir Tabulações</h2>
+
+    <!-- Formulário para adicionar nova tabulação -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header">
+            Adicionar Nova Tabulação
+        </div>
+        <div class="card-body">
+            <!-- ===== FORMULÁRIO ATUALIZADO AQUI ===== -->
+            <form action="{{ url_for('main.add_tabulation') }}" method="POST">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label for="name" class="form-label fw-bold">Nome da Tabulação</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="Ex: Venda, Não Atendeu" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="color" class="form-label fw-bold">Cor do Botão</label>
+                        <input type="color" class="form-control form-control-color" id="color" name="color" value="#0d6efd" title="Escolha uma cor">
+                    </div>
+                    <!-- NOVO: Campo para dias de reciclagem (inicialmente oculto) -->
+                    <div class="col-md-2" id="recycle-days-container" style="display: none;">
+                        <label for="recycle_in_days" class="form-label fw-bold">Reciclar em (dias)</label>
+                        <input type="number" class="form-control" name="recycle_in_days" min="1" placeholder="Ex: 30">
+                    </div>
+                    <div class="col-md-3 d-flex flex-column">
+                         <!-- NOVO: Checkbox para ativar a reciclagem -->
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="is_recyclable" id="is_recyclable_check">
+                            <label class="form-check-label" for="is_recyclable_check">
+                                Reciclar esta tabulação
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Adicionar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de tabulações existentes -->
+    <div class="card shadow-sm">
+        <div class="card-header">
+            Tabulações Existentes
+        </div>
+        <div class="card-body">
+            {% if tabulations %}
+            <ul class="list-group">
+                {% for tab in tabulations %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="d-inline-block" style="width: 20px; height: 20px; background-color: {{ tab.color }}; border-radius: 50%; margin-right: 10px; vertical-align: middle;"></span>
+                        <span>{{ tab.name }}</span>
+                        <!-- NOVO: Exibe a informação de reciclagem se estiver ativa -->
+                        {% if tab.is_recyclable %}
+                            <small class="text-muted d-block ms-4 ps-2"><i class="fas fa-recycle"></i> Recicla em {{ tab.recycle_in_days or '0' }} dias</small>
+                        {% endif %}
+                    </div>
+                    <form action="{{ url_for('main.delete_tabulation', id=tab.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer eliminar esta tabulação?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-muted">Ainda não existem tabulações. Adicione uma acima.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<!-- NOVO: Script para mostrar/ocultar o campo de dias -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isRecyclableCheckbox = document.getElementById('is_recyclable_check');
+    const recycleDaysContainer = document.getElementById('recycle-days-container');
+    const recycleDaysInput = recycleDaysContainer.querySelector('input');
+
+    if (isRecyclableCheckbox) {
+        isRecyclableCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                recycleDaysContainer.style.display = 'block';
+                recycleDaysInput.required = true; // Torna o campo de dias obrigatório se a reciclagem for marcada
+                recycleDaysInput.focus();
+            } else {
+                recycleDaysContainer.style.display = 'none';
+                recycleDaysInput.required = false;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

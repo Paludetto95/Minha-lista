@@ -1,0 +1,33 @@
+# Ambientes Virtuais
+venv/
+.venv/
+env/
+.env/
+
+# Arquivos de ambiente - MUITO IMPORTANTE
+.env
+
+# Arquivos temporários e de cache do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pasta de uploads temporários
+temp_uploads/
+
+# Arquivos de banco de dados SQLite (bom ter, caso use para testes)
+*.db
+*.sqlite3
+
+# Arquivos de configuração de IDEs
+.vscode/
+.idea/
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Pasta de build do Flask-Migrate
+# (A pasta 'migrations' DEVE ser enviada, mas a 'build' não)
+migrations/versions/build/

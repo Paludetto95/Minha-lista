@@ -1,0 +1,265 @@
+<!-- templates/consultor_dashboard.html (VERSÃO FINAL COM ActivityLog) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Painel do Consultor</h2>
+        {% if leads_em_atendimento > 0 %}
+            <a href="{{ url_for('main.atendimento') }}" class="btn btn-success btn-lg">
+                <i class="fas fa-headset"></i> Iniciar Atendimento ({{ leads_em_atendimento }})
+            </a>
+        {% endif %}
+    </div>
+
+    <!-- ESTRUTURA DE ABAS -->
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pegar-leads-tab" data-bs-toggle="tab" data-bs-target="#pegar-leads" type="button" role="tab" aria-controls="pegar-leads" aria-selected="true">Pegar Novos Leads</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico" type="button" role="tab" aria-controls="historico" aria-selected="false">Histórico de Atendimentos</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="myTabContent">
+        <!-- ABA 1: PEGAR NOVOS LEADS -->
+        <div class="tab-pane fade show active" id="pegar-leads" role="tabpanel" aria-labelledby="pegar-leads-tab">
+            <div class="row mt-3">
+                <!-- Coluna de Informações e Limites -->
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header">
+                            <h5 class="mb-0">Meus Limites</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Carteira Atual <span class="badge bg-primary rounded-pill">{{ leads_em_atendimento }}</span></li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Limite da Carteira <span class="badge bg-secondary rounded-pill">{{ current_user.wallet_limit }}</span></li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Vagas na Carteira <span class="badge bg-success rounded-pill">{{ vagas_na_carteira if vagas_na_carteira > 0 else 0 }}</span></li>
+                            </ul>
+                            <hr>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Leads Pegos Hoje <span class="badge bg-primary rounded-pill">{{ leads_consumidos_hoje }}</span></li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Limite Diário <span class="badge bg-secondary rounded-pill">{{ current_user.daily_pull_limit }}</span></li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">Puxadas Restantes Hoje <span class="badge bg-success rounded-pill">{{ vagas_na_puxada_diaria if vagas_na_puxada_diaria > 0 else 0 }}</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna para Pegar Novos Leads com Filtros -->
+                <div class="col-md-8 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header"><h5 class="mb-0">Encontrar Leads Disponíveis</h5></div>
+                        <div class="card-body d-flex flex-column">
+                            {% if vagas_na_carteira > 0 and vagas_na_puxada_diaria > 0 %}
+                                <form action="{{ url_for('main.pegar_leads_selecionados') }}" method="POST" id="pegar-leads-form">
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6"><label for="filtro-produto" class="form-label fw-bold">1. Selecione o Produto:</label><select id="filtro-produto" class="form-select"><option value="" selected disabled>-- Escolha um produto --</option></select></div>
+                                        <div class="col-md-6"><label for="filtro-estado" class="form-label fw-bold">2. Selecione o Estado:</label><select id="filtro-estado" class="form-select" disabled><option value="" selected disabled>-- Escolha um estado --</option></select></div>
+                                    </div>
+                                    <div id="lotes-container" class="mt-3" style="display: none;">
+                                        <hr><h6 class="mb-2">3. Informe a quantidade de leads a pegar:</h6>
+                                        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                            <table class="table table-sm table-striped">
+                                                <thead><tr><th>Produto</th><th>Estado</th><th class="text-center">Disponíveis</th><th style="width: 25%;" class="text-center">Qtd. a Pegar</th></tr></thead>
+                                                <tbody id="tabela-lotes">
+                                                    {% for mailing in mailings_disponiveis %}<tr data-produto="{{ mailing.produto_id }}" data-estado="{{ mailing.estado }}" style="display: none;"><td><span class="badge bg-info text-dark">{{ mailing.produto_nome }}</span></td><td><strong>{{ mailing.estado }}</strong></td><td class="text-center"><span class="badge bg-primary">{{ mailing.leads_disponiveis }}</span></td><td><input type="number" name="leads_{{ mailing.produto_id }}-{{ mailing.estado }}" class="form-control form-control-sm lead-input" min="0" max="{{ [mailing.leads_disponiveis, vagas_na_carteira, vagas_na_puxada_diaria]|min }}" placeholder="0"></td></tr>{% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {% if mailings_disponiveis %}<div class="mt-auto pt-3"><p class="text-end fw-bold">Total a pegar: <span id="total-a-pegar">0</span> / {{ [vagas_na_carteira, vagas_na_puxada_diaria]|min }}</p><button type="submit" class="btn btn-primary btn-lg w-100">Pegar Leads Selecionados</button></div>{% endif %}
+                                    </div>
+                                    <div id="sem-lotes-mensagem" class="alert alert-info text-center" style="display: none;">Não há lotes com leads novos disponíveis para esta seleção.</div>
+                                </form>
+                            {% else %}<div class="alert alert-warning text-center my-auto">Você atingiu um de seus limites para hoje (Carteira ou Puxada Diária).<br>Finalize os atendimentos atuais ou volte amanhã.</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA 2: HISTÓRICO DE ATENDIMENTOS -->
+        <div class="tab-pane fade" id="historico" role="tabpanel" aria-labelledby="historico-tab">
+            <div class="card mt-3 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Meu Histórico de Atendimentos</span>
+                    <form method="GET" action="{{ url_for('main.consultor_dashboard') }}" class="d-flex">
+                        <input type="hidden" name="tab" value="historico">
+                        <input class="form-control me-2" type="search" name="search_history" placeholder="Buscar por nome ou CPF..." value="{{ search_history or '' }}">
+                        <button class="btn btn-outline-secondary" type="submit">Buscar</button>
+                    </form>
+                </div>
+                <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                    <!-- ATUALIZADO: O loop agora itera sobre 'tabulated_history' (que são os logs) -->
+                    {% if tabulated_history %}
+                        <ul class="list-group list-group-flush">
+                            {% for log_entry in tabulated_history %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ log_entry.lead.nome_cliente }}</strong>
+                                    <small class="text-muted d-block">
+                                        {{ log_entry.lead.cpf }} - {{ log_entry.action_type }} em {{ log_entry.timestamp.strftime('%d/%m/%Y às %H:%M') }}
+                                    </small>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    {% if log_entry.tabulation %}
+                                    <span class="badge me-3" style="background-color: {{ log_entry.tabulation.color }}; color: white; padding: .5em .7em;" title="Tabulação: {{ log_entry.tabulation.name }}">
+                                        {% if log_entry.action_type == 'Reciclagem' %}
+                                            <i class="fas fa-recycle me-1"></i>
+                                        {% elif log_entry.action_type == 'Retabulação' %}
+                                            <i class="fas fa-edit me-1"></i>
+                                        {% endif %}
+                                        {{ log_entry.tabulation.name }}
+                                    </span>
+                                    {% endif %}
+                                    <!-- O botão de editar agora usa o ID do lead do log -->
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-lead-id="{{ log_entry.lead.id }}" data-lead-name="{{ log_entry.lead.nome_cliente }}">Editar</button>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-center text-muted">Nenhum histórico de atendimento encontrado.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Edição -->
+<div class="modal fade" id="editTabulationModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="editModalLabel">Editar Tabulação para </h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+      <form id="edit-form" method="POST">
+          <div class="modal-body">
+            <p>Selecione a nova tabulação para o cliente <strong id="lead-name-in-modal"></strong>.</p>
+            <div class="mb-3"><label for="new_tabulation_id" class="form-label">Nova Tabulação</label><select class="form-select" name="new_tabulation_id" required><option value="" disabled selected>Escolha uma opção...</option>{% for tab in all_tabulations %}<option value="{{ tab.id }}">{{ tab.name }}</option>{% endfor %}</select></div>
+          </div>
+          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar Alteração</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Lógica para a aba de Pegar Leads
+    const formPegarLeads = document.getElementById('pegar-leads-form');
+    if (formPegarLeads) {
+        const filtroProduto = document.getElementById('filtro-produto');
+        const filtroEstado = document.getElementById('filtro-estado');
+        const lotesContainer = document.getElementById('lotes-container');
+        const tabelaLotesBody = document.getElementById('tabela-lotes');
+        const todasAsLinhas = tabelaLotesBody.querySelectorAll('tr[data-produto]');
+        const mensagemSemLotes = document.getElementById('sem-lotes-mensagem');
+
+        const data = {};
+        todasAsLinhas.forEach(linha => {
+            const produtoId = linha.dataset.produto;
+            const produtoNome = linha.querySelector('.badge.bg-info').textContent;
+            const estado = linha.dataset.estado;
+            if (!data[produtoId]) {
+                data[produtoId] = { nome: produtoNome, estados: new Set() };
+            }
+            data[produtoId].estados.add(estado);
+        });
+
+        for (const produtoId in data) {
+            const option = document.createElement('option');
+            option.value = produtoId;
+            option.textContent = data[produtoId].nome;
+            filtroProduto.appendChild(option);
+        }
+
+        filtroProduto.addEventListener('change', function() {
+            const produtoSelecionado = this.value;
+            filtroEstado.innerHTML = '<option value="" selected disabled>-- Escolha um estado --</option>';
+            filtroEstado.disabled = false;
+            if (produtoSelecionado && data[produtoSelecionado]) {
+                Array.from(data[produtoSelecionado].estados).sort().forEach(estado => {
+                    const option = document.createElement('option');
+                    option.value = estado;
+                    option.textContent = estado;
+                    filtroEstado.appendChild(option);
+                });
+            }
+            filtroEstado.dispatchEvent(new Event('change'));
+        });
+
+        filtroEstado.addEventListener('change', function() {
+            const produtoSelecionado = filtroProduto.value;
+            const estadoSelecionado = this.value;
+            let linhasVisiveis = 0;
+
+            todasAsLinhas.forEach(linha => {
+                const linhaVisivel = linha.dataset.produto === produtoSelecionado && linha.dataset.estado === estadoSelecionado;
+                linha.style.display = linhaVisivel ? '' : 'none';
+                if (linhaVisivel) linhasVisiveis++;
+            });
+
+            if (produtoSelecionado && estadoSelecionado) {
+                lotesContainer.style.display = linhasVisiveis > 0 ? 'block' : 'none';
+                mensagemSemLotes.style.display = linhasVisiveis === 0 ? 'block' : 'none';
+            } else {
+                lotesContainer.style.display = 'none';
+                mensagemSemLotes.style.display = 'none';
+            }
+        });
+
+        const inputs = formPegarLeads.querySelectorAll('.lead-input');
+        const totalSpan = document.getElementById('total-a-pegar');
+        const vagasPuxada = {{ vagas_na_puxada_diaria if vagas_na_puxada_diaria > 0 else 0 }};
+        const vagasCarteira = {{ vagas_na_carteira if vagas_na_carteira > 0 else 0 }};
+        const limiteTotal = Math.min(vagasPuxada, vagasCarteira);
+
+        function updateTotal() {
+            let total = 0;
+            inputs.forEach(input => {
+                if (input.parentElement.parentElement.style.display !== 'none') {
+                    total += Number(input.value) || 0;
+                }
+            });
+            totalSpan.textContent = total;
+            if (total > limiteTotal) {
+                totalSpan.parentElement.classList.add('text-danger');
+            } else {
+                totalSpan.parentElement.classList.remove('text-danger');
+            }
+        }
+        inputs.forEach(input => { input.addEventListener('input', updateTotal); });
+        filtroEstado.addEventListener('change', updateTotal);
+    }
+
+    // Lógica para a aba de Histórico
+    const urlParams = new URLSearchParams(window.location.search);
+    const tab = urlParams.get('tab');
+    if (tab === 'historico') {
+        const historicoTabButton = document.getElementById('historico-tab');
+        if (historicoTabButton) { new bootstrap.Tab(historicoTabButton).show(); }
+    }
+
+    var editModal = document.getElementById('editTabulationModal');
+    if (editModal) {
+        editModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var leadId = button.getAttribute('data-lead-id');
+            var leadName = button.getAttribute('data-lead-name');
+            var form = editModal.querySelector('#edit-form');
+            var actionUrl = "{{ url_for('main.retabulate_lead', lead_id=0) }}".replace('0', leadId);
+            form.setAttribute('action', actionUrl);
+            var modalTitle = editModal.querySelector('.modal-title');
+            var leadNameInModal = editModal.querySelector('#lead-name-in-modal');
+            modalTitle.textContent = 'Editar Tabulação para ' + leadName;
+            leadNameInModal.textContent = leadName;
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Lotes de Importação de Mailings</h2>
+        
+        <!-- ===== BOTÃO DE EXPORTAÇÃO GLOBAL ADICIONADO AQUI ===== -->
+        <a href="{{ url_for('main.export_all_mailings') }}" class="btn btn-success">
+            <i class="fas fa-file-excel"></i> Exportar Relatório Completo
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            Histórico de Lotes Importados
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Arquivo</th>
+                            <th>Produto</th>
+                            <th>Importado por</th>
+                            <th class="text-center">Total de Leads</th>
+                            <th class="text-center">Não Trabalhados</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for batch in batches %}
+                        <tr>
+                            <td>{{ batch.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td><i class="fas fa-file me-2 text-muted"></i>{{ batch.filename }}</td>
+                            <td><span class="badge bg-info text-dark">{{ batch.produto_nome }}</span></td>
+                            <td>{{ batch.importer_name }}</td>
+                            <td class="text-center">{{ batch.total_leads }}</td>
+                            <td class="text-center"><span class="badge bg-warning text-dark rounded-pill">{{ batch.leads_novos }}</span></td>
+                            <td class="text-center">
+                                <!-- Ações por lote -->
+                                <a href="{{ url_for('main.export_batch', batch_id=batch.id) }}" class="btn btn-sm btn-outline-success" title="Exportar este lote">
+                                    <i class="fas fa-file-csv"></i>
+                                </a>
+                                <form action="{{ url_for('main.delete_batch', batch_id=batch.id) }}" method="POST" class="d-inline" onsubmit="return confirm('ATENÇÃO! Isso apagará PERMANENTEMENTE {{ batch.total_leads }} leads deste lote. Deseja continuar?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir este lote">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted p-4">Nenhum lote importado ainda.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Painel do Administrador</h2>
+
+    <div class="row">
+        <!-- Coluna para Upload de Leads -->
+        <div class="col-md-5 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title">Importar Nova Lista de Leads</h5>
+                    <p class="card-text">Envie um ficheiro .csv ou .xlsx.</p>
+                    
+                    <!-- Formulário de Upload -->
+                    <form action="{{ url_for('main.upload_step1') }}" method="post" enctype="multipart/form-data" class="mt-auto">
+                        <div class="mb-3">
+                            <label for="file" class="form-label fw-bold">1. Selecione o Arquivo</label>
+                            <input class="form-control" type="file" name="file" id="file" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="produto_id" class="form-label fw-bold">2. Selecione o Produto</label>
+                            <select name="produto_id" id="produto_id" class="form-select" required>
+                                <option value="" disabled selected>-- Escolha um produto --</option>
+                                {% for product in all_products %}
+                                <option value="{{ product.id }}">{{ product.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="layout_id" class="form-label">3. Usar Layout Salvo (Opcional)</label>
+                            <select name="layout_id" id="layout_id" class="form-select">
+                                <option value="">-- Mapear colunas manualmente --</option>
+                                {% for layout in all_layouts %}
+                                <option value="{{ layout.id }}">{{ layout.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-2">Próximo: Mapear Colunas</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Gerir -->
+        <div class="col-md-7 mb-4">
+            <!-- Card de Gestão -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    Área de Gestão
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <!-- ===== CORREÇÃO APLICADA AQUI ===== -->
+                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold">Gerir Mailings (Grupos de Leads)</a>
+                        <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action">Gerir Produtos</a>
+                        <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action">Gerir Layouts Salvos</a>
+                        <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action">Gerir Utilizadores</a>
+                        <a href="{{ url_for('main.manage_tabulations') }}" class="list-group-item list-group-item-action">Gerir Tabulações</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card de Últimos Leads Tabulados -->
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    Últimos Leads Tabulados
+                </div>
+                 <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                    {% for lead in tabulated_leads.items %}
+                        <li class="list-group-item">
+                            {{ lead.nome_cliente }} - <strong>{{ lead.tabulation.name if lead.tabulation else 'Sem Tabulação' }}</strong>
+                            <small class="text-muted d-block">por {{ lead.consultor.username if lead.consultor else 'N/A' }} em {{ lead.data_tabulacao.strftime('%d/%m/%Y') if lead.data_tabulacao }}</small>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-center text-muted py-4">Nenhum lead tabulado recentemente.</li>
+                    {% endfor %}
+                    </ul>
+                 </div>
+                 <!-- Paginação para os Leads Tabulados -->
+                 {% if tabulated_leads.pages > 1 %}
+                 <div class="card-footer bg-light">
+                    <nav aria-label="Paginação de leads tabulados">
+                        <ul class="pagination justify-content-center mb-0">
+                            <li class="page-item {% if not tabulated_leads.has_prev %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=tabulated_leads.prev_num) }}">Anterior</a>
+                            </li>
+
+                            {% for page_num in tabulated_leads.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                                {% if page_num %}
+                                    {% if tabulated_leads.page == page_num %}
+                                        <li class="page-item active" aria-current="page"><span class="page-link">{{ page_num }}</span></li>
+                                    {% else %}
+                                        <li class="page-item"><a class="page-link" href="{{ url_for('main.admin_dashboard', page=page_num) }}">{{ page_num }}</a></li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            <li class="page-item {% if not tabulated_leads.has_next %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=tabulated_leads.next_num) }}">Próximo</a>
+                            </li>
+                        </ul>
+                    </nav>
+                 </div>
+                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

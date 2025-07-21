@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .btn-whatsapp-custom {
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 6px 14px; background-color: #25D366; color: #fff;
+        border-radius: 20px; text-decoration: none; font-weight: 500;
+        font-size: 0.9rem; transition: all 0.2s ease-in-out; border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn-whatsapp-custom:hover {
+        transform: scale(1.05) translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); color: #fff;
+    }
+    .btn-whatsapp-custom.clicked {
+        background-color: #6c757d;
+        box-shadow: none;
+        transform: none;
+        cursor: not-allowed;
+    }
+    .details-table-container {
+        max-height: calc(100vh - 450px); 
+        min-height: 200px;
+        overflow-y: auto;
+    }
+    .tabulation-submit-btn {
+        transition: transform 0.1s ease-out;
+    }
+    .tabulation-submit-btn:hover {
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {% if lead %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h3 class="mb-0 me-3">Atendimento: {{ lead.nome_cliente or 'Lead sem nome' }}</h3>
+                <div class="whatsapp-buttons-container">
+                    {% for phone in phone_numbers %}
+                        <a href="https://wa.me/55{{ phone.number }}" target="_blank" class="btn-whatsapp-custom whatsapp-contact-btn" title="Enviar mensagem para {{ phone.label }}: {{ phone.number }}">
+                            <i class="fab fa-whatsapp me-2"></i> <span>{{ phone.label }}</span>
+                        </a>
+                    {% else %}
+                        <span class="text-muted">Nenhum telefone encontrado.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            
+            <h5><i class="fas fa-info-circle"></i> Detalhes do Lead</h5>
+            
+            <div class="table-responsive details-table-container">
+                <table class="table table-bordered table-striped table-sm">
+                    <tbody>
+                        {% for key, value in lead_details.items() %}
+                            <tr>
+                                <td style="width: 30%;" class="fw-bold">{{ key }}</td>
+                                <td>{{ value }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td>Nenhum detalhe disponível para este lead.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <hr class="my-4">
+
+            <!-- ===== ALTERAÇÃO APLICADA AQUI ===== -->
+            <form action="{{ url_for('main.atender_lead', lead_id=lead.id) }}" method="POST" id="tabulation-form" class="no-loader">
+                <h5 class="mb-3">Tabular Atendimento:</h5>
+                
+                <div id="phone-click-alert" class="alert alert-warning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i> Por favor, clique em pelo menos um botão de contato do WhatsApp antes de tabular.
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                    {% for tab in tabulations %}
+                        <button type="submit" class="btn text-white tabulation-submit-btn" 
+                                style="background-color: {{ tab.color }};" 
+                                name="tabulation_id" 
+                                value="{{ tab.id }}">
+                            {{ tab.name }}
+                        </button>
+                    {% endfor %}
+                </div>
+            </form>
+        </div>
+    </div>
+    {% else %}
+        <div class="alert alert-success text-center">
+            <h4 class="alert-heading">Parabéns!</h4>
+            <p>Você não tem mais leads pendentes na sua carteira.</p>
+            <hr>
+            <p class="mb-0">Volte para o seu painel para pegar novos leads.</p>
+            <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-primary mt-3">Voltar ao Painel</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const whatsappButtons = document.querySelectorAll('.whatsapp-contact-btn');
+    const tabulationForm = document.getElementById('tabulation-form');
+    const phoneClickAlert = document.getElementById('phone-click-alert');
+    let contactAttempted = false;
+
+    if (whatsappButtons.length === 0) {
+        contactAttempted = true;
+    }
+
+    whatsappButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            contactAttempted = true;
+            phoneClickAlert.style.display = 'none';
+
+            this.classList.add('clicked');
+            const icon = this.querySelector('i');
+            const textSpan = this.querySelector('span');
+            if (icon && textSpan) {
+                icon.className = 'fas fa-check me-2';
+                textSpan.textContent = 'Contatado';
+            }
+        });
+    });
+
+    if (tabulationForm) {
+        tabulationForm.addEventListener('submit', function(event) {
+            if (!contactAttempted) {
+                event.preventDefault();
+                phoneClickAlert.style.display = 'block';
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
