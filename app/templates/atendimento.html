@@ -1,3 +1,8 @@
+Claro\! Aqui está o seu código completo com a alteração aplicada para que os links do WhatsApp abram diretamente no aplicativo.
+
+Basta substituir o conteúdo do seu arquivo por este código atualizado.
+
+```html
 {% extends "base.html" %}
 
 {% block styles %}
@@ -43,7 +48,7 @@
                 <h3 class="mb-0 me-3">Atendimento: {{ lead.nome_cliente or 'Lead sem nome' }}</h3>
                 <div class="whatsapp-buttons-container">
                     {% for phone in phone_numbers %}
-                        <a href="https://wa.me/55{{ phone.number }}" target="_blank" class="btn-whatsapp-custom whatsapp-contact-btn" title="Enviar mensagem para {{ phone.label }}: {{ phone.number }}">
+                        <a href="whatsapp://send?phone=55{{ phone.number }}" class="btn-whatsapp-custom whatsapp-contact-btn" title="Enviar mensagem para {{ phone.label }}: {{ phone.number }}">
                             <i class="fab fa-whatsapp me-2"></i> <span>{{ phone.label }}</span>
                         </a>
                     {% else %}
@@ -75,7 +80,6 @@
 
             <hr class="my-4">
 
-            <!-- ===== ALTERAÇÃO APLICADA AQUI ===== -->
             <form action="{{ url_for('main.atender_lead', lead_id=lead.id) }}" method="POST" id="tabulation-form" class="no-loader">
                 <h5 class="mb-3">Tabular Atendimento:</h5>
                 
@@ -149,3 +153,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+```
