@@ -72,7 +72,6 @@ def index():
 @bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    # ATUALIZADO: A lógica desta rota foi alterada para buscar da ActivityLog.
     if not current_user.is_admin:
         flash('Acesso negado.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
@@ -80,7 +79,18 @@ def admin_dashboard():
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     
+    # ===== ALTERAÇÃO 1: Renomeia a variável =====
+    # Pega a página para a paginação
     page = request.args.get('page', 1, type=int)
+    # Cria o objeto de paginação e o armazena em 'recent_activity'
+    recent_activity = Lead.query.filter(Lead.status == 'Tabulado').order_by(Lead.data_tabulacao.desc()).paginate(page=page, per_page=15, error_out=False)
+
+    # ===== ALTERAÇÃO 2: Passa a variável correta para o template =====
+    return render_template('admin/admin_dashboard.html', 
+                           title='Dashboard do Admin',
+                           all_products=all_products,
+                           all_layouts=all_layouts,
+                           recent_activity=recent_activity) # <--- Passa
     
     # A consulta agora busca na ActivityLog para ter o histórico completo de atividades.
     recent_activity = ActivityLog.query.options(
