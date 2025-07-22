@@ -49,9 +49,16 @@
                 <div class="card-header">
                     Área de Gestão
                 </div>
-                <div class="card-body">
-                    <div class="list-group">
-                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold">Gerir Mailings (Grupos de Leads)</a>
+                <!-- ... -->
+<div class="card-body">
+    <div class="list-group">
+        
+        <!-- TESTE PARA FORÇAR ATUALIZAÇÃO -->
+        <a href="{{ url_for('main.admin_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold"><i class="fas fa-satellite-dish me-2"></i>Monitor em Tempo Real</a>
+
+                        <!-- ===== LINK ATUALIZADO/ADICIONADO AQUI ===== -->
+                        <a href="{{ url_for('main.admin_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold"><i class="fas fa-satellite-dish me-2"></i>Monitor em Tempo Real</a>
+                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold">Gerir Mailings</a>
                         <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action">Gerir Produtos</a>
                         <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action">Gerir Layouts Salvos</a>
                         <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action">Gerir Utilizadores</a>
