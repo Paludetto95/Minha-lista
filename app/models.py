@@ -1,4 +1,4 @@
-# app/models.py (VERSÃO FINAL COM ActivityLog)
+# app/models.py (VERSÃO FINAL ATUALIZADA COM CAMPOS DO MONITOR)
 
 from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,10 +15,13 @@ class User(UserMixin, db.Model):
     wallet_limit = db.Column(db.Integer, default=100, nullable=False)
     daily_pull_limit = db.Column(db.Integer, default=30, nullable=False)
     
+    # --- CAMPOS ADICIONADOS PARA O MONITOR ---
+    current_status = db.Column(db.String(50), default='Offline', index=True)
+    status_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    # ----------------------------------------
+    
     leads = db.relationship('Lead', backref='consultor', lazy='dynamic')
     consumptions = db.relationship('LeadConsumption', backref='user', lazy='dynamic', cascade="all, delete-orphan")
-    
-    # NOVO: Relacionamento para acessar todas as atividades de um usuário.
     activities = db.relationship('ActivityLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     
     def set_password(self, password):
@@ -50,8 +53,6 @@ class Lead(db.Model):
     tabulation = db.relationship('Tabulation', back_populates='leads')
     produto = db.relationship('Produto', back_populates='leads')
     consumptions = db.relationship('LeadConsumption', backref='lead', lazy='dynamic', cascade="all, delete-orphan")
-    
-    # NOVO: Relacionamento para acessar o histórico de atividades de um lead específico.
     activities = db.relationship('ActivityLog', backref='lead', lazy='dynamic', cascade="all, delete-orphan")
 
 class Tabulation(db.Model):
@@ -61,6 +62,10 @@ class Tabulation(db.Model):
     
     is_recyclable = db.Column(db.Boolean, default=False, nullable=False)
     recycle_in_days = db.Column(db.Integer, nullable=True)
+    
+    # --- CAMPO ADICIONADO PARA O MONITOR ---
+    is_positive_conversion = db.Column(db.Boolean, default=False, nullable=False)
+    # -------------------------------------
 
     leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')
 
@@ -83,7 +88,6 @@ class LayoutMailing(db.Model):
     produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False, index=True)
     mapping = db.Column(db.JSON, nullable=False)
 
-# NOVO: Tabela para o histórico completo de interações.
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
@@ -92,7 +96,7 @@ class ActivityLog(db.Model):
     tabulation_id = db.Column(db.Integer, db.ForeignKey('tabulation.id'), nullable=False, index=True)
     
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    action_type = db.Column(db.String(50)) # Ex: 'Tabulação', 'Reciclagem'
+    action_type = db.Column(db.String(50)) 
 
     tabulation = db.relationship('Tabulation')
 
