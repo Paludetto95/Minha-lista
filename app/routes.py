@@ -1,4 +1,4 @@
-# app/routes.py (VERSÃO FINAL COM ActivityLog)
+# app/routes.py (VERSÃO FINAL COM ActivityLog E CORREÇÃO NO DASHBOARD ADMIN)
 
 import pandas as pd
 import io
@@ -10,7 +10,6 @@ from collections import defaultdict
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
-# ATUALIZADO: Importa o novo modelo ActivityLog
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog
 from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case
@@ -20,7 +19,6 @@ from sqlalchemy.orm import joinedload
 bp = Blueprint('main', __name__)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
-# (Nenhuma alteração nesta seção)
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -70,50 +68,69 @@ def index():
     return redirect(url_for('main.consultor_dashboard'))
 
 # --- ROTAS DE ADMIN ---
-# (Nenhuma alteração nesta seção)
+
 @bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
+    # ATUALIZADO: A lógica desta rota foi alterada para buscar da ActivityLog.
     if not current_user.is_admin:
         flash('Acesso negado.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
+    
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
+    
     page = request.args.get('page', 1, type=int)
-    tabulated_leads = Lead.query.filter(Lead.status == 'Tabulado').order_by(Lead.data_tabulacao.desc()).paginate(page=page, per_page=15, error_out=False)
+    
+    # A consulta agora busca na ActivityLog para ter o histórico completo de atividades.
+    recent_activity = ActivityLog.query.options(
+        joinedload(ActivityLog.lead),
+        joinedload(ActivityLog.user),
+        joinedload(ActivityLog.tabulation)
+    ).order_by(
+        ActivityLog.timestamp.desc()
+    ).paginate(page=page, per_page=10, error_out=False)
+
     return render_template('admin/admin_dashboard.html', 
                            title='Dashboard do Admin',
                            all_products=all_products,
                            all_layouts=all_layouts,
-                           tabulated_leads=tabulated_leads)
+                           recent_activity=recent_activity) # Passa a nova variável para o template.
 
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
 def upload_step1():
-    # ... (código sem alteração)
+    # ... (código existente sem alterações)
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
+
     uploaded_file = request.files.get('file')
     produto_id = request.form.get('produto_id')
     layout_id = request.form.get('layout_id')
+
     if not all([uploaded_file, produto_id]):
         flash('Os campos (Arquivo e Produto) são obrigatórios.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
+    
     if not uploaded_file.filename.lower().endswith(('.csv', '.xlsx')):
         flash('Formato de ficheiro inválido. Apenas .csv ou .xlsx.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
+
     try:
         if uploaded_file.filename.lower().endswith('.csv'):
             df = pd.read_csv(uploaded_file.stream, sep=None, engine='python', encoding='latin1', dtype=str)
         else:
             df = pd.read_excel(uploaded_file.stream, dtype=str)
+        
         temp_filename = f"{uuid.uuid4()}{os.path.splitext(uploaded_file.filename)[1]}"
         temp_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_filename)
         uploaded_file.stream.seek(0)
         with open(temp_filepath, 'wb') as f:
              f.write(uploaded_file.stream.read())
+
         headers = df.columns.tolist()
         sample_rows = df.head(2).to_dict(orient='records')
+        
         system_fields = [
             'nome_cliente', 'cpf', 'telefone', 'telefone_2', 'estado', 'bairro', 'cep', 'cidade',
             'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade',
@@ -121,11 +138,13 @@ def upload_step1():
             'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5',
             'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10'
         ]
+        
         existing_mapping = None
         if layout_id:
             layout = LayoutMailing.query.get(layout_id)
             if layout:
                 existing_mapping = layout.mapping
+
         return render_template('admin/map_columns.html',
                                headers=headers,
                                sample_rows=sample_rows,
@@ -133,6 +152,7 @@ def upload_step1():
                                produto_id=produto_id,
                                system_fields=system_fields,
                                existing_mapping=existing_mapping)
+
     except Exception as e:
         flash(f'Erro ao ler o arquivo: {e}', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -140,22 +160,27 @@ def upload_step1():
 @bp.route('/upload_step2_process', methods=['POST'])
 @login_required
 def upload_step2_process():
-    # ... (código sem alteração)
+    # ... (código existente sem alterações)
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
+
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
     produto_id = form_data.get('produto_id')
+    
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
+    
     temp_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_filename)
     if not os.path.exists(temp_filepath):
         flash('Erro: arquivo temporário não encontrado.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
+
     try:
         mapping = {}
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
+        
         for i in range(len(df_headers.columns)):
             if f'include_column_{i}' in form_data:
                 selected_system_field = form_data.get(f'mapping_{i}')
@@ -166,42 +191,55 @@ def upload_step2_process():
                             flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
                             return redirect(url_for('main.admin_dashboard'))
                         mapping[selected_system_field] = original_header_name.lower().strip()
+        
         if 'cpf' not in mapping:
             flash("Erro de mapeamento: A coluna 'CPF' é obrigatória e deve ser mapeada.", 'danger')
             return redirect(url_for('main.admin_dashboard'))
+
         if form_data.get('save_layout') and form_data.get('layout_name'):
             layout_mapping_to_save = {k: v for k, v in mapping.items() if v}
             new_layout = LayoutMailing(name=form_data.get('layout_name'), produto_id=produto_id, mapping=layout_mapping_to_save)
             db.session.add(new_layout)
+
         df = pd.read_excel(temp_filepath, dtype=str) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str)
         original_headers = df.columns.copy()
         df.columns = [str(col).lower().strip() for col in df.columns]
+        
         inversed_mapping = {v: k for k, v in mapping.items()}
+        
         existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
         leads_para_adicionar = []
         leads_ignorados = 0
+
         campos_do_modelo_lead = [
             'nome_cliente', 'cpf', 'telefone', 'telefone_2', 
             'status', 'data_criacao', 'data_tabulacao', 
             'consultor_id', 'tabulation_id', 'produto_id', 'estado'
         ]
+        
         for index, row in df.iterrows():
             row_renamed = row.rename(inversed_mapping)
             cpf_digits = re.sub(r'\D', '', str(row_renamed.get('cpf', '')))
+            
             if not cpf_digits or len(cpf_digits) != 11 or cpf_digits in existing_cpfs:
                 leads_ignorados += 1
                 continue
+            
             lead_data = {
                 'produto_id': produto_id,
                 'cpf': cpf_digits,
                 'status': 'Novo',
                 'data_criacao': datetime.utcnow()
             }
+            
             additional_data = {}
+
             for original_header in original_headers:
                 original_header_lower = original_header.lower().strip()
                 system_field = inversed_mapping.get(original_header_lower)
+                
                 valor = row.get(original_header_lower)
+                
                 if system_field and system_field in campos_do_modelo_lead:
                     if 'telefone' in system_field:
                         lead_data[system_field] = re.sub(r'\D', '', str(valor))
@@ -211,26 +249,33 @@ def upload_step2_process():
                         lead_data[system_field] = str(valor).strip()
                 else:
                     additional_data[original_header.title()] = valor
+
             lead_data['additional_data'] = {k: v for k, v in additional_data.items() if pd.notna(v)}
+            
             novo_lead = Lead(**lead_data)
             leads_para_adicionar.append(novo_lead)
             existing_cpfs.add(cpf_digits)
+
         if leads_para_adicionar:
             db.session.bulk_save_objects(leads_para_adicionar)
             flash(f'{len(leads_para_adicionar)} leads importados com sucesso! {leads_ignorados} foram ignorados.', 'success')
         else:
             flash('Nenhum novo lead válido para importar foi encontrado na planilha.', 'warning')
+        
         db.session.commit()
+
     except Exception as e:
         db.session.rollback()
         flash(f'Ocorreu um erro crítico durante o processamento: {e}', 'danger')
     finally:
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
+
     return redirect(url_for('main.admin_dashboard'))
 
 # --- ROTAS DE GESTÃO (ADMIN) ---
-# (Nenhuma alteração nesta seção)
+# ... (código existente sem alterações)
+# ...
 @bp.route('/admin/products')
 @login_required
 def manage_products():
@@ -403,7 +448,6 @@ def export_all_mailings():
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
 
 # --- ROTAS DE GESTÃO DE USUÁRIOS ---
-# (Nenhuma alteração nesta seção)
 @bp.route('/users')
 @login_required
 def manage_users():
@@ -471,7 +515,6 @@ def delete_user(id):
     return redirect(url_for('main.manage_users'))
 
 # --- ROTAS DO CONSULTOR ---
-
 @bp.route('/consultor/dashboard')
 @login_required
 def consultor_dashboard():
@@ -502,7 +545,6 @@ def consultor_dashboard():
             Lead.produto_id, Produto.name, Lead.estado
         ).order_by(Produto.name, Lead.estado).all()
         
-    # ATUALIZADO: Lógica do histórico para usar ActivityLog
     search_history = request.args.get('search_history', '')
     history_query = ActivityLog.query.options(
         joinedload(ActivityLog.lead),
@@ -588,13 +630,12 @@ def pegar_leads_selecionados():
     return redirect(url_for('main.consultor_dashboard'))
 
 # --- ROTAS DE ATENDIMENTO E OUTRAS ---
-
 @bp.route('/atendimento')
 @login_required
 def atendimento():
-    # ... (código sem alteração)
     if current_user.is_admin:
         return redirect(url_for('main.admin_dashboard'))
+    
     lead_para_atender = Lead.query.filter_by(
         consultor_id=current_user.id, 
         status='Em Atendimento'
@@ -603,6 +644,7 @@ def atendimento():
         flash('Parabéns, você não tem mais leads pendentes para atender!', 'success')
         return redirect(url_for('main.consultor_dashboard'))
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
+    
     campos_principais_ordenados = [
         ('Nome Cliente', lead_para_atender.nome_cliente), ('CPF', lead_para_atender.cpf),
         ('Estado', lead_para_atender.estado), ('Telefone', lead_para_atender.telefone),
@@ -613,6 +655,7 @@ def atendimento():
         for key, value in lead_para_atender.additional_data.items():
             if key.title() not in lead_details:
                 lead_details[key.title()] = value
+    
     phone_numbers = []
     processed_numbers = set()
     for label, phone_number in [('Telefone Principal', lead_para_atender.telefone), ('Telefone 2', lead_para_atender.telefone_2)]:
@@ -630,6 +673,7 @@ def atendimento():
                     if len(clean_phone) >= 8 and clean_phone not in processed_numbers:
                         phone_numbers.append({'label': key.title(), 'number': clean_phone})
                         processed_numbers.add(clean_phone)
+    
     return render_template('atendimento.html', 
                            title="Atendimento de Lead", 
                            lead=lead_para_atender, 
@@ -655,15 +699,15 @@ def atender_lead(lead_id):
         flash('Tabulação inválida.', 'danger')
         return redirect(url_for('main.atendimento'))
 
-    # ATUALIZADO: Lógica para criar um registro no ActivityLog
     action_type = ''
     
     if tabulation.is_recyclable and tabulation.recycle_in_days is not None:
         recycle_date = datetime.utcnow() + timedelta(days=tabulation.recycle_in_days)
+        
         lead.status = 'Novo'
         lead.consultor_id = None
         lead.tabulation_id = None
-        lead.data_tabulacao = None # O histórico agora está no log
+        lead.data_tabulacao = None 
         lead.available_after = recycle_date
         action_type = 'Reciclagem'
         flash(f'Lead de {lead.nome_cliente} será reciclado em {tabulation.recycle_in_days} dias.', 'info')
@@ -688,11 +732,11 @@ def atender_lead(lead_id):
 @bp.route('/retabulate/<int:lead_id>', methods=['POST'])
 @login_required
 def retabulate_lead(lead_id):
-    # ATUALIZADO: A retabulação agora também deve criar um log
     lead = Lead.query.get_or_404(lead_id)
-    original_consultor_id = lead.consultor_id # Salva o consultor original
     
-    # Apenas o consultor original ou um admin pode retabular
+    last_activity = ActivityLog.query.filter_by(lead_id=lead.id).order_by(ActivityLog.timestamp.desc()).first()
+    original_consultor_id = last_activity.user_id if last_activity else None
+    
     if original_consultor_id != current_user.id and not current_user.is_admin:
         flash('Não pode editar um lead que não é seu.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
@@ -707,16 +751,14 @@ def retabulate_lead(lead_id):
         flash('Tabulação selecionada inválida.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
     
-    # Atualiza o lead (aqui você pode decidir se quer ou não reciclar na retabulação)
-    # Para simplificar, vamos assumir que a retabulação é sempre final.
     lead.tabulation_id = new_tabulation.id
     lead.status = 'Tabulado'
     lead.data_tabulacao = datetime.utcnow()
+    lead.consultor_id = original_consultor_id
 
-    # Cria um novo log para a retabulação
     retab_log = ActivityLog(
         lead_id=lead.id,
-        user_id=original_consultor_id, # Loga a ação para o consultor original
+        user_id=current_user.id,
         tabulation_id=new_tabulation.id,
         action_type='Retabulação'
     )
@@ -729,7 +771,6 @@ def retabulate_lead(lead_id):
 @bp.route('/tabulations')
 @login_required
 def manage_tabulations():
-    # ... (código sem alteração)
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
@@ -738,10 +779,10 @@ def manage_tabulations():
 @bp.route('/tabulations/add', methods=['POST'])
 @login_required
 def add_tabulation():
-    # ... (código sem alteração)
     if not current_user.is_admin: return redirect(url_for('main.index'))
     name = request.form.get('name')
     color = request.form.get('color')
+    
     is_recyclable = request.form.get('is_recyclable') == 'on'
     recycle_in_days = None
     if is_recyclable:
@@ -749,6 +790,7 @@ def add_tabulation():
             recycle_in_days = int(request.form.get('recycle_in_days', 0))
         except (ValueError, TypeError):
             recycle_in_days = 0
+
     if name and color:
         new_tabulation = Tabulation(
             name=name, 
@@ -766,12 +808,12 @@ def add_tabulation():
         except Exception as e:
             db.session.rollback()
             flash(f'Ocorreu um erro: {e}', 'danger')
+            
     return redirect(url_for('main.manage_tabulations'))
 
 @bp.route('/tabulations/delete/<int:id>', methods=['POST'])
 @login_required
 def delete_tabulation(id):
-    # ... (código sem alteração)
     if not current_user.is_admin: return redirect(url_for('main.index'))
     tabulation_to_delete = Tabulation.query.get_or_404(id)
     db.session.delete(tabulation_to_delete)
@@ -782,7 +824,6 @@ def delete_tabulation(id):
 @bp.route('/export/tabulations')
 @login_required
 def export_tabulations():
-    # ATUALIZADO: Exporta dados do ActivityLog
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
     try:
