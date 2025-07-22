@@ -1,0 +1,107 @@
+<!-- app/templates/admin/monitor.html -->
+
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .status-badge {
+        color: white;
+        padding: 0.4em 0.8em;
+        border-radius: 20px;
+        font-weight: 500;
+        min-width: 120px;
+        text-align: center;
+    }
+    .status-falando { background-color: #28a745; }
+    .status-ocioso { background-color: #6c757d; }
+    .status-em-negociacao { background-color: #ffc107; color: #000 !important;}
+    .status-tpa { background-color: #007bff; }
+    .status-offline { background-color: #dc3545; }
+
+    .timer {
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+        background-color: #f1f1f1;
+        padding: 0.2em 0.6em;
+        border-radius: 5px;
+        margin-left: 10px;
+    }
+
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    .rank-medal {
+        font-size: 1.5rem;
+    }
+    .rank-1 { color: #ffd700; } /* Gold */
+    .rank-2 { color: #c0c0c0; } /* Silver */
+    .rank-3 { color: #cd7f32; } /* Bronze */
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Monitor de Consultores</h2>
+        <span class="text-muted">Atualização automática a cada 10 segundos</span>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 5%;" class="text-center">#</th>
+                            <th style="width: 25%;">Nome</th>
+                            <th style="width: 20%;">Local de Trabalho</th>
+                            <th style="width: 25%;">Status</th>
+                            <th style="width: 10%;" class="text-center">Lig. Hoje</th>
+                            <th style="width: 15%;" class="text-center">Conversões Hoje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for agent in agents_data %}
+                        <tr>
+                            <td class="text-center fw-bold">
+                                {% if loop.index <= 3 %}
+                                    <i class="fas fa-medal rank-medal rank-{{ loop.index }}"></i>
+                                {% else %}
+                                    {{ loop.index }}º
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ agent.name }}</strong></td>
+                            <td>{{ agent.local or 'N/A' }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
+                                    <span class="timer">{{ agent.timer }}</span>
+                                </div>
+                            </td>
+                            <td class="text-center fs-5">{{ agent.calls_today }}</td>
+                            <td class="text-center fs-5 fw-bold text-success">{{ agent.conversions_today }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Recarrega a página a cada 10 segundos para atualizar os dados
+    setTimeout(function() {
+        window.location.reload();
+    }, 10000); // 10000 milissegundos = 10 segundos
+</script>
+{% endblock %}

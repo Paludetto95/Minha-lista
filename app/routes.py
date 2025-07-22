@@ -1,4 +1,4 @@
-# app/routes.py (VERSÃO CORRIGIDA)
+# app/routes.py (VERSÃO FINAL COM MONITOR INTEGRADO)
 
 import pandas as pd
 import io
@@ -18,7 +18,14 @@ from sqlalchemy.orm import joinedload
 
 bp = Blueprint('main', __name__)
 
-# --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
+# --- NOVA FUNÇÃO HELPER PARA O MONITOR ---
+def update_user_status(user, new_status):
+    """Atualiza o status de um usuário e o timestamp no banco de dados."""
+    user.current_status = new_status
+    user.status_timestamp = datetime.utcnow()
+    db.session.add(user)
+
+# --- ROTAS DE AUTENTICAÇÃO E GERAIS (COM ATUALIZAÇÃO DE STATUS) ---
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -29,6 +36,12 @@ def login():
             flash('Email ou senha inválidos', 'danger')
             return redirect(url_for('main.login'))
         login_user(user, remember=request.form.get('remember_me') is not None)
+        
+        # ATUALIZA O STATUS DO CONSULTOR AO LOGAR
+        if not user.is_admin:
+            update_user_status(user, 'Ocioso')
+            db.session.commit()
+            
         return redirect(url_for('main.index'))
     return render_template('login.html', title='Login')
 
@@ -55,7 +68,13 @@ def register():
     return render_template('register.html', title='Registrar Administrador')
 
 @bp.route('/logout')
+@login_required # Garante que temos um current_user
 def logout():
+    # ATUALIZA O STATUS DO CONSULTOR PARA OFFLINE AO DESLOGAR
+    if current_user.is_authenticated and not current_user.is_admin:
+        update_user_status(current_user, 'Offline')
+        db.session.commit()
+    
     logout_user()
     return redirect(url_for('main.login'))
 
@@ -69,7 +88,6 @@ def index():
 
 # --- ROTAS DE ADMIN ---
 
-# ===== FUNÇÃO CORRIGIDA =====
 @bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
@@ -79,12 +97,8 @@ def admin_dashboard():
     
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
-    
-    # Pega o número da página da URL para a paginação.
     page = request.args.get('page', 1, type=int)
     
-    # A consulta agora busca na ActivityLog para ter o histórico completo.
-    # Esta é a única consulta que será executada.
     recent_activity = ActivityLog.query.options(
         joinedload(ActivityLog.lead),
         joinedload(ActivityLog.user),
@@ -93,12 +107,62 @@ def admin_dashboard():
         ActivityLog.timestamp.desc()
     ).paginate(page=page, per_page=10, error_out=False)
 
-    # Renderiza o template, passando a variável 'recent_activity'
     return render_template('admin/admin_dashboard.html', 
                            title='Dashboard do Admin',
                            all_products=all_products,
                            all_layouts=all_layouts,
                            recent_activity=recent_activity)
+
+# --- NOVA ROTA DO MONITOR ---
+@bp.route('/admin/monitor')
+@login_required
+def admin_monitor():
+    if not current_user.is_admin:
+        abort(403)
+        
+    start_of_day = datetime.combine(date.today(), time.min)
+    consultants = User.query.filter_by(is_admin=False).all()
+    
+    agents_data = []
+    
+    for agent in consultants:
+        time_in_status = datetime.utcnow() - agent.status_timestamp
+        hours, remainder = divmod(time_in_status.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        timer_str = "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
+
+        calls_today = ActivityLog.query.filter(
+            ActivityLog.user_id == agent.id,
+            ActivityLog.timestamp >= start_of_day
+        ).count()
+
+        conversions_today = ActivityLog.query.join(Tabulation).filter(
+            ActivityLog.user_id == agent.id,
+            ActivityLog.timestamp >= start_of_day,
+            Tabulation.is_positive_conversion == True
+        ).count()
+        
+        current_work = Lead.query.join(Produto).filter(
+            Lead.consultor_id == agent.id,
+            Lead.status == 'Em Atendimento'
+        ).with_entities(Produto.name).first()
+
+        agents_data.append({
+            'id': agent.id,
+            'name': agent.username,
+            'status': agent.current_status,
+            'timer': timer_str,
+            'local': current_work[0] if current_work else "Nenhum",
+            'calls_today': calls_today,
+            'conversions_today': conversions_today
+        })
+        
+    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
+    
+    return render_template('admin/monitor.html', 
+                           title="Monitor de Consultores",
+                           agents_data=agents_data)
+
 
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
@@ -513,7 +577,7 @@ def delete_user(id):
     flash('Utilizador eliminado com sucesso!', 'success')
     return redirect(url_for('main.manage_users'))
 
-# --- ROTAS DO CONSULTOR ---
+# --- ROTAS DO CONSULTOR (COM ATUALIZAÇÃO DE STATUS) ---
 @bp.route('/consultor/dashboard')
 @login_required
 def consultor_dashboard():
@@ -639,11 +703,19 @@ def atendimento():
         consultor_id=current_user.id, 
         status='Em Atendimento'
     ).order_by(Lead.data_criacao).first()
+    
     if not lead_para_atender:
+        # ATUALIZA O STATUS QUANDO A CARTEIRA ESTÁ VAZIA
+        update_user_status(current_user, 'Ocioso')
+        db.session.commit()
         flash('Parabéns, você não tem mais leads pendentes para atender!', 'success')
         return redirect(url_for('main.consultor_dashboard'))
+        
+    # ATUALIZA O STATUS PARA "FALANDO" QUANDO UM LEAD É APRESENTADO
+    update_user_status(current_user, 'Falando')
+    db.session.commit()
+
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
-    
     campos_principais_ordenados = [
         ('Nome Cliente', lead_para_atender.nome_cliente), ('CPF', lead_para_atender.cpf),
         ('Estado', lead_para_atender.estado), ('Telefone', lead_para_atender.telefone),
@@ -699,10 +771,8 @@ def atender_lead(lead_id):
         return redirect(url_for('main.atendimento'))
 
     action_type = ''
-    
     if tabulation.is_recyclable and tabulation.recycle_in_days is not None:
         recycle_date = datetime.utcnow() + timedelta(days=tabulation.recycle_in_days)
-        
         lead.status = 'Novo'
         lead.consultor_id = None
         lead.tabulation_id = None
@@ -783,6 +853,8 @@ def add_tabulation():
     color = request.form.get('color')
     
     is_recyclable = request.form.get('is_recyclable') == 'on'
+    is_positive_conversion = request.form.get('is_positive_conversion') == 'on' # Adicionado para o monitor
+    
     recycle_in_days = None
     if is_recyclable:
         try:
@@ -795,7 +867,8 @@ def add_tabulation():
             name=name, 
             color=color,
             is_recyclable=is_recyclable,
-            recycle_in_days=recycle_in_days
+            recycle_in_days=recycle_in_days,
+            is_positive_conversion=is_positive_conversion # Adicionado para o monitor
         )
         db.session.add(new_tabulation)
         try:
