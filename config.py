@@ -1,15 +1,10 @@
-# config.py (VERSÃO FINAL SIMPLIFICADA PARA PyMySQL)
+# config.py (VERSÃO FINAL E CORRIGIDA COM POOL_RECYCLE)
 
 import os
 from dotenv import load_dotenv
 
 # Carrega as variáveis de ambiente do arquivo .env (para uso local)
-load_dotenv() # Esta linha lê o arquivo .env e carrega as variáveis
-
-class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') # Ele vai encontrar a SECRET_KEY do .env
-    DATABASE_URL_FROM_ENV = os.environ.get('DATABASE_URL') # Ele vai encontrar a DATABASE_URL do .env
-    # ...
+load_dotenv()
 
 # Define o diretório base da aplicação
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -22,7 +17,7 @@ class Config:
     # definida como uma variável de ambiente no Railway.
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'uma-chave-secreta-muito-segura'
 
-    # --- LÓGICA DE CONEXÃO AO BANCO DE DADOS SIMPLIFICADA ---
+    # --- LÓGICA DE CONEXÃO AO BANCO DE DADOS ---
     # Pega a URL do banco de dados do ambiente (fornecida pelo Railway ou pelo .env)
     DATABASE_URL_FROM_ENV = os.environ.get('DATABASE_URL')
 
@@ -36,7 +31,6 @@ class Config:
             SQLALCHEMY_DATABASE_URI = DATABASE_URL_FROM_ENV
     else:
         # Fallback: se nenhuma DATABASE_URL for encontrada, usa um banco SQLite local.
-        # Isso evita que a aplicação quebre e facilita o desenvolvimento local.
         print("AVISO: Váriavel DATABASE_URL não encontrada. Usando banco de dados SQLite local 'app.db'.")
         SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.db')
 
@@ -45,3 +39,9 @@ class Config:
 
     # Define a pasta para uploads temporários de arquivos.
     UPLOAD_FOLDER = os.path.join(basedir, 'temp_uploads')
+
+    # ===== ADIÇÃO PARA ESTABILIDADE DA CONEXÃO =====
+    # Recicla conexões que estão inativas por mais de 30 minutos (1800s).
+    # Isso evita erros de "MySQL server has gone away" ou "Lost connection"
+    # em ambientes de produção onde as conexões podem ser encerradas por inatividade.
+    SQLALCHEMY_ENGINE_OPTIONS = {'pool_recycle': 1800}
