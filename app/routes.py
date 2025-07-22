@@ -1,4 +1,4 @@
-# app/routes.py (VERSÃO FINAL COM ActivityLog E CORREÇÃO NO DASHBOARD ADMIN)
+# app/routes.py (VERSÃO CORRIGIDA)
 
 import pandas as pd
 import io
@@ -69,6 +69,7 @@ def index():
 
 # --- ROTAS DE ADMIN ---
 
+# ===== FUNÇÃO CORRIGIDA =====
 @bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
@@ -79,20 +80,11 @@ def admin_dashboard():
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     
-    # ===== ALTERAÇÃO 1: Renomeia a variável =====
-    # Pega a página para a paginação
+    # Pega o número da página da URL para a paginação.
     page = request.args.get('page', 1, type=int)
-    # Cria o objeto de paginação e o armazena em 'recent_activity'
-    recent_activity = Lead.query.filter(Lead.status == 'Tabulado').order_by(Lead.data_tabulacao.desc()).paginate(page=page, per_page=15, error_out=False)
-
-    # ===== ALTERAÇÃO 2: Passa a variável correta para o template =====
-    return render_template('admin/admin_dashboard.html', 
-                           title='Dashboard do Admin',
-                           all_products=all_products,
-                           all_layouts=all_layouts,
-                           recent_activity=recent_activity) # <--- Passa
     
-    # A consulta agora busca na ActivityLog para ter o histórico completo de atividades.
+    # A consulta agora busca na ActivityLog para ter o histórico completo.
+    # Esta é a única consulta que será executada.
     recent_activity = ActivityLog.query.options(
         joinedload(ActivityLog.lead),
         joinedload(ActivityLog.user),
@@ -101,16 +93,16 @@ def admin_dashboard():
         ActivityLog.timestamp.desc()
     ).paginate(page=page, per_page=10, error_out=False)
 
+    # Renderiza o template, passando a variável 'recent_activity'
     return render_template('admin/admin_dashboard.html', 
                            title='Dashboard do Admin',
                            all_products=all_products,
                            all_layouts=all_layouts,
-                           recent_activity=recent_activity) # Passa a nova variável para o template.
+                           recent_activity=recent_activity)
 
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
 def upload_step1():
-    # ... (código existente sem alterações)
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
 
@@ -170,7 +162,6 @@ def upload_step1():
 @bp.route('/upload_step2_process', methods=['POST'])
 @login_required
 def upload_step2_process():
-    # ... (código existente sem alterações)
     if not current_user.is_admin:
         return redirect(url_for('main.index'))
 
@@ -284,8 +275,6 @@ def upload_step2_process():
     return redirect(url_for('main.admin_dashboard'))
 
 # --- ROTAS DE GESTÃO (ADMIN) ---
-# ... (código existente sem alterações)
-# ...
 @bp.route('/admin/products')
 @login_required
 def manage_products():

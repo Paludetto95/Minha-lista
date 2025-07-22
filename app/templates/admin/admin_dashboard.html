@@ -51,7 +51,6 @@
                 </div>
                 <div class="card-body">
                     <div class="list-group">
-                        <!-- ===== CORREÇÃO APLICADA AQUI ===== -->
                         <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold">Gerir Mailings (Grupos de Leads)</a>
                         <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action">Gerir Produtos</a>
                         <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action">Gerir Layouts Salvos</a>
@@ -61,35 +60,43 @@
                 </div>
             </div>
 
-            <!-- Card de Últimos Leads Tabulados -->
+            <!-- Card de Últimas Atividades -->
             <div class="card shadow-sm">
                 <div class="card-header">
-                    Últimos Leads Tabulados
+                    Últimas Atividades (Tabulações e Reciclagens)
                 </div>
                  <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
                     <ul class="list-group list-group-flush">
-                    {% for lead in tabulated_leads.items %}
+                    {% for log_entry in recent_activity.items %}
                         <li class="list-group-item">
-                            {{ lead.nome_cliente }} - <strong>{{ lead.tabulation.name if lead.tabulation else 'Sem Tabulação' }}</strong>
-                            <small class="text-muted d-block">por {{ lead.consultor.username if lead.consultor else 'N/A' }} em {{ lead.data_tabulacao.strftime('%d/%m/%Y') if lead.data_tabulacao }}</small>
+                            <!-- Mostra o nome do cliente e a tabulação escolhida -->
+                            {{ log_entry.lead.nome_cliente if log_entry.lead else 'Lead Apagado' }} - 
+                            <strong style="color: {{ log_entry.tabulation.color }};">
+                                {% if log_entry.action_type == 'Reciclagem' %}<i class="fas fa-recycle me-1" title="Reciclagem"></i>{% endif %}
+                                {{ log_entry.tabulation.name if log_entry.tabulation else 'Sem Tabulação' }}
+                            </strong>
+                            <!-- Mostra quem fez e quando -->
+                            <small class="text-muted d-block">
+                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp.strftime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
+                            </small>
                         </li>
                     {% else %}
-                        <li class="list-group-item text-center text-muted py-4">Nenhum lead tabulado recentemente.</li>
+                        <li class="list-group-item text-center text-muted py-4">Nenhuma atividade registrada recentemente.</li>
                     {% endfor %}
                     </ul>
                  </div>
-                 <!-- Paginação para os Leads Tabulados -->
-                 {% if tabulated_leads.pages > 1 %}
+                 <!-- Paginação para as Atividades -->
+                 {% if recent_activity.pages > 1 %}
                  <div class="card-footer bg-light">
-                    <nav aria-label="Paginação de leads tabulados">
+                    <nav aria-label="Paginação de atividades">
                         <ul class="pagination justify-content-center mb-0">
-                            <li class="page-item {% if not tabulated_leads.has_prev %}disabled{% endif %}">
-                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=tabulated_leads.prev_num) }}">Anterior</a>
+                            <li class="page-item {% if not recent_activity.has_prev %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=recent_activity.prev_num) }}">Anterior</a>
                             </li>
 
-                            {% for page_num in tabulated_leads.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                            {% for page_num in recent_activity.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
                                 {% if page_num %}
-                                    {% if tabulated_leads.page == page_num %}
+                                    {% if recent_activity.page == page_num %}
                                         <li class="page-item active" aria-current="page"><span class="page-link">{{ page_num }}</span></li>
                                     {% else %}
                                         <li class="page-item"><a class="page-link" href="{{ url_for('main.admin_dashboard', page=page_num) }}">{{ page_num }}</a></li>
@@ -99,8 +106,8 @@
                                 {% endif %}
                             {% endfor %}
 
-                            <li class="page-item {% if not tabulated_leads.has_next %}disabled{% endif %}">
-                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=tabulated_leads.next_num) }}">Próximo</a>
+                            <li class="page-item {% if not recent_activity.has_next %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=recent_activity.next_num) }}">Próximo</a>
                             </li>
                         </ul>
                     </nav>
