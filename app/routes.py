@@ -1,5 +1,3 @@
-# app/routes.py (VERSÃO FINAL COM MONITOR INTEGRADO)
-
 import pandas as pd
 import io
 import re
@@ -7,10 +5,11 @@ import os
 import uuid
 import threading
 from collections import defaultdict
+from functools import wraps
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
-from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog
+from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo
 from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +17,25 @@ from sqlalchemy.orm import joinedload
 
 bp = Blueprint('main', __name__)
 
-# --- NOVA FUNÇÃO HELPER PARA O MONITOR ---
+# --- DECORADORES DE PERMISSÃO (CONTROLE DE ACESSO) ---
+def require_role(*roles):
+    """Decorador genérico para verificar se o usuário tem um dos papéis permitidos."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('main.login'))
+            # Super Admin sempre tem acesso
+            if current_user.role == 'super_admin':
+                return f(*args, **kwargs)
+            if current_user.role not in roles:
+                flash('Acesso negado. Você não tem permissão para ver esta página.', 'danger')
+                return redirect(url_for('main.index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# --- FUNÇÃO HELPER PARA O MONITOR ---
 def update_user_status(user, new_status):
     """Atualiza o status de um usuário e o timestamp no banco de dados."""
     user.current_status = new_status
@@ -38,7 +55,7 @@ def login():
         login_user(user, remember=request.form.get('remember_me') is not None)
         
         # ATUALIZA O STATUS DO CONSULTOR AO LOGAR
-        if not user.is_admin:
+        if user.role == 'consultor':
             update_user_status(user, 'Ocioso')
             db.session.commit()
             
@@ -47,31 +64,29 @@ def login():
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
     if User.query.first() is not None:
-        flash('O registro de novos usuários está desabilitado.', 'warning')
+        flash('O registro está desabilitado.', 'warning')
         return redirect(url_for('main.login'))
     if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        if not all([username, email, password]):
-            flash('Todos os campos são obrigatórios.', 'danger')
-            return redirect(url_for('main.register'))
-        user = User(username=username, email=email, is_admin=True)
-        user.set_password(password)
+        grupo_principal = Grupo.query.filter_by(nome="Equipe Principal").first()
+        if not grupo_principal:
+            grupo_principal = Grupo(nome="Equipe Principal")
+            db.session.add(grupo_principal)
+            db.session.flush()
+        user = User(username=request.form.get('username'), email=request.form.get('email'), role='super_admin', grupo_id=grupo_principal.id)
+        user.set_password(request.form.get('password'))
         db.session.add(user)
         db.session.commit()
-        flash('Conta de administrador criada com sucesso! Por favor, faça login.', 'success')
+        flash('Conta de Super Administrador criada com sucesso!', 'success')
         return redirect(url_for('main.login'))
-    return render_template('register.html', title='Registrar Administrador')
+    return render_template('register.html', title='Registrar Super Admin')
+
 
 @bp.route('/logout')
 @login_required # Garante que temos um current_user
 def logout():
     # ATUALIZA O STATUS DO CONSULTOR PARA OFFLINE AO DESLOGAR
-    if current_user.is_authenticated and not current_user.is_admin:
+    if current_user.is_authenticated and current_user.role == 'consultor':
         update_user_status(current_user, 'Offline')
         db.session.commit()
     
@@ -82,19 +97,19 @@ def logout():
 @bp.route('/index')
 @login_required
 def index():
-    if current_user.is_admin:
+    if current_user.role == 'super_admin':
         return redirect(url_for('main.admin_dashboard'))
-    return redirect(url_for('main.consultor_dashboard'))
+    elif current_user.role == 'admin_parceiro':
+        return redirect(url_for('main.parceiro_dashboard'))
+    else:
+        return redirect(url_for('main.consultor_dashboard'))
 
-# --- ROTAS DE ADMIN ---
+# --- ROTAS DE SUPER ADMIN ---
 
 @bp.route('/admin/dashboard')
 @login_required
+@require_role('super_admin')
 def admin_dashboard():
-    if not current_user.is_admin:
-        flash('Acesso negado.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
-    
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     page = request.args.get('page', 1, type=int)
@@ -113,15 +128,12 @@ def admin_dashboard():
                            all_layouts=all_layouts,
                            recent_activity=recent_activity)
 
-# --- NOVA ROTA DO MONITOR ---
 @bp.route('/admin/monitor')
 @login_required
+@require_role('super_admin')
 def admin_monitor():
-    if not current_user.is_admin:
-        abort(403)
-        
     start_of_day = datetime.combine(date.today(), time.min)
-    consultants = User.query.filter_by(is_admin=False).all()
+    consultants = User.query.filter_by(role='consultor').all()
     
     agents_data = []
     
@@ -152,7 +164,7 @@ def admin_monitor():
             'name': agent.username,
             'status': agent.current_status,
             'timer': timer_str,
-            'local': current_work[0] if current_work else "Nenhum",
+            'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}",
             'calls_today': calls_today,
             'conversions_today': conversions_today
         })
@@ -160,16 +172,14 @@ def admin_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     
     return render_template('admin/monitor.html', 
-                           title="Monitor de Consultores",
+                           title="Monitor Global de Consultores",
                            agents_data=agents_data)
 
 
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def upload_step1():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
-
     uploaded_file = request.files.get('file')
     produto_id = request.form.get('produto_id')
     layout_id = request.form.get('layout_id')
@@ -192,7 +202,7 @@ def upload_step1():
         temp_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_filename)
         uploaded_file.stream.seek(0)
         with open(temp_filepath, 'wb') as f:
-             f.write(uploaded_file.stream.read())
+            f.write(uploaded_file.stream.read())
 
         headers = df.columns.tolist()
         sample_rows = df.head(2).to_dict(orient='records')
@@ -225,10 +235,8 @@ def upload_step1():
 
 @bp.route('/upload_step2_process', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def upload_step2_process():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
-
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
     produto_id = form_data.get('produto_id')
@@ -338,18 +346,37 @@ def upload_step2_process():
 
     return redirect(url_for('main.admin_dashboard'))
 
-# --- ROTAS DE GESTÃO (ADMIN) ---
+# --- ROTAS DE GESTÃO (SUPER ADMIN) ---
+
+@bp.route('/admin/groups')
+@login_required
+@require_role('super_admin')
+def manage_groups():
+    grupos = Grupo.query.order_by(Grupo.nome).all()
+    return render_template('admin/manage_groups.html', title="Gerir Grupos/Parceiros", grupos=grupos)
+
+@bp.route('/admin/groups/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_group():
+    nome = request.form.get('name')
+    if nome:
+        db.session.add(Grupo(nome=nome))
+        db.session.commit()
+        flash('Grupo adicionado com sucesso!', 'success')
+    return redirect(url_for('main.manage_groups'))
+
 @bp.route('/admin/products')
 @login_required
+@require_role('super_admin')
 def manage_products():
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     products = Produto.query.order_by(Produto.name).all()
     return render_template('admin/manage_products.html', title="Gerir Produtos", products=products)
 
 @bp.route('/admin/products/add', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def add_product():
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     name = request.form.get('name')
     if name:
         try:
@@ -363,9 +390,8 @@ def add_product():
 
 @bp.route('/admin/products/delete/<int:id>', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def delete_product(id):
-    if not current_user.is_admin:
-        abort(403)
     product_to_delete = Produto.query.get_or_404(id)
     try:
         db.session.delete(product_to_delete)
@@ -373,7 +399,7 @@ def delete_product(id):
         flash(f'Produto "{product_to_delete.name}" excluído com sucesso!', 'success')
     except IntegrityError:
         db.session.rollback()
-        flash(f'Erro: O produto "{product_to_delete.name}" não pode ser excluído porque está em uso por leads ou layouts.', 'danger')
+        flash(f'Erro: O produto "{product_to_delete.name}" não pode ser excluído porque está em uso.', 'danger')
     except Exception as e:
         db.session.rollback()
         flash(f'Ocorreu um erro inesperado: {e}', 'danger')
@@ -381,15 +407,15 @@ def delete_product(id):
 
 @bp.route('/admin/layouts')
 @login_required
+@require_role('super_admin')
 def manage_layouts():
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     layouts = LayoutMailing.query.options(joinedload(LayoutMailing.produto)).order_by(LayoutMailing.name).all()
     return render_template('admin/manage_layouts.html', title="Gerir Layouts", layouts=layouts)
 
 @bp.route('/admin/layouts/delete/<int:id>', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def delete_layout(id):
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     layout = LayoutMailing.query.get_or_404(id)
     db.session.delete(layout)
     db.session.commit()
@@ -399,12 +425,7 @@ def delete_layout(id):
 def delete_leads_in_background(app, produto_id, estado):
     with app.app_context():
         try:
-            print(f"BACKGROUND TASK: Iniciando exclusão para produto {produto_id}, estado {estado}.")
             leads_query = Lead.query.filter_by(produto_id=produto_id, estado=estado)
-            total_count = leads_query.count()
-            if total_count == 0:
-                print("BACKGROUND TASK: Nenhum lead para excluir.")
-                return
             batch_size = 1000
             while True:
                 leads_to_delete_ids = [lead.id for lead in leads_query.limit(batch_size).with_entities(Lead.id).all()]
@@ -413,17 +434,13 @@ def delete_leads_in_background(app, produto_id, estado):
                 LeadConsumption.query.filter(LeadConsumption.lead_id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
                 db.session.query(Lead).filter(Lead.id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
                 db.session.commit()
-            print(f"BACKGROUND TASK: Exclusão concluída.")
         except Exception as e:
-            print(f"BACKGROUND TASK FAILED: {e}")
             db.session.rollback()
 
 @bp.route('/admin/mailings')
 @login_required
+@require_role('super_admin')
 def manage_mailings():
-    if not current_user.is_admin:
-        flash('Acesso negado.', 'danger')
-        return redirect(url_for('main.index'))
     mailing_groups = db.session.query(
         Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado,
         func.count(Lead.id).label('total_leads'),
@@ -438,8 +455,8 @@ def manage_mailings():
 
 @bp.route('/admin/mailings/delete', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def delete_mailing():
-    if not current_user.is_admin: abort(403)
     produto_id = request.form.get('produto_id')
     estado = request.form.get('estado')
     if not produto_id or not estado:
@@ -452,8 +469,8 @@ def delete_mailing():
 
 @bp.route('/admin/mailings/export')
 @login_required
+@require_role('super_admin')
 def export_mailing():
-    if not current_user.is_admin: abort(403)
     produto_id = request.args.get('produto_id')
     estado = request.args.get('estado')
     if not produto_id or not estado:
@@ -463,19 +480,9 @@ def export_mailing():
     if not leads:
         flash('Nenhum lead encontrado para este grupo.', 'warning')
         return redirect(url_for('main.manage_mailings'))
-    data_for_df = []
-    for lead in leads:
-        lead_info = {
-            'ID do Lead': lead.id, 'Nome Cliente': lead.nome_cliente, 'CPF': lead.cpf,
-            'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado,
-            'Produto': lead.produto.name if lead.produto else 'N/A',
-            'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A',
-            'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO',
-            'Data Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '',
-        }
-        if lead.additional_data:
-            lead_info.update(lead.additional_data)
-        data_for_df.append(lead_info)
+    
+    data_for_df = [{'ID do Lead': lead.id, 'Nome Cliente': lead.nome_cliente, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado, 'Produto': lead.produto.name if lead.produto else 'N/A', 'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Data Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '', **(lead.additional_data or {})} for lead in leads]
+    
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
     df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
@@ -485,24 +492,15 @@ def export_mailing():
 
 @bp.route('/admin/mailings/export_all')
 @login_required
+@require_role('super_admin')
 def export_all_mailings():
-    if not current_user.is_admin: abort(403)
     leads = Lead.query.options(joinedload(Lead.produto), joinedload(Lead.tabulation), joinedload(Lead.consultor)).order_by(Lead.produto_id, Lead.estado, Lead.data_criacao).all()
     if not leads:
         flash('Nenhum lead encontrado para exportar.', 'warning')
         return redirect(url_for('main.manage_mailings'))
-    data_for_df = []
-    for lead in leads:
-        lead_info = {
-            'Produto': lead.produto.name if lead.produto else 'N/A', 'Estado': lead.estado,
-            'Status': lead.status, 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO',
-            'Consultor': lead.consultor.username if lead.consultor else 'N/A',
-            'Nome Cliente': lead.nome_cliente, 'CPF': lead.cpf,
-            'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2,
-        }
-        if lead.additional_data:
-            lead_info.update(lead.additional_data)
-        data_for_df.append(lead_info)
+    
+    data_for_df = [{'Produto': lead.produto.name if lead.produto else 'N/A', 'Estado': lead.estado, 'Status': lead.status, 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Nome Cliente': lead.nome_cliente, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, **(lead.additional_data or {})} for lead in leads]
+
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
     df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
@@ -510,47 +508,45 @@ def export_all_mailings():
     filename = f"relatorio_completo_mailings_{date.today().strftime('%Y-%m-%d')}.csv"
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
 
-# --- ROTAS DE GESTÃO DE USUÁRIOS ---
-@bp.route('/users')
+# --- ROTAS DE GESTÃO DE USUÁRIOS (SUPER ADMIN) ---
+@bp.route('/admin/users')
 @login_required
+@require_role('super_admin')
 def manage_users():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
     users = User.query.order_by(User.username).all()
-    return render_template('admin/manage_users.html', title="Gerir Utilizadores", users=users)
+    grupos = Grupo.query.order_by(Grupo.nome).all()
+    return render_template('admin/manage_users.html', title="Gerir Utilizadores", users=users, grupos=grupos)
 
-@bp.route('/users/add', methods=['POST'])
+@bp.route('/admin/users/add', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def add_user():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
     username = request.form.get('username')
     email = request.form.get('email')
     password = request.form.get('password')
-    is_admin = request.form.get('is_admin') == 'on'
+    role = request.form.get('role', 'consultor')
+    grupo_id = request.form.get('grupo_id')
+    if not all([username, email, password, role, grupo_id]):
+        flash('Todos os campos são obrigatórios.', 'danger')
+        return redirect(url_for('main.manage_users'))
     if User.query.filter_by(username=username).first():
         flash('Esse nome de utilizador já existe.', 'danger')
         return redirect(url_for('main.manage_users'))
     if User.query.filter_by(email=email).first():
         flash('Esse email já está a ser utilizado.', 'danger')
         return redirect(url_for('main.manage_users'))
-    new_user = User(username=username, email=email, is_admin=is_admin)
+    new_user = User(username=username, email=email, role=role, grupo_id=int(grupo_id))
     new_user.set_password(password)
     db.session.add(new_user)
     db.session.commit()
     flash('Utilizador criado com sucesso!', 'success')
     return redirect(url_for('main.manage_users'))
 
-@bp.route('/users/update_limits/<int:user_id>', methods=['POST'])
+@bp.route('/admin/users/update_limits/<int:user_id>', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def update_user_limits(user_id):
-    if not current_user.is_admin:
-        flash('Acesso negado.', 'danger')
-        return redirect(url_for('main.index'))
     user = User.query.get_or_404(user_id)
-    if user.is_admin:
-        flash('Não é possível definir limites para um administrador.', 'warning')
-        return redirect(url_for('main.manage_users'))
     try:
         wallet_limit = int(request.form.get('wallet_limit', user.wallet_limit))
         daily_pull_limit = int(request.form.get('daily_pull_limit', user.daily_pull_limit))
@@ -563,11 +559,10 @@ def update_user_limits(user_id):
         flash('Valores de limite inválidos. Por favor, insira apenas números.', 'danger')
     return redirect(url_for('main.manage_users'))
 
-@bp.route('/users/delete/<int:id>', methods=['POST'])
+@bp.route('/admin/users/delete/<int:id>', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def delete_user(id):
-    if not current_user.is_admin:
-        return redirect(url_for('main.manage_users'))
     if id == current_user.id:
         flash('Não pode eliminar a sua própria conta.', 'danger')
         return redirect(url_for('main.manage_users'))
@@ -577,13 +572,68 @@ def delete_user(id):
     flash('Utilizador eliminado com sucesso!', 'success')
     return redirect(url_for('main.manage_users'))
 
+# --- ROTAS DO ADMIN DO PARCEIRO ---
+
+@bp.route('/parceiro/dashboard')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_dashboard():
+    return render_template('parceiro/dashboard.html', title=f"Painel - {current_user.grupo.nome}")
+
+@bp.route('/parceiro/monitor')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_monitor():
+    consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
+    start_of_day = datetime.combine(date.today(), time.min)
+    agents_data = []
+    for agent in consultants:
+        time_in_status = datetime.utcnow() - agent.status_timestamp
+        hours, remainder = divmod(time_in_status.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
+        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
+        agents_data.append({'id': agent.id, 'name': agent.username, 'status': agent.current_status, 'timer': timer_str, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
+    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
+    return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
+
+@bp.route('/parceiro/users')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_manage_users():
+    users = User.query.filter(User.grupo_id == current_user.grupo_id, User.role == 'consultor').order_by(User.username).all()
+    return render_template('parceiro/manage_users.html', title="Gerir Minha Equipe", users=users)
+
+@bp.route('/parceiro/users/add', methods=['POST'])
+@login_required
+@require_role('admin_parceiro')
+def parceiro_add_user():
+    username = request.form.get('username')
+    email = request.form.get('email')
+    password = request.form.get('password')
+    if not all([username, email, password]):
+        flash('Todos os campos são obrigatórios.', 'danger')
+        return redirect(url_for('main.parceiro_manage_users'))
+    if User.query.filter_by(username=username).first():
+        flash('Esse nome de utilizador já existe.', 'danger')
+        return redirect(url_for('main.parceiro_manage_users'))
+    if User.query.filter_by(email=email).first():
+        flash('Esse email já está a ser utilizado.', 'danger')
+        return redirect(url_for('main.parceiro_manage_users'))
+    new_user = User(username=username, email=email, role='consultor', grupo_id=current_user.grupo_id)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    db.session.commit()
+    flash('Consultor adicionado à sua equipe!', 'success')
+    return redirect(url_for('main.parceiro_manage_users'))
+
 # --- ROTAS DO CONSULTOR (COM ATUALIZAÇÃO DE STATUS) ---
 @bp.route('/consultor/dashboard')
 @login_required
+@require_role('consultor')
 def consultor_dashboard():
-    if current_user.is_admin:
-        return redirect(url_for('main.admin_dashboard'))
-        
     start_of_day = datetime.combine(date.today(), time.min)
     leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     leads_consumidos_hoje = LeadConsumption.query.filter(
@@ -637,9 +687,8 @@ def consultor_dashboard():
 
 @bp.route('/pegar_leads_selecionados', methods=['POST'])
 @login_required
+@require_role('consultor')
 def pegar_leads_selecionados():
-    if current_user.is_admin:
-        return redirect(url_for('main.admin_dashboard'))
     leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     start_of_day = datetime.combine(date.today(), time.min)
     leads_consumidos_hoje = LeadConsumption.query.filter(
@@ -695,10 +744,8 @@ def pegar_leads_selecionados():
 # --- ROTAS DE ATENDIMENTO E OUTRAS ---
 @bp.route('/atendimento')
 @login_required
+@require_role('consultor')
 def atendimento():
-    if current_user.is_admin:
-        return redirect(url_for('main.admin_dashboard'))
-    
     lead_para_atender = Lead.query.filter_by(
         consultor_id=current_user.id, 
         status='Em Atendimento'
@@ -754,6 +801,7 @@ def atendimento():
 
 @bp.route('/atender/<int:lead_id>', methods=['POST'])
 @login_required
+@require_role('consultor')
 def atender_lead(lead_id):
     lead = Lead.query.get_or_404(lead_id)
     if lead.consultor_id != current_user.id:
@@ -800,34 +848,44 @@ def atender_lead(lead_id):
 
 @bp.route('/retabulate/<int:lead_id>', methods=['POST'])
 @login_required
+@require_role('consultor', 'admin_parceiro', 'super_admin')
 def retabulate_lead(lead_id):
     lead = Lead.query.get_or_404(lead_id)
     
     last_activity = ActivityLog.query.filter_by(lead_id=lead.id).order_by(ActivityLog.timestamp.desc()).first()
-    original_consultor_id = last_activity.user_id if last_activity else None
-    
-    if original_consultor_id != current_user.id and not current_user.is_admin:
+    if not last_activity:
+        flash('Nenhuma atividade anterior encontrada para este lead.', 'danger')
+        return redirect(request.referrer or url_for('main.index'))
+        
+    original_consultor = User.query.get(last_activity.user_id)
+
+    # Regras de permissão
+    if current_user.role == 'consultor' and original_consultor.id != current_user.id:
         flash('Não pode editar um lead que não é seu.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
+    if current_user.role == 'admin_parceiro' and (not original_consultor or original_consultor.grupo_id != current_user.grupo_id):
+        flash('Não pode editar um lead de outra equipe.', 'danger')
+        return redirect(url_for('main.parceiro_dashboard'))
     
     new_tabulation_id = request.form.get('new_tabulation_id')
     if not new_tabulation_id:
         flash('Nova tabulação não selecionada.', 'warning')
-        return redirect(url_for('main.consultor_dashboard'))
+        return redirect(request.referrer or url_for('main.index'))
 
     new_tabulation = Tabulation.query.get(int(new_tabulation_id))
     if not new_tabulation:
         flash('Tabulação selecionada inválida.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
+        return redirect(request.referrer or url_for('main.index'))
     
     lead.tabulation_id = new_tabulation.id
     lead.status = 'Tabulado'
     lead.data_tabulacao = datetime.utcnow()
-    lead.consultor_id = original_consultor_id
+    if original_consultor:
+        lead.consultor_id = original_consultor.id
 
     retab_log = ActivityLog(
         lead_id=lead.id,
-        user_id=current_user.id,
+        user_id=current_user.id, # Quem fez a retabulação
         tabulation_id=new_tabulation.id,
         action_type='Retabulação'
     )
@@ -835,25 +893,25 @@ def retabulate_lead(lead_id):
     db.session.commit()
 
     flash(f'Tabulação do lead {lead.nome_cliente} atualizada!', 'success')
-    return redirect(url_for('main.consultor_dashboard'))
+    return redirect(request.referrer or url_for('main.index'))
 
-@bp.route('/tabulations')
+
+@bp.route('/admin/tabulations')
 @login_required
+@require_role('super_admin')
 def manage_tabulations():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
     return render_template('admin/manage_tabulations.html', title="Gerir Tabulações", tabulations=tabulations)
 
-@bp.route('/tabulations/add', methods=['POST'])
+@bp.route('/admin/tabulations/add', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def add_tabulation():
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     name = request.form.get('name')
     color = request.form.get('color')
     
     is_recyclable = request.form.get('is_recyclable') == 'on'
-    is_positive_conversion = request.form.get('is_positive_conversion') == 'on' # Adicionado para o monitor
+    is_positive_conversion = request.form.get('is_positive_conversion') == 'on'
     
     recycle_in_days = None
     if is_recyclable:
@@ -868,7 +926,7 @@ def add_tabulation():
             color=color,
             is_recyclable=is_recyclable,
             recycle_in_days=recycle_in_days,
-            is_positive_conversion=is_positive_conversion # Adicionado para o monitor
+            is_positive_conversion=is_positive_conversion
         )
         db.session.add(new_tabulation)
         try:
@@ -883,21 +941,20 @@ def add_tabulation():
             
     return redirect(url_for('main.manage_tabulations'))
 
-@bp.route('/tabulations/delete/<int:id>', methods=['POST'])
+@bp.route('/admin/tabulations/delete/<int:id>', methods=['POST'])
 @login_required
+@require_role('super_admin')
 def delete_tabulation(id):
-    if not current_user.is_admin: return redirect(url_for('main.index'))
     tabulation_to_delete = Tabulation.query.get_or_404(id)
     db.session.delete(tabulation_to_delete)
     db.session.commit()
     flash('Tabulação eliminada com sucesso!', 'success')
     return redirect(url_for('main.manage_tabulations'))
 
-@bp.route('/export/tabulations')
+@bp.route('/admin/export/tabulations')
 @login_required
+@require_role('super_admin')
 def export_tabulations():
-    if not current_user.is_admin:
-        return redirect(url_for('main.index'))
     try:
         results = ActivityLog.query.options(
             joinedload(ActivityLog.lead).joinedload(Lead.produto),
