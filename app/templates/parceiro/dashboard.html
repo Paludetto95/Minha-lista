@@ -1,0 +1,66 @@
+<!-- app/templates/parceiro/dashboard.html (VERSÃO FINAL COM LINK DE DESEMPENHO) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Painel de Gestão - {{ current_user.grupo.nome }}</h2>
+    </div>
+
+    <div class="row">
+        <!-- Coluna de Ações Rápidas -->
+        <div class="col-md-5 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">Ações Rápidas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('main.parceiro_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold">
+                            <i class="fas fa-satellite-dish me-2"></i>Monitorar Minha Equipe
+                        </a>
+                        <!-- ===== NOVO LINK ADICIONADO AQUI ===== -->
+                        <a href="{{ url_for('main.parceiro_performance_dashboard') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-tachometer-alt me-2"></i>Dashboard de Desempenho
+                        </a>
+                        <a href="{{ url_for('main.parceiro_manage_users') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-user-edit me-2"></i>Gerir Nomes de Utilizadores
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna de Últimas Atividades da Equipe -->
+        <div class="col-md-7 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">Últimas Atividades da Equipe</h5>
+                </div>
+                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                    {% for log_entry in recent_activity %}
+                        <li class="list-group-item">
+                            <!-- Mostra o nome do cliente e a tabulação escolhida -->
+                            {{ log_entry.lead.nome if log_entry.lead else 'Lead Apagado' }} - 
+                            <strong style="color: {{ log_entry.tabulation.color }};">
+                                {% if log_entry.action_type == 'Reciclagem' %}
+                                    <i class="fas fa-recycle me-1" title="Reciclagem"></i>
+                                {% endif %}
+                                {{ log_entry.tabulation.name if log_entry.tabulation else 'Sem Tabulação' }}
+                            </strong>
+                            <!-- Mostra quem fez e quando -->
+                            <small class="text-muted d-block">
+                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp.strftime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
+                            </small>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-center text-muted py-4">Nenhuma atividade registrada pela equipe recentemente.</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

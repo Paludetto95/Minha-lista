@@ -1,3 +1,4 @@
+<!-- app/templates/admin/manage_products.html (VERSÃO COM TEMA CORRIGIDO) -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -31,8 +32,10 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
+                        <!-- 'table-striped' já estava aqui, o que é ótimo -->
                         <table class="table table-striped table-hover">
-                            <thead>
+                            <!-- ===== 'table-light' (implícito) TROCADO POR 'table-secondary' ===== -->
+                            <thead class="table-secondary">
                                 <tr>
                                     <th>ID</th>
                                     <th>Nome do Produto</th>
@@ -45,7 +48,6 @@
                                     <td>{{ product.id }}</td>
                                     <td>{{ product.name }}</td>
                                     <td class="text-end">
-                                        <!-- ===== BOTÃO DE APAGAR ADICIONADO AQUI ===== -->
                                         <form action="{{ url_for('main.delete_product', id=product.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja apagar o produto \'{{ product.name }}\'? Esta ação não pode ser desfeita.');">
                                             <button type="submit" class="btn btn-sm btn-outline-danger">
                                                 <i class="fas fa-trash"></i> Apagar

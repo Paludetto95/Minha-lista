@@ -1,0 +1,153 @@
+<!-- app/templates/parceiro/performance_dashboard.html (VERSÃO FINAL COM ESTILO NEON E GRÁFICO CORRIGIDO) -->
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    .rank-medal { font-size: 1.5rem; }
+    .rank-1 { color: #ffd700; }
+    .rank-2 { color: #c0c0c0; }
+    .rank-3 { color: #cd7f32; }
+    .progress-bar { font-weight: bold; }
+
+    /* Estilo para o efeito de brilho no card do gráfico */
+    .neon-glow-card {
+        border: 1px solid rgba(0, 123, 255, 0.4);
+        box-shadow: 0 0 8px rgba(0, 123, 255, 0.3),
+                    0 0 15px rgba(0, 123, 255, 0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('main.parceiro_dashboard') }}" class="btn btn-outline-secondary me-3" title="Voltar ao Painel">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h2 class="mb-0">Desempenho da Equipe ({{ selected_period|title }}) - {{ current_user.grupo.nome }}</h2>
+        </div>
+        
+        <div>
+            <a href="{{ url_for('main.parceiro_export_performance', periodo=selected_period) }}" class="btn btn-success">
+                <i class="fas fa-file-excel me-2"></i>Exportar para Excel
+            </a>
+        </div>
+    </div>
+    <!-- Linha de KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total de Ligações</h6>
+                    <p class="card-text display-4 fw-bold">{{ kpis.total_calls }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total de Conversões</h6>
+                    <p class="card-text display-4 fw-bold text-success">{{ kpis.total_conversions }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Taxa de Conversão da Equipe</h6>
+                    <p class="card-text display-4 fw-bold text-primary">{{ "%.1f"|format(kpis.conversion_rate) }}<small>%</small></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Linha do Ranking e Gráfico -->
+    <div class="row">
+        <!-- Coluna do Ranking -->
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header"><h5 class="mb-0">Ranking de Consultores</h5></div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                                <thead class="table-secondary">
+
+                                <tr>
+                                    <th class="text-center" style="width: 5%;">#</th>
+                                    <th style="width: 25%;">Consultor</th>
+                                    <th class="text-center" style="width: 15%;">Ligações</th>
+                                    <th class="text-center" style="width: 15%;">Conversões</th>
+                                    <th style="width: 40%;">Taxa de Conversão</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in performance_data %}
+                                <tr>
+                                    <td class="text-center fw-bold">
+                                        {% if loop.index <= 3 %}<i class="fas fa-medal rank-medal rank-{{ loop.index }}"></i>{% else %}{{ loop.index }}º{% endif %}
+                                    </td>
+                                    <td><strong>{{ data.name }}</strong></td>
+                                    <td class="text-center fs-5">{{ data.total_calls }}</td>
+                                    <td class="text-center fs-5 fw-bold text-success">{{ data.total_conversions }}</td>
+                                    <td>
+                                        <div class="progress" style="height: 25px;">
+                                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ data.conversion_rate }}%;" aria-valuenow="{{ data.conversion_rate }}" aria-valuemin="0" aria-valuemax="100">
+                                                {{ "%.1f"|format(data.conversion_rate) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">Nenhum dado de desempenho para exibir neste período.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+         <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm">
+            <!-- CÓDIGO NOVO E CORRIGIDO -->
+<div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Distribuição de Tabulações</h5>
+    <div class="btn-group btn-group-sm" role="group">
+    <a href="{{ url_for('main.parceiro_performance_dashboard', periodo='hoje') }}" class="btn {% if selected_period == 'hoje' %}btn-primary{% else %}btn-outline-primary{% endif %}">Hoje</a>
+    <a href="{{ url_for('main.parceiro_performance_dashboard', periodo='ontem') }}" class="btn {% if selected_period == 'ontem' %}btn-primary{% else %}btn-outline-primary{% endif %}">Ontem</a>
+    <a href="{{ url_for('main.parceiro_performance_dashboard', periodo='7dias') }}" class="btn {% if selected_period == '7dias' %}btn-primary{% else %}btn-outline-primary{% endif %} text-nowrap">7 Dias</a>
+</div>
+</div>
+            <div class="card-body">
+                <!-- Div para o gráfico -->
+                <div style="height: 300px;">
+                {% if pie_chart_html %}
+                    {{ pie_chart_html | safe }}
+                {% else %}
+                    <p class="text-center text-muted h-100 d-flex align-items-center justify-content-center">Sem dados de tabulação para este período.</p>
+                {% endif %}
+                </div>
+
+                <!-- ===== NOVA LEGENDA COM SCROLL ===== -->
+                {% if legend_data %}
+                <hr class="my-2">
+                <!-- Container da legenda com altura máxima e scroll vertical -->
+                <div style="max-height: 100px; overflow-y: auto;">
+                    <ul class="list-unstyled mb-0">
+                        {% for label, color in legend_data %}
+                            <li class="d-flex align-items-center mb-1">
+                                <span style="height: 14px; width: 14px; background-color: {{ color }}; border-radius: 3px; display: inline-block; margin-right: 10px; flex-shrink: 0;"></span>
+                                <span class="text-muted">{{ label }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

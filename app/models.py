@@ -1,17 +1,16 @@
-# app/models.py (VERSÃO ATUALIZADA COM GRUPOS E PAPÉIS)
+# app/models.py (VERSÃO FINAL COMPLETA)
 
 from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from datetime import datetime, timedelta
 
-# --- NOVO MODELO PARA OS GRUPOS/PARCEIROS ---
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), unique=True, nullable=False, index=True)
     is_active = db.Column(db.Boolean, default=True)
+    color = db.Column(db.String(7), default='#6c757d')
     
-    # Relacionamento para acessar todos os usuários de um determinado grupo
     users = db.relationship('User', backref='grupo', lazy='dynamic')
 
 class User(UserMixin, db.Model):
@@ -19,19 +18,15 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), index=True, unique=True)
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(256))
-    
-    # --- CAMPO 'is_admin' SUBSTITUÍDO POR 'role' ---
-    # Papéis possíveis: 'super_admin', 'consultor', 'admin_parceiro'
     role = db.Column(db.String(50), default='consultor', nullable=False, index=True)
+    theme = db.Column(db.String(50), default='default', nullable=False)
     
-    # --- NOVO CAMPO PARA LIGAR O USUÁRIO A UM GRUPO ---
     grupo_id = db.Column(db.Integer, db.ForeignKey('grupo.id'), nullable=False, index=True)
-    
     wallet_limit = db.Column(db.Integer, default=100, nullable=False)
     daily_pull_limit = db.Column(db.Integer, default=30, nullable=False)
-    
     current_status = db.Column(db.String(50), default='Offline', index=True)
     status_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
     
     leads = db.relationship('Lead', backref='consultor', lazy='dynamic')
     consumptions = db.relationship('LeadConsumption', backref='user', lazy='dynamic', cascade="all, delete-orphan")
@@ -43,12 +38,10 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-# --- NENHUMA ALTERAÇÃO NECESSÁRIA NOS MODELOS ABAIXO ---
-
 class Lead(db.Model):
     __tablename__ = 'lead'
     id = db.Column(db.Integer, primary_key=True)
-    nome_cliente = db.Column(db.String(150), index=True)
+    nome = db.Column(db.String(150), index=True)
     cpf = db.Column(db.String(11), unique=True, nullable=False, index=True)
     telefone = db.Column(db.String(20), nullable=True)
     telefone_2 = db.Column(db.String(20), nullable=True)
@@ -61,10 +54,8 @@ class Lead(db.Model):
     tabulation_id = db.Column(db.Integer, db.ForeignKey('tabulation.id'), index=True)
     produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), index=True, nullable=True)
     estado = db.Column(db.String(2), index=True, nullable=True)
-    
     available_after = db.Column(db.DateTime, nullable=True, index=True)
 
-    # RELACIONAMENTOS
     tabulation = db.relationship('Tabulation', back_populates='leads')
     produto = db.relationship('Produto', back_populates='leads')
     consumptions = db.relationship('LeadConsumption', backref='lead', lazy='dynamic', cascade="all, delete-orphan")
@@ -74,12 +65,9 @@ class Tabulation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     color = db.Column(db.String(7), default='#000000')
-    
     is_recyclable = db.Column(db.Boolean, default=False, nullable=False)
     recycle_in_days = db.Column(db.Integer, nullable=True)
-    
     is_positive_conversion = db.Column(db.Boolean, default=False, nullable=False)
-
     leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')
 
 class LeadConsumption(db.Model):
@@ -91,7 +79,6 @@ class LeadConsumption(db.Model):
 class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    
     leads = db.relationship('Lead', back_populates='produto', lazy='dynamic', cascade="all, delete-orphan")
     layouts = db.relationship('LayoutMailing', backref='produto', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -103,14 +90,11 @@ class LayoutMailing(db.Model):
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     tabulation_id = db.Column(db.Integer, db.ForeignKey('tabulation.id'), nullable=False, index=True)
-    
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     action_type = db.Column(db.String(50)) 
-
     tabulation = db.relationship('Tabulation')
 
 @login_manager.user_loader

@@ -1,4 +1,4 @@
-<!-- app/templates/admin/monitor.html (VERSÃO COM ÚLTIMO LOGIN) -->
+<!-- app/templates/parceiro/monitor.html (VERSÃO COM ÚLTIMO LOGIN) -->
 {% extends "base.html" %}
 
 {% block styles %}
@@ -34,22 +34,27 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="mb-0">Monitor Global de Consultores</h2>
-        <span class="text-muted">Atualização automática a cada 30 segundos</span>
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('main.parceiro_dashboard') }}" class="btn btn-outline-secondary me-3" title="Voltar ao Painel">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h2 class="mb-0">Monitor da Equipe: <strong>{{ current_user.grupo.nome }}</strong></h2>
+        </div>
+        <span class="text-muted">Atualização automática a cada 10 segundos</span>
     </div>
 
     <div class="card shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
                 <table class="table table-hover mb-0">
                     <thead class="table-secondary">
                         <tr>
                             <th style="width: 5%;" class="text-center">#</th>
-                            <th style="width: 20%;">Nome</th>
-                            <th style="width: 20%;">Equipe / Local</th>
-                            <th style="width: 25%;">Status / Último Login</th>
-                            <th style="width: 10%;" class="text-center">Lig. Hoje</th>
-                            <th style="width: 15%;" class="text-center">Conversões Hoje</th>
+                            <th style="width: 25%;">Nome</th>
+                            <th style="width: 30%;">Status / Último Login</th>
+                            <th style="width: 15%;" class="text-center">Acionamentos Hoje</th>
+                            <th style="width: 20%;" class="text-center">Conversões Hoje</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,7 +68,6 @@
                                 {% endif %}
                             </td>
                             <td><strong>{{ agent.name }}</strong></td>
-                            <td>{{ agent.local or 'N/A' }}</td>
                             <td>
                                 <div class="d-flex align-items-center">
                                     <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
@@ -82,7 +86,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado.</td>
+                            <td colspan="5" class="text-center text-muted p-5">Nenhum consultor encontrado nesta equipe.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

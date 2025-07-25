@@ -49,18 +49,18 @@
                 <div class="card-header">
                     Área de Gestão
                 </div>
-                <!-- ... -->
-<div class="card-body">
-    <div class="list-group">
-        
-        <!-- TESTE PARA FORÇAR ATUALIZAÇÃO -->
-                        <!-- ===== LINK ATUALIZADO/ADICIONADO AQUI ===== -->
+                <div class="card-body">
+                    <div class="list-group">
                         <a href="{{ url_for('main.admin_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold"><i class="fas fa-satellite-dish me-2"></i>Monitor em Tempo Real</a>
-                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold">Gerir Mailings</a>
-                        <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action">Gerir Produtos</a>
-                        <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action">Gerir Layouts Salvos</a>
-                        <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action">Gerir Utilizadores</a>
-                        <a href="{{ url_for('main.manage_tabulations') }}" class="list-group-item list-group-item-action">Gerir Tabulações</a>
+                        
+                        <!-- ===== LINK ATUALIZADO PARA A NOVA PÁGINA DE EQUIPES ===== -->
+                        <a href="{{ url_for('main.manage_teams') }}" class="list-group-item list-group-item-action"><i class="fas fa-users-cog me-2"></i>Gerir Equipes</a>
+                        
+                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold"><i class="fas fa-mail-bulk me-2"></i>Gerir Mailings</a>
+                        <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action"><i class="fas fa-box-open me-2"></i>Gerir Produtos</a>
+                        <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action"><i class="fas fa-drafting-compass me-2"></i>Gerir Layouts Salvos</a>
+                        <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action"><i class="fas fa-user-friends me-2"></i>Gerir Utilizadores (Lista)</a>
+                        <a href="{{ url_for('main.manage_tabulations') }}" class="list-group-item list-group-item-action"><i class="fas fa-tags me-2"></i>Gerir Tabulações</a>
                     </div>
                 </div>
             </div>
@@ -75,7 +75,7 @@
                     {% for log_entry in recent_activity.items %}
                         <li class="list-group-item">
                             <!-- Mostra o nome do cliente e a tabulação escolhida -->
-                            {{ log_entry.lead.nome_cliente if log_entry.lead else 'Lead Apagado' }} - 
+                            {{ log_entry.lead.nome if log_entry.lead else 'Lead Apagado' }} - 
                             <strong style="color: {{ log_entry.tabulation.color }};">
                                 {% if log_entry.action_type == 'Reciclagem' %}<i class="fas fa-recycle me-1" title="Reciclagem"></i>{% endif %}
                                 {{ log_entry.tabulation.name if log_entry.tabulation else 'Sem Tabulação' }}

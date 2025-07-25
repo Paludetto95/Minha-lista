@@ -1,4 +1,4 @@
-# app/__init__.py (VERSÃO FINAL E CORRIGIDA)
+# app/__init__.py (VERSÃO FINAL COM A INDENTAÇÃO CORRIGIDA)
 
 import os
 from flask import Flask
@@ -22,9 +22,7 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # ===== CORREÇÃO APLICADA AQUI =====
-    # Adiciona a função 'enumerate' do Python ao ambiente global do Jinja2,
-    # permitindo que ela seja usada em todos os templates.
+    # Adiciona a função 'enumerate' do Python ao ambiente global do Jinja2
     app.jinja_env.globals.update(enumerate=enumerate)
 
     # Cria a pasta de uploads temporários se ela não existir
@@ -41,4 +39,6 @@ def create_app(config_class=Config):
         from app import routes, models
         app.register_blueprint(routes.bp)
 
+    # ===== CORREÇÃO AQUI =====
+    # A linha 'return' deve estar dentro da função 'create_app'
     return app

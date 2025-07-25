@@ -1,10 +1,10 @@
+<!-- app/templates/admin/manage_mailings.html (VERSÃO COM TEMA CORRIGIDO) -->
 {% extends "base.html" %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">Gerenciamento de Mailings</h2>
-        <!-- Botão para exportar tudo -->
         <a href="{{ url_for('main.export_all_mailings') }}" class="btn btn-success">
             <i class="fas fa-file-excel"></i> Exportar Relatório Completo
         </a>
@@ -20,9 +20,11 @@
                 </h2>
                 <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#accordionMailings">
                     <div class="accordion-body p-0">
-                        <table class="table table-hover align-middle mb-0">
+                        <!-- ===== 'table-striped' ADICIONADO AQUI ===== -->
+                        <table class="table table-hover table-striped align-middle mb-0">
                             <!-- Cabeçalho da sub-tabela -->
-                            <thead class="table-light">
+                            <!-- ===== 'table-light' TROCADO POR 'table-secondary' ===== -->
+                            <thead class="table-secondary">
                                 <tr>
                                     <th>Estado</th>
                                     <th>Total de Leads</th>
@@ -37,17 +39,12 @@
                                     <td>{{ mailing.total_leads }}</td>
                                     <td><span class="badge bg-warning text-dark">{{ mailing.leads_novos }}</span></td>
                                     <td>
-                                        <!-- ===== CORREÇÃO IMPORTANTE AQUI ===== -->
-                                        <!-- Envolve os botões em um div com gap para espaçamento -->
                                         <div class="d-flex gap-2">
-                                            <!-- Botão de Exportar por grupo (é um link, fica fora do form) -->
                                             <a href="{{ url_for('main.export_mailing', produto_id=mailing.produto_id, estado=mailing.estado) }}" class="btn btn-sm btn-outline-success" title="Exportar mailing de {{ mailing.estado }}">
                                                 <i class="fas fa-file-csv"></i> Exportar
                                             </a>
                                             
-                                            <!-- Formulário de Exclusão encapsula apenas seu próprio botão -->
                                             <form action="{{ url_for('main.delete_mailing') }}" method="POST" onsubmit="return confirm('ATENÇÃO! Isso iniciará a exclusão em segundo plano de {{ mailing.total_leads }} leads de {{ mailing.estado }}. Deseja continuar?');">
-                                                <!-- Campos ocultos para enviar os parâmetros no corpo do POST -->
                                                 <input type="hidden" name="produto_id" value="{{ mailing.produto_id }}">
                                                 <input type="hidden" name="estado" value="{{ mailing.estado }}">
                                                 

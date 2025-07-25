@@ -16,33 +16,100 @@
     <!-- Estilos específicos da página (se houver) -->
     {% block styles %}{% endblock %}
 
-    <!-- Estilos do Loader -->
+    <!-- ESTILOS GLOBAIS E DE TEMAS -->
     <style>
+        /* Loader */
         #loader-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.7);
-            z-index: 9999;
-            display: none;
-            justify-content: center;
-            align-items: center;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(255, 255, 255, 0.7); z-index: 9999;
+            display: none; justify-content: center; align-items: center;
         }
         .spinner {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #0d6efd; /* Azul do Bootstrap */
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
+            border: 8px solid #f3f3f3; border-top: 8px solid #0d6efd;
+            border-radius: 50%; width: 60px; height: 60px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
 
+        /* ===== CSS DOS TEMAS (VERSÃO CORRIGIDA E ESPECÍFICA) ===== */
+
+        /* TEMA PADRÃO (CLARO) */
+        body[data-theme="default"] { background-color: #e0e0e0 !important; color: #212529; }
+        body[data-theme="default"] .card, 
+        body[data-theme="default"] .list-group-item,
+        body[data-theme="default"] .modal-content { background-color: #fff; color: #212529; }
+        body[data-theme="default"] .navbar-dark.bg-dark { background-color: #343a40 !important; }
+        body[data-theme="default"] h1, body[data-theme="default"] h2, body[data-theme="default"] h3,
+        body[data-theme="default"] h4, body[data-theme="default"] h5, body[data-theme="default"] h6 { color: #212529; }
+        body[data-theme="default"] .table-secondary th { color: #212529; }
+
+        /* TEMA ESCURO (DARK) */
+        /* TEMA ESCURO (DARK) */
+        body[data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
+        body[data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #121212 0%, #1c1c1c 100%) !important; }
+        body[data-theme="dark"] .card, 
+        body[data-theme="dark"] .list-group-item,
+        body[data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
+
+        /* REGRAS DE TABELA */
+        body[data-theme="dark"] .table { --bs-table-color: #dee2e6; --bs-table-bg: #343a40; --bs-table-border-color: #495057; --bs-table-striped-color: #dee2e6; --bs-table-striped-bg: rgba(255, 255, 255, 0.03); --bs-table-hover-color: #fff; --bs-table-hover-bg: rgba(255, 255, 255, 0.05); }
+        body[data-theme="dark"] .table-secondary { --bs-table-bg: #495057; --bs-table-color: #fff; --bs-table-border-color: #6c757d; }
+
+        /* REGRAS DE TEXTO */
+        body[data-theme="dark"] h1, body[data-theme="dark"] h2, body[data-theme="dark"] h3,
+        body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] h6 { color: #fff; }
+        body[data-theme="dark"] .text-muted { color: #adb5bd !important; }
+
+        /* REGRAS DE COMPONENTES */
+        body[data-theme="dark"] .modal-header, body[data-theme="dark"] .modal-footer { border-color: #495057; }
+        body[data-theme="dark"] .btn-close { filter: invert(1) grayscale(100) brightness(200%); }
+        body[data-theme="dark"] .accordion-item { background-color: #343a40; border-color: #495057; }
+        body[data-theme="dark"] .accordion-button { background-color: #495057; color: #fff; }
+        body[data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15); }
+        body[data-theme="dark"] .accordion-button::after { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e"); }
+
+        /* REGRAS DE FORMULÁRIO */
+        body[data-theme="dark"] .form-control,
+        body[data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
+        body[data-theme="dark"] .form-control::placeholder { color: #adb5bd; }
+        body[data-theme="dark"] .form-control:focus,
+        body[data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
+        body[data-theme="dark"] .form-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23dee2e6' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); }
+        body[data-theme="dark"] .form-control[type="file"]::file-selector-button { background-color: #6c757d; color: #fff; border-color: #6c757d; }
+        body[data-theme="dark"] .form-control[type="file"]:hover::file-selector-button { background-color: #5c636a; border-color: #565e64; }
+        body[data-theme="dark"] .form-check-input { background-color: #495057; border-color: #6c757d; }
+        body[data-theme="dark"] .form-check-input:checked { background-color: #0d6efd; border-color: #0d6efd; }
+
+        /* REGRAS DE BOTÕES */
+        body[data-theme="dark"] .btn-outline-success { background-color: #198754; color: #fff; border-color: #198754; }
+        body[data-theme="dark"] .btn-outline-success:hover { background-color: #157347; color: #fff; border-color: #146c43; }
+        body[data-theme="dark"] .btn-outline-danger { background-color: #dc3545; color: #fff; border-color: #dc3545; }
+        body[data-theme="dark"] .btn-outline-danger:hover { background-color: #bb2d3b; color: #fff; border-color: #b02a37; }
+        body[data-theme="dark"] .btn-outline-primary { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
+        body[data-theme="dark"] .btn-outline-primary:hover { background-color: #0b5ed7; color: #fff; border-color: #0a58ca; }
+
+        /* REGRAS DE BARRA DE PROGRESSO */
+        body[data-theme="dark"] .progress { background-color: #495057; }
+
+        /* TEMA OCEANO (AZUL) */
+        body[data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
+        body[data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
+        body[data-theme="ocean"] .card, 
+        body[data-theme="ocean"] .list-group-item,
+        body[data-theme="ocean"] .modal-content { background-color: #fff; color: #003d5b; }
+        body[data-theme="ocean"] h1, body[data-theme="ocean"] h2, body[data-theme="ocean"] h3,
+        body[data-theme="ocean"] h4, body[data-theme="ocean"] h5, body[data-theme="ocean"] h6 { color: #003d5b; }
+    </style>
 </head>
-<body>
+<body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
+
+    <!-- SCRIPT DE APLICAÇÃO INSTANTÂNEA DO TEMA (Evita o "flash") -->
+    <script>
+        (function() {
+            var theme = localStorage.getItem('userTheme') || document.body.getAttribute('data-theme');
+            document.body.setAttribute('data-theme', theme);
+        })();
+    </script>
 
     <!-- Loader -->
     <div id="loader-overlay">
@@ -63,31 +130,31 @@
                 </button>
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <!-- Lógica de navegação baseada em papéis -->
                         {% if current_user.is_authenticated %}
-                            {% if current_user.is_admin %}
-                                <li class="nav-item">
-                                    <a class="nav-link" href="{{ url_for('main.admin_dashboard') }}">Dashboard Admin</a>
-                                </li>
+                            {% if current_user.role == 'super_admin' %}
+                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.admin_dashboard') }}">Painel Principal</a></li>
+                            {% elif current_user.role == 'admin_parceiro' %}
+                                 <li class="nav-item"><a class="nav-link" href="{{ url_for('main.parceiro_dashboard') }}">Meu Painel</a></li>
                             {% else %}
-                                <li class="nav-item">
-                                    <a class="nav-link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a>
-                                </li>
+                                 <li class="nav-item"><a class="nav-link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
                             {% endif %}
                         {% endif %}
                     </ul>
                     <ul class="navbar-nav">
                         {% if current_user.is_authenticated %}
-                            {% if current_user.is_admin %}
+                            {% if current_user.role == 'super_admin' %}
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="fas fa-cog"></i> Gestão
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_teams') }}">Gerir Equipes</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_users') }}">Gerir Utilizadores</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_mailings') }}">Gerir Mailings</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_products') }}">Gerir Produtos</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_layouts') }}">Gerir Layouts</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_users') }}">Gerir Utilizadores</a></li>
                                     <li><a class="dropdown-item" href="{{ url_for('main.manage_tabulations') }}">Gerir Tabulações</a></li>
                                 </ul>
                             </li>
@@ -97,7 +164,9 @@
                                     <i class="fas fa-user-circle"></i> Olá, {{ current_user.username }}!
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fas fa-palette fa-fw me-2"></i>Mudar Aparência</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt fa-fw me-2"></i>Logout</a></li>
                                 </ul>
                             </li>
                         {% else %}
@@ -119,7 +188,7 @@
                     <div class="col-md-10 offset-md-1 col-lg-8 offset-lg-2">
                         {% for category, message in messages %}
                             <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                {{ message }}
+                                {{ message | safe }}
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
                             </div>
                         {% endfor %}
@@ -135,18 +204,19 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
             integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
             crossorigin="anonymous"></script>
+    
+    <!-- Biblioteca de Gráficos (Plotly) -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
-    <!-- ===== LOADER JAVASCRIPT ATUALIZADO ===== -->
+    <!-- SCRIPT DO LOADER -->
     <script>
         document.querySelectorAll('form').forEach(form => {
             form.addEventListener('submit', function() {
-                // Verifica se o formulário é válido E se NÃO tem a classe 'no-loader'
                 if (!form.classList.contains('no-loader') && form.checkValidity()) {
                     document.getElementById('loader-overlay').style.display = 'flex';
                 }
             });
         });
-
         window.addEventListener('pageshow', function(event) {
             if (event.persisted) {
                 document.getElementById('loader-overlay').style.display = 'none';
@@ -155,6 +225,17 @@
     </script>
 
     <!-- Scripts específicos da página -->
-    {% block scripts %}{% endblock %}
+    {% block scripts %}
+    <!-- SCRIPT DE SINCRONIZAÇÃO DO TEMA -->
+    <script>
+        (function() {
+            var serverTheme = document.body.getAttribute('data-theme');
+            var localTheme = localStorage.getItem('userTheme');
+            if (serverTheme !== localTheme) {
+                localStorage.setItem('userTheme', serverTheme);
+            }
+        })();
+    </script>
+    {% endblock %}
 </body>
 </html>

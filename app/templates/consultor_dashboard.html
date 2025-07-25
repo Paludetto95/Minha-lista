@@ -98,7 +98,7 @@
                             {% for log_entry in tabulated_history %}
                             <li class="list-group-item d-flex justify-content-between align-items-center">
                                 <div>
-                                    <strong>{{ log_entry.lead.nome_cliente }}</strong>
+                                    <strong>{{ log_entry.lead.nome }}</strong>
                                     <small class="text-muted d-block">
                                         {{ log_entry.lead.cpf }} - {{ log_entry.action_type }} em {{ log_entry.timestamp.strftime('%d/%m/%Y às %H:%M') }}
                                     </small>
@@ -115,7 +115,7 @@
                                     </span>
                                     {% endif %}
                                     <!-- O botão de editar agora usa o ID do lead do log -->
-                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-lead-id="{{ log_entry.lead.id }}" data-lead-name="{{ log_entry.lead.nome_cliente }}">Editar</button>
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-lead-id="{{ log_entry.lead.id }}" data-lead-name="{{ log_entry.lead.nome }}">Editar</button>
                                 </div>
                             </li>
                             {% endfor %}

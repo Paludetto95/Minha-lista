@@ -1,4 +1,47 @@
+<!-- app/templates/admin/map_columns.html (VERSÃO FINAL E CORRIGIDA) -->
 {% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Estilos específicos para esta página no tema DARK */
+    body[data-theme="dark"] .table-bordered thead,
+    body[data-theme="dark"] .table-bordered tbody tr {
+        border-color: #495057; /* Borda da tabela */
+    }
+    body[data-theme="dark"] .table-bordered th,
+    body[data-theme="dark"] .table-bordered td {
+        border-color: #495057; /* Borda das células */
+    }
+    body[data-theme="dark"] .table-bordered {
+        --bs-table-bg: #343a40; /* Fundo da tabela */
+        --bs-table-color: #dee2e6; /* Cor do texto da tabela */
+    }
+
+    /* FORÇA O ESTILO DOS SELECTS E INPUTS DENTRO DA TABELA */
+    body[data-theme="dark"] .mapping-select,
+    body[data-theme="dark"] input.form-control[type="text"] { /* Para o input hidden de header_name */
+        background-color: #495057 !important;
+        color: #dee2e6 !important;
+        border-color: #6c757d !important;
+    }
+    body[data-theme="dark"] .mapping-select:focus,
+    body[data-theme="dark"] input.form-control[type="text"]:focus {
+        background-color: #495057 !important;
+        color: #fff !important;
+        border-color: #86b7fe !important;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    }
+    body[data-theme="dark"] .form-select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23dee2e6'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    }
+    /* Estilo para a label do checkbox "Salvar layout" */
+    body[data-theme="dark"] .card-body.bg-light {
+        background-color: #343a40 !important; /* Fundo do card inferior */
+        color: #dee2e6 !important; /* Texto da label */
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -14,7 +57,8 @@
 
         <div class="table-responsive">
             <table class="table table-bordered table-hover align-middle">
-                <thead class="table-light">
+                <!-- Cabeçalho da tabela com tema escuro -->
+                <thead class="table-secondary">
                     <tr>
                         <th style="width: 5%;">Incluir</th>
                         <th style="width: 5%;">Coluna</th>
@@ -41,7 +85,7 @@
                                 <option value="Ignorar">-- Ignorar esta coluna --</option>
                                 {% for field in system_fields %}
                                     <option value="{{ field }}" 
-                                    {% if existing_mapping and existing_mapping.get(field) == header %}
+                                    {% if existing_mapping and existing_mapping.get(header) == field %}
                                         selected
                                     {% elif not existing_mapping and field.lower() in header.lower() %}
                                         selected
@@ -59,7 +103,8 @@
         </div>
 
         <div class="card mt-4">
-            <div class="card-body bg-light">
+            <!-- A classe bg-light foi removida do card-body para que o estilo do tema dark seja aplicado -->
+            <div class="card-body">
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" name="save_layout" id="save_layout">
                     <label class="form-check-label" for="save_layout">
@@ -99,12 +144,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ===== LÓGICA DE VALIDAÇÃO COM CORREÇÃO DE BUG VISUAL =====
     const form = document.getElementById('mapping-form');
     const validationAlert = document.getElementById('validation-alert');
 
     form.addEventListener('submit', function(event) {
-        // Reseta o estado de erro
         validationAlert.style.display = 'none';
         validationAlert.textContent = '';
         document.querySelectorAll('.mapping-select').forEach(select => {
@@ -137,30 +180,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Validação dos campos obrigatórios
-        const requiredFields = ['cpf']; // Adicione outros campos aqui se necessário
+        const requiredFields = ['cpf', 'nome']; // Adicionado 'nome' como obrigatório
         for (const field of requiredFields) {
             if (!selectedValues.has(field)) {
                 hasError = true;
-                // Encontra o dropdown correspondente para destacar, se possível
-                document.querySelectorAll('.mapping-select').forEach(select => {
-                    if (select.querySelector(`option[value="${field}"]`)) {
-                        // Não marca como inválido, pois não é um erro de seleção, mas de omissão.
-                    }
-                });
                 validationAlert.textContent = `Erro: O campo obrigatório "${field.toUpperCase()}" não foi mapeado.`;
-                break; // Mostra um erro de cada vez
+                break;
             }
         }
 
         if (hasError) {
-            event.preventDefault(); // Impede o envio do formulário
-            validationAlert.style.display = 'block'; // Mostra o alerta de erro
+            event.preventDefault();
+            validationAlert.style.display = 'block';
             
-            // Foca no primeiro campo com erro e rola a tela até ele
             if (firstInvalidField) {
                 firstInvalidField.focus();
             } else {
-                window.scrollTo(0, 0); // Rola para o topo se não houver um campo específico
+                window.scrollTo(0, 0);
             }
         }
     });

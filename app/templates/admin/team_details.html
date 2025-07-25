@@ -1,0 +1,216 @@
+<!-- app/templates/admin/team_details.html (VERSÃO FINAL E CORRIGIDA) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('main.manage_teams') }}" class="btn btn-outline-secondary me-3" title="Voltar para a lista de equipes">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h2 class="mb-0">Gerenciar Equipe: <strong>{{ grupo.nome }}</strong></h2>
+        </div>
+        <!-- Botões de Ação para a Equipe -->
+        <div class="d-flex gap-2">
+            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#editTeamModal" title="Editar nome e cor da equipe"><i class="fas fa-pencil-alt me-2"></i>Editar Equipe</button>
+            <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTeamModal" title="Excluir a equipe"><i class="fas fa-trash-alt me-2"></i>Excluir Equipe</button>
+        </div>
+    </div>
+
+    <!-- Linha de Métricas da Equipe -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Total de Membros</h6><p class="card-text display-4 fw-bold">{{ admins|length + consultores|length }}</p></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Total de Logins (Contabilizados)</h6><p class="card-text display-4 fw-bold">{{ total_logins_group }}</p></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Métricas Futuras</h6><p class="card-text display-4 fw-bold text-muted" style="font-size: 1.5rem;">Em breve...</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Seção de Supervisores (Admins do Parceiro) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Supervisores ({{ admins|length }})</h5>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal" data-member-role="admin_parceiro">Adicionar Supervisor</button>
+        </div>
+        <div class="card-body">
+            {% if admins %}
+                <ul class="list-group list-group-flush">
+                    {% for admin in admins %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-user-shield text-primary me-2"></i>{{ admin.username }}
+                                <small class="d-block text-muted">{{ admin.email }}</small>
+                                <small class="d-block text-muted">Último Login: {{ admin.last_login.strftime('%d/%m/%Y %H:%M') if admin.last_login else 'Nunca logou' }}</small>
+                            </div>
+                            <form action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=admin.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover {{ admin.username }} desta equipe?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remover Supervisor">Remover</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-muted text-center py-3">Nenhum supervisor nesta equipe.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Seção de Agentes (Consultores) -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Agentes ({{ consultores|length }})</h5>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal" data-member-role="consultor">Adicionar Agente</button>
+        </div>
+        <div class="card-body">
+            {% if consultores %}
+                <ul class="list-group list-group-flush">
+                    {% for consultor in consultores %}
+                         <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-user text-secondary me-2"></i>{{ consultor.username }}
+                                <small class="d-block text-muted">{{ consultor.email }}</small>
+                                <small class="d-block text-muted">Último Login: {{ consultor.last_login.strftime('%d/%m/%Y %H:%M') if consultor.last_login else 'Nunca logou' }}</small>
+                            </div>
+                            <form action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=consultor.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover {{ consultor.username }} desta equipe?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remover Agente">Remover</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-muted text-center py-3">Nenhum agente nesta equipe.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal para EDITAR a Equipe -->
+<div class="modal fade" id="editTeamModal" tabindex="-1" aria-labelledby="editTeamModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editTeamModalLabel">Editar Equipe: {{ grupo.nome }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('main.edit_group_name_color', group_id=grupo.id) }}" method="POST">
+        <div class="modal-body">
+            <div class="mb-3">
+                <label for="edit_name" class="form-label">Nome da Equipe</label>
+                <input type="text" name="name" id="edit_name" class="form-control" value="{{ grupo.nome }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="edit_color" class="form-label">Cor da Equipe</label>
+                <input type="color" name="color" id="edit_color" class="form-control form-control-color" value="{{ grupo.color }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para CONFIRMAR EXCLUSÃO da Equipe -->
+<div class="modal fade" id="deleteTeamModal" tabindex="-1" aria-labelledby="deleteTeamModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteTeamModalLabel">Confirmar Exclusão</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Você tem certeza que deseja excluir a equipe <strong>{{ grupo.nome }}</strong>?</p>
+        <p class="text-danger">Esta ação não pode ser desfeita.</p>
+        <p class="text-warning">Só é possível excluir equipes que não possuem nenhum membro.</p>
+      </div>
+      <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <form action="{{ url_for('main.delete_group', group_id=grupo.id) }}" method="POST">
+              <button type="submit" class="btn btn-danger">Sim, Excluir Equipe</button>
+          </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal para ADICIONAR MEMBRO à Equipe -->
+<div class="modal fade" id="addMemberModal" tabindex="-1" aria-labelledby="addMemberModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addMemberModalLabel">Adicionar Membro à Equipe {{ grupo.nome }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="add-member-form" method="POST">
+            <div class="modal-body">
+                <p>Selecione o usuário e o papel para adicionar ou atualizar nesta equipe.</p>
+                <div class="mb-3">
+                    <label for="user_id" class="form-label">Usuário</label>
+                    <select name="user_id" id="user_id" class="form-select" required>
+                        <option value="" disabled selected>-- Selecione um usuário --</option>
+                        {% for user in available_users %}
+                            <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="role" class="form-label">Papel na Equipe</label>
+                    <select name="role" id="member_role" class="form-select" required>
+                        <option value="consultor">Consultor</option>
+                        <option value="admin_parceiro">Admin do Parceiro</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Adicionar / Atualizar Membro</button>
+            </div>
+        </form>
+      </div>
+    </div>
+</div>
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var addMemberModal = document.getElementById('addMemberModal');
+    addMemberModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget; // Botão que acionou o modal
+        var role = button.getAttribute('data-member-role'); // 'consultor' ou 'admin_parceiro'
+
+        var modalTitle = addMemberModal.querySelector('#addMemberModalLabel');
+        var roleSelect = addMemberModal.querySelector('#member_role');
+        var form = addMemberModal.querySelector('#add-member-form');
+
+        // Atualiza o título do modal
+        if (role === 'admin_parceiro') {
+            modalTitle.textContent = 'Adicionar Supervisor à Equipe {{ grupo.nome }}';
+        } else {
+            modalTitle.textContent = 'Adicionar Agente à Equipe {{ grupo.nome }}';
+        }
+
+        // Pré-seleciona o papel correto no dropdown
+        if (role) {
+            roleSelect.value = role;
+        }
+
+        // Define a action do formulário (group_id já está na URL)
+        form.action = "{{ url_for('main.add_member_to_team', group_id=grupo.id) }}";
+    });
+});
+</script>
+{% endblock %}
+</div>
+{% endblock %}
