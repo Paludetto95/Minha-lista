@@ -27,7 +27,8 @@ class User(UserMixin, db.Model):
     current_status = db.Column(db.String(50), default='Offline', index=True)
     status_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
-    
+    last_activity_at = db.Column(db.DateTime, default=datetime.utcnow)
+
     leads = db.relationship('Lead', backref='consultor', lazy='dynamic')
     consumptions = db.relationship('LeadConsumption', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     activities = db.relationship('ActivityLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")

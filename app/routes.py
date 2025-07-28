@@ -1,4 +1,4 @@
-# app/routes.py (VERSÃO FINAL COMPLETA E CORRIGIDA)
+# app/routes.py (VERSÃO FINAL COMPLETA E INTEGRAL COM GRUPOS, PAPÉIS E TEMAS)
 
 import pandas as pd
 import io
@@ -56,6 +56,7 @@ def require_role(*roles):
 def update_user_status(user, new_status):
     user.current_status = new_status
     user.status_timestamp = datetime.utcnow()
+    user.last_activity_at = datetime.utcnow()
     db.session.add(user)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
@@ -128,7 +129,6 @@ def profile():
     return render_template('profile.html', title="Minhas Configurações")
 
 # --- ROTAS DE SUPER ADMIN ---
-
 @bp.route('/admin/dashboard')
 @login_required
 @require_role('super_admin')
@@ -147,6 +147,18 @@ def admin_monitor():
     start_of_day = datetime.combine(date.today(), time.min)
     agents_data = []
     for agent in consultants:
+        # Lógica para determinar o status real do usuário (ping)
+        inactivity_threshold_minutes = 2 
+        if agent.role == 'consultor' and datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
+            real_status = 'Offline'
+            if agent.current_status != 'Offline':
+                agent.current_status = 'Offline'
+                agent.status_timestamp = datetime.utcnow()
+                db.session.add(agent)
+                db.session.commit()
+        else:
+            real_status = agent.current_status
+
         time_in_status = datetime.utcnow() - agent.status_timestamp
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -154,7 +166,7 @@ def admin_monitor():
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
-        agents_data.append({'id': agent.id, 'name': agent.username, 'status': agent.current_status, 'last_login': agent.last_login, 'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 'calls_today': calls_today, 'conversions_today': conversions_today})
+        agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'last_login': agent.last_login, 'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 'calls_today': calls_today, 'conversions_today': conversions_today})
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
@@ -677,6 +689,18 @@ def parceiro_monitor():
     start_of_day = datetime.combine(date.today(), time.min)
     agents_data = []
     for agent in consultants:
+        # Lógica para determinar o status real do usuário (ping)
+        inactivity_threshold_minutes = 2 
+        if agent.role == 'consultor' and datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
+            real_status = 'Offline'
+            if agent.current_status != 'Offline':
+                agent.current_status = 'Offline'
+                agent.status_timestamp = datetime.utcnow()
+                db.session.add(agent)
+                db.session.commit()
+        else:
+            real_status = agent.current_status
+
         time_in_status = datetime.utcnow() - agent.status_timestamp
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -685,7 +709,7 @@ def parceiro_monitor():
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         agents_data.append({'id': agent.id, 'name': agent.username, 'status': agent.current_status, 'last_login': agent.last_login, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
-    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
+    agents_data.sort(key=lambda x: (x['conversions_conversions'], x['calls_today']), reverse=True)
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
 
 @bp.route('/parceiro/performance_dashboard')
