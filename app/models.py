@@ -1,10 +1,10 @@
-# app/models.py (VERSÃO FINAL COMPLETA)
+# app/models.py (VERSÃO FINAL COMPLETA COM SYSTEMLOG)
 
 from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from datetime import datetime, timedelta
-import uuid # <-- ADICIONE ESTA LINHA
+import uuid
 
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -33,6 +33,8 @@ class User(UserMixin, db.Model):
     leads = db.relationship('Lead', backref='consultor', lazy='dynamic')
     consumptions = db.relationship('LeadConsumption', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     activities = db.relationship('ActivityLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    # ADICIONADO: Relacionamento para SystemLog
+    system_logs = db.relationship('SystemLog', backref='user_performer', lazy='dynamic', cascade="all, delete-orphan")
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -114,12 +116,26 @@ class BackgroundTask(db.Model):
 
     user = db.relationship('User', backref='background_tasks') # Relacionamento de volta com o usuário que iniciou a tarefa
 
+# --- NOVO MODELO PARA LOGS DE SISTEMA ---
+class SystemLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True) # Pode ser nulo para ações do sistema sem login (ex: primeiro registro)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    action_type = db.Column(db.String(100), nullable=False, index=True) # Ex: 'USER_CREATED', 'LOGIN', 'PRODUCT_DELETED', 'GROUP_UPDATED'
+    entity_type = db.Column(db.String(50), nullable=True, index=True) # Ex: 'User', 'Product', 'Group', 'Mailing', 'Tabulation'
+    entity_id = db.Column(db.Integer, nullable=True, index=True) # ID da entidade afetada (ex: user.id, product.id)
+    description = db.Column(db.Text, nullable=True) # Descrição humana da ação
+    details = db.Column(db.JSON, nullable=True) # Dados adicionais (ex: 'old_value': '...', 'new_value': '...')
+
+    # Não precisamos de um relacionamento direto com a entidade aqui, apenas o ID e tipo.
+    # user_performer é o backref do User model, que já criamos.
+
 
 @login_manager.user_loader
 def load_user(id):
     return User.query.get(int(id))
 
-# Outros modelos
+# Outros modelos (manter como estão)
 class Proposta(db.Model): id = db.Column(db.Integer, primary_key=True)
 class Banco(db.Model): id = db.Column(db.Integer, primary_key=True)
 class Convenio(db.Model): id = db.Column(db.Integer, primary_key=True)

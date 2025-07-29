@@ -1,0 +1,198 @@
+<!-- app/templates/admin/export_reports.html (VERSÃO COM LOADER DO BOTÃO CORRIGIDO) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary me-3" title="Voltar ao Painel">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h2 class="mb-0">Exportar Relatórios de Leads</h2>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Opções de Filtro para Exportação</h5>
+        </div>
+        <div class="card-body">
+            <!-- ADICIONADO: class="no-loader" para evitar o loader global -->
+            <form action="{{ url_for('main.admin_export_filtered_leads') }}" method="GET" id="export-form" class="no-loader">
+                <div class="row g-3 mb-4">
+                    <!-- Filtro por Status de Tabulação -->
+                    <div class="col-md-4">
+                        <label for="tabulation_status" class="form-label fw-bold">Status de Tabulação:</label>
+                        <select class="form-select" id="tabulation_status" name="tabulation_status">
+                            {% for value, label in tabulation_statuses %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Filtro por Produto -->
+                    <div class="col-md-4">
+                        <label for="product_ids" class="form-label fw-bold">Produtos:</label>
+                        <select class="form-select" id="product_ids" name="product_ids" multiple size="5">
+                            <option value="" selected>-- Todos os Produtos --</option>
+                            {% for product in all_products %}
+                                <option value="{{ product.id }}">{{ product.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Use CTRL/CMD para selecionar múltiplos.</small>
+                    </div>
+
+                    <!-- Filtro por Estado -->
+                    <div class="col-md-4">
+                        <label for="states" class="form-label fw-bold">Estados:</label>
+                        <select class="form-select" id="states" name="states" multiple size="5">
+                            <option value="" selected>-- Todos os Estados --</option>
+                            {% for label, value in distinct_states %}
+                                <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Use CTRL/CMD para selecionar múltiplos. 'N/A' = Leads sem estado.</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <!-- Filtro por Data de Criação (Início) -->
+                    <div class="col-md-6">
+                        <label for="start_date" class="form-label fw-bold">Data de Criação (Início):</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date">
+                    </div>
+
+                    <!-- Filtro por Data de Criação (Fim) -->
+                    <div class="col-md-6">
+                        <label for="end_date" class="form-label fw-bold">Data de Criação (Fim):</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date">
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <!-- Botão de submissão do formulário -->
+                    <button type="submit" class="btn btn-primary btn-lg" id="export-button">
+                        <i class="fas fa-file-excel me-2"></i> Exportar Relatório
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Função para manter as seleções de múltiplos selects após o envio (se o Flask redirecionar)
+    const persistSelections = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Product IDs
+        const productSelect = document.getElementById('product_ids');
+        const selectedProductIds = urlParams.get('product_ids');
+        if (selectedProductIds) {
+            const ids = selectedProductIds.split(',');
+            Array.from(productSelect.options).forEach(option => {
+                if (ids.includes(option.value)) {
+                    option.selected = true;
+                } else {
+                    option.selected = false; // Desseleciona o que não foi selecionado
+                }
+            });
+        } else {
+            // Se nenhum ID for passado, certifique-se de que a opção "Todos os Produtos" esteja selecionada
+            Array.from(productSelect.options).forEach(option => option.selected = false);
+            productSelect.querySelector('option[value=""]').selected = true;
+        }
+
+        // States
+        const stateSelect = document.getElementById('states');
+        const selectedStates = urlParams.get('states');
+        if (selectedStates) {
+            const states = selectedStates.split(',');
+            Array.from(stateSelect.options).forEach(option => {
+                if (states.includes(option.value)) {
+                    option.selected = true;
+                } else {
+                    option.selected = false; // Desseleciona o que não foi selecionado
+                }
+            });
+        } else {
+            Array.from(stateSelect.options).forEach(option => option.selected = false);
+            stateSelect.querySelector('option[value=""]').selected = true;
+        }
+
+        // Tabulation Status
+        const tabStatusSelect = document.getElementById('tabulation_status');
+        const selectedTabStatus = urlParams.get('tabulation_status');
+        if (selectedTabStatus) {
+            tabStatusSelect.value = selectedTabStatus;
+        }
+
+        // Dates
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+        const selectedStartDate = urlParams.get('start_date');
+        const selectedEndDate = urlParams.get('end_date');
+        if (selectedStartDate) {
+            startDateInput.value = selectedStartDate;
+        }
+        if (selectedEndDate) {
+            endDateInput.value = selectedEndDate;
+        }
+    };
+
+    // Chamar a função ao carregar a página
+    persistSelections();
+
+    // Adiciona event listeners para garantir que a opção "Todos" deselecione outras
+    // para Produto e Estado.
+    const handleAllOption = (selectId) => {
+        const selectElement = document.getElementById(selectId);
+        selectElement.addEventListener('change', () => {
+            const allOption = selectElement.querySelector('option[value=""]');
+            if (allOption.selected) {
+                // Se "Todos" foi selecionado, deseleciona os outros
+                Array.from(selectElement.options).forEach(option => {
+                    if (option.value !== "") {
+                        option.selected = false;
+                    }
+                });
+            } else {
+                // Se qualquer outra opção for selecionada e "Todos" estava selecionado,
+                // deseleciona "Todos".
+                const selectedOptions = Array.from(selectElement.options).filter(option => option.selected);
+                if (selectedOptions.length > 1 && allOption && allOption.selected) {
+                    allOption.selected = false;
+                } else if (selectedOptions.length === 0) {
+                    // Se nada estiver selecionado, automaticamente seleciona "Todos"
+                    allOption.selected = true;
+                }
+            }
+        });
+    };
+
+    handleAllOption('product_ids');
+    handleAllOption('states');
+
+    // ADICIONADO: Lógica para o botão de exportar
+    const exportForm = document.getElementById('export-form');
+    const exportButton = document.getElementById('export-button');
+    let originalButtonHtml = exportButton.innerHTML; // Salva o HTML original do botão
+
+    exportForm.addEventListener('submit', function() {
+        // Desabilita o botão e mostra o spinner
+        exportButton.disabled = true;
+        exportButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Exportando...';
+        
+        // Reabilita o botão após um curto período, pois o download não aciona um page load
+        setTimeout(() => {
+            exportButton.disabled = false;
+            exportButton.innerHTML = originalButtonHtml;
+        }, 3000); // 3 segundos deve ser o suficiente para iniciar o download
+    });
+});
+</script>
+{% endblock %}

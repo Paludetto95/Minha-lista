@@ -73,12 +73,9 @@
 
 {% block scripts %}
 {{ super() }}
-{# app/templates/admin/manage_products.html #}
-
-{% block scripts %}
-{{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Seleciona todos os botões de exclusão de produto
     const deleteButtons = document.querySelectorAll('.btn-delete-product');
 
     deleteButtons.forEach(button => {
@@ -86,9 +83,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const productId = this.dataset.productId;
             const productName = this.dataset.productName;
 
+            // Pergunta de confirmação mais detalhada
             const confirmMessage = `ATENÇÃO! Isso iniciará a exclusão em segundo plano do produto '${productName}' e de TODOS os leads associados a ele. Deseja continuar?`;
 
             if (confirm(confirmMessage)) {
+                // Desabilita o botão para evitar cliques múltiplos
                 this.disabled = true;
                 this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Apagando...';
 
@@ -101,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'processing') {
-                        // ADICIONADO: Exibir flash message imediatamente
+                        // Exibir flash message imediatamente
                         flashMessage('info', data.message);
                         window.startPollingProgress(data.task_id);
                     } else {

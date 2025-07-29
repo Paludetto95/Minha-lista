@@ -37,12 +37,33 @@
             padding: 0 !important; /* Remove paddings que possam interferir */
         }
 
-        .navbar-brand .logo {
+        /* Removido o .navbar-brand .logo geral */
+        /* ADICIONADO: Estilos para os dois logos */
+        .logo-light, .logo-dark {
             height: 55px; /* Altura do seu logo */
             width: auto;
             display: block; /* Garante que a imagem se comporte como um bloco */
         }
         
+        .logo-dark { /* Esconde o logo escuro por padrão */
+            display: none;
+        }
+
+        /* Regras para mostrar/esconder logos com base no tema */
+        body[data-theme="dark"] .logo-light {
+            display: none; /* Esconde o logo claro no tema escuro */
+        }
+        body[data-theme="dark"] .logo-dark {
+            display: block; /* Mostra o logo escuro no tema escuro */
+        }
+        /* Para o tema oceano, mantém o logo claro */
+        body[data-theme="ocean"] .logo-dark {
+            display: none;
+        }
+        body[data-theme="ocean"] .logo-light {
+            display: block;
+        }
+
         /* Ajusta o conteúdo colapsável para não sobrepor o logo em telas pequenas */
         .navbar-collapse {
             padding-top: 10px; /* Adiciona um espaço no topo para os links */
@@ -167,7 +188,9 @@
             <div class="container-fluid">
 
                 <a class="navbar-brand" href="{{ url_for('main.index') }}" aria-label="Início">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo" alt="Logo FS Promotora">
+                    <!-- ADICIONADO: Dois elementos de imagem para o logo -->
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo-light" alt="Logo FS Promotora">
+                    <img src="{{ url_for('static', filename='images/logo1.png') }}" class="logo-dark" alt="Logo FS Promotora Dark">
                 </a>
 
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
@@ -184,7 +207,7 @@
                             {% elif current_user.role == 'admin_parceiro' %}
                                 <li class="nav-item"><a class="nav-link" href="{{ url_for('main.parceiro_dashboard') }}">Meu Painel</a></li>
                             {% else %}
-                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
+                                <li class="nav-item"><a class="nav_link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
                             {% endif %}
                         {% endif %}
                     </ul>
@@ -297,10 +320,19 @@
             const progressMessage = document.getElementById('progressMessage');
             const closeProgressBarModalButton = document.getElementById('closeProgressBarModalButton');
 
+            // ADICIONADO: Event listener para o botão de fechar do modal
+            closeProgressBarModalButton.addEventListener('click', function() {
+                // Apenas recarrega a página se a tarefa já estiver COMPLETA ou FALHA
+                const progressBarElement = document.getElementById('progressBar');
+                if (progressBarElement.classList.contains('bg-success') || progressBarElement.classList.contains('bg-danger')) {
+                    window.location.reload();
+                }
+            });
+
             let pollingInterval; // Variável para armazenar o ID do intervalo de polling
 
             // Função para exibir flash messages via JS (AGORA GLOBAL)
-            window.flashMessage = function(category, message) { // <--- MODIFICADO AQUI
+            window.flashMessage = function(category, message) {
                 const alertContainer = document.querySelector('main .container-fluid .row .col-md-10');
                 if (alertContainer) {
                     // Remove alertas existentes para não acumular
