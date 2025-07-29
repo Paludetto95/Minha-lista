@@ -1,4 +1,4 @@
-# config.py (VERSÃO FINAL E CORRIGIDA COM POOL_RECYCLE)
+# config.py (VERSÃO FINAL E CORRIGIDA COM POOL_RECYCLE E PARTNER_LOGOS_FOLDER)
 
 import os
 from dotenv import load_dotenv
@@ -39,6 +39,9 @@ class Config:
 
     # Define a pasta para uploads temporários de arquivos.
     UPLOAD_FOLDER = os.path.join(basedir, 'temp_uploads')
+
+    # ADICIONADO: Define a pasta para os logos dos parceiros
+    PARTNER_LOGOS_FOLDER = os.path.join(basedir, 'static', 'partner_logos') # <--- JÁ ESTÁ AQUI
 
     # ===== ADIÇÃO PARA ESTABILIDADE DA CONEXÃO =====
     # Recicla conexões que estão inativas por mais de 30 minutos (1800s).

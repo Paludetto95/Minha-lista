@@ -1,4 +1,4 @@
-<!-- app/templates/admin/manage_teams.html (VERSÃO COM CORES) -->
+<!-- app/templates/admin/manage_teams.html (VERSÃO COM CAMPO DE LOGO NO MODAL DE CRIAÇÃO) -->
 {% extends "base.html" %}
 
 {% block styles %}
@@ -22,6 +22,20 @@
         color: inherit;
         display: block;
     }
+    .team-logo-thumbnail {
+        max-width: 80px;
+        max-height: 50px;
+        margin-bottom: 10px;
+        object-fit: contain; /* Garante que a imagem se ajuste sem cortar */
+        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
+        border: 1px solid #dee2e6;
+        padding: 3px;
+        border-radius: 5px;
+    }
+    body[data-theme="dark"] .team-logo-thumbnail {
+        background-color: #343a40; /* Fundo escuro para logos no tema dark */
+        border-color: #495057;
+    }
 </style>
 {% endblock %}
 
@@ -41,7 +55,12 @@
                 <!-- A cor de fundo da borda superior agora é dinâmica -->
                 <div class="card team-card h-100" style="--card-border-color: {{ grupo.color }}; border-top-color: {{ grupo.color }};">
                     <a href="{{ url_for('main.team_details', group_id=grupo.id) }}" class="team-card-link">
-                        <div class="card-body">
+                        <div class="card-body text-center"> {# Centralizado o conteúdo do card #}
+                            {% if grupo.logo_filename %}
+                                <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                                     alt="Logo {{ grupo.nome }}" 
+                                     class="team-logo-thumbnail">
+                            {% endif %}
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <h5 class="card-title mb-0">{{ grupo.nome }}</h5>
                                 <i class="fas fa-arrow-right text-muted"></i>
@@ -55,7 +74,7 @@
     </div>
 </div>
 
-<!-- Modal para Adicionar Nova Equipe (COM CAMPO DE COR) -->
+<!-- Modal para Adicionar Nova Equipe (COM CAMPO DE COR E LOGO) -->
 <div class="modal fade" id="addTeamModal" tabindex="-1" aria-labelledby="addTeamModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -63,16 +82,22 @@
         <h5 class="modal-title" id="addTeamModalLabel">Adicionar Nova Equipe/Parceiro</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form action="{{ url_for('main.add_group') }}" method="POST">
+      {# ADICIONADO: enctype="multipart/form-data" para upload de arquivos #}
+      <form action="{{ url_for('main.add_group') }}" method="POST" enctype="multipart/form-data">
         <div class="modal-body">
             <div class="mb-3">
                 <label for="name" class="form-label">Nome da Equipe</label>
                 <input type="text" name="name" id="name" class="form-control" placeholder="Ex: Parceiro Vendas ABC" required>
             </div>
-            <!-- NOVO CAMPO DE COR -->
             <div class="mb-3">
                 <label for="color" class="form-label">Cor da Equipe</label>
                 <input type="color" name="color" id="color" class="form-control form-control-color" value="#6c757d" title="Escolha uma cor para a equipe">
+            </div>
+            {# ADICIONADO: Campo para upload de logo #}
+            <div class="mb-3">
+                <label for="logo_file" class="form-label">Logo da Equipe (Opcional)</label>
+                <input class="form-control" type="file" id="logo_file" name="logo_file" accept="image/png, image/jpeg, image/jpg, image/gif">
+                <small class="form-text text-muted">Apenas imagens (PNG, JPG, JPEG, GIF).</small>
             </div>
         </div>
         <div class="modal-footer">

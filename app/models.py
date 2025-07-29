@@ -1,4 +1,4 @@
-# app/models.py (VERSÃO FINAL COMPLETA COM SYSTEMLOG)
+# app/models.py (VERSÃO FINAL COMPLETA COM SYSTEMLOG E LOGO_FILENAME NO GRUPO)
 
 from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,10 +11,13 @@ class Grupo(db.Model):
     nome = db.Column(db.String(120), unique=True, nullable=False, index=True)
     is_active = db.Column(db.Boolean, default=True)
     color = db.Column(db.String(7), default='#6c757d')
+    # ADICIONADO: Campo para armazenar o nome do arquivo do logo do grupo
+    logo_filename = db.Column(db.String(255), nullable=True) # Pode ser nulo se não houver logo
     
     users = db.relationship('User', backref='grupo', lazy='dynamic')
 
 class User(UserMixin, db.Model):
+    # ... (restante da classe User permanece o mesmo)
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True)
     email = db.Column(db.String(120), index=True, unique=True)
@@ -33,7 +36,6 @@ class User(UserMixin, db.Model):
     leads = db.relationship('Lead', backref='consultor', lazy='dynamic')
     consumptions = db.relationship('LeadConsumption', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     activities = db.relationship('ActivityLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
-    # ADICIONADO: Relacionamento para SystemLog
     system_logs = db.relationship('SystemLog', backref='user_performer', lazy='dynamic', cascade="all, delete-orphan")
     
     def set_password(self, password):
@@ -133,6 +135,9 @@ class SystemLog(db.Model):
 
 @login_manager.user_loader
 def load_user(id):
+    # Opcional: Eager load do grupo aqui para evitar N+1 queries ao acessar current_user.grupo.logo_filename
+    # from sqlalchemy.orm import joinedload # <- Adicionar ao topo se ainda não tiver
+    # return User.query.options(joinedload(User.grupo)).get(int(id))
     return User.query.get(int(id))
 
 # Outros modelos (manter como estão)

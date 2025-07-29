@@ -1,5 +1,56 @@
-<!-- app/templates/admin/team_details.html (VERSÃO FINAL E CORRIGIDA) -->
+<!-- app/templates/admin/team_details.html (VERSÃO FINAL E CORRIGIDA COM LOGO DA EQUIPE - REVISADA PARA SINTAXE) -->
 {% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Estilos específicos para o logo na página de detalhes da equipe */
+    .team-details-logo {
+        max-width: 150px;
+        max-height: 100px;
+        object-fit: contain;
+        margin-right: 15px;
+        border: 1px solid #dee2e6;
+        padding: 5px;
+        border-radius: 8px;
+        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
+    }
+    body[data-theme="dark"] .team-details-logo {
+        background-color: #343a40; /* Fundo escuro para logos no tema dark */
+        border-color: #495057;
+    }
+    .current-logo-container {
+        display: flex;
+        align-items: center;
+        margin-top: 15px;
+        margin-bottom: 15px;
+        padding: 10px;
+        border: 1px dashed #ced4da;
+        border-radius: 5px;
+        background-color: #f1f1f1;
+        font-size: 0.9rem;
+    }
+    body[data-theme="dark"] .current-logo-container {
+        background-color: #495057;
+        border-color: #6c757d;
+        color: #dee2e6;
+    }
+    .current-logo-container img {
+        max-width: 80px;
+        max-height: 50px;
+        object-fit: contain;
+        margin-right: 10px;
+        border: 1px solid #adb5bd;
+        background-color: #fff;
+        padding: 2px;
+    }
+    body[data-theme="dark"] .current-logo-container img {
+        background-color: #343a40;
+        border-color: #adb5bd;
+    }
+</style>
+{% endblock %}
+
 
 {% block content %}
 <div class="container mt-4">
@@ -8,6 +59,12 @@
             <a href="{{ url_for('main.manage_teams') }}" class="btn btn-outline-secondary me-3" title="Voltar para a lista de equipes">
                 <i class="fas fa-arrow-left"></i>
             </a>
+            {# EXIBIÇÃO DO LOGO ATUAL NA PÁGINA #}
+            {% if grupo.logo_filename %}
+                <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                     alt="Logo {{ grupo.nome }}" 
+                     class="team-details-logo">
+            {% endif %}
             <h2 class="mb-0">Gerenciar Equipe: <strong>{{ grupo.nome }}</strong></h2>
         </div>
         <!-- Botões de Ação para a Equipe -->
@@ -93,7 +150,7 @@
     </div>
 </div>
 
-<!-- Modal para EDITAR a Equipe -->
+<!-- Modal para EDITAR a Equipe (COM CAMPO DE LOGO) -->
 <div class="modal fade" id="editTeamModal" tabindex="-1" aria-labelledby="editTeamModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -101,7 +158,8 @@
         <h5 class="modal-title" id="editTeamModalLabel">Editar Equipe: {{ grupo.nome }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form action="{{ url_for('main.edit_group_name_color', group_id=grupo.id) }}" method="POST">
+      {# ADICIONADO: enctype="multipart/form-data" para upload de arquivos #}
+      <form action="{{ url_for('main.edit_group_name_color', group_id=grupo.id) }}" method="POST" enctype="multipart/form-data">
         <div class="modal-body">
             <div class="mb-3">
                 <label for="edit_name" class="form-label">Nome da Equipe</label>
@@ -110,6 +168,25 @@
             <div class="mb-3">
                 <label for="edit_color" class="form-label">Cor da Equipe</label>
                 <input type="color" name="color" id="edit_color" class="form-control form-control-color" value="{{ grupo.color }}">
+            </div>
+            {# ADICIONADO: Seção para gerenciar o logo #}
+            <div class="mb-3">
+                <label class="form-label">Logo da Equipe (Opcional)</label>
+                {% if grupo.logo_filename %}
+                    <div class="current-logo-container mb-2">
+                        <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                             alt="Logo Atual" style="height: 40px;">
+                        <span>Logo Atual: {{ grupo.logo_filename }}</span>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="remove_logo_check" name="remove_logo">
+                        <label class="form-check-label" for="remove_logo_check">
+                            Remover logo existente
+                        </label>
+                    </div>
+                {% endif %}
+                <input class="form-control" type="file" id="edit_logo_file" name="logo_file" accept="image/png, image/jpeg, image/jpg, image/gif">
+                <small class="form-text text-muted">Apenas imagens (PNG, JPG, JPEG, GIF). Enviar um novo substituirá o existente.</small>
             </div>
         </div>
         <div class="modal-footer">
@@ -131,7 +208,7 @@
       </div>
       <div class="modal-body">
         <p>Você tem certeza que deseja excluir a equipe <strong>{{ grupo.nome }}</strong>?</p>
-        <p class="text-danger">Esta ação não pode ser desfeita.</p>
+        <p class="text-danger">Esta ação não pode ser desfeita e removerá também o logo associado, se houver.</p>
         <p class="text-warning">Só é possível excluir equipes que não possuem nenhum membro.</p>
       </div>
       <div class="modal-footer">
@@ -186,31 +263,61 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var addMemberModal = document.getElementById('addMemberModal');
-    addMemberModal.addEventListener('show.bs.modal', function (event) {
-        var button = event.relatedTarget; // Botão que acionou o modal
-        var role = button.getAttribute('data-member-role'); // 'consultor' ou 'admin_parceiro'
+    if (addMemberModal) { // Verificação para garantir que o modal existe
+        addMemberModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget; // Botão que acionou o modal
+            var role = button.getAttribute('data-member-role'); // 'consultor' ou 'admin_parceiro'
 
-        var modalTitle = addMemberModal.querySelector('#addMemberModalLabel');
-        var roleSelect = addMemberModal.querySelector('#member_role');
-        var form = addMemberModal.querySelector('#add-member-form');
+            var modalTitle = addMemberModal.querySelector('#addMemberModalLabel');
+            var roleSelect = addMemberModal.querySelector('#member_role');
+            var form = addMemberModal.querySelector('#add-member-form');
 
-        // Atualiza o título do modal
-        if (role === 'admin_parceiro') {
-            modalTitle.textContent = 'Adicionar Supervisor à Equipe {{ grupo.nome }}';
-        } else {
-            modalTitle.textContent = 'Adicionar Agente à Equipe {{ grupo.nome }}';
+            // Atualiza o título do modal
+            if (role === 'admin_parceiro') {
+                modalTitle.textContent = 'Adicionar Supervisor à Equipe {{ grupo.nome }}';
+            } else {
+                modalTitle.textContent = 'Adicionar Agente à Equipe {{ grupo.nome }}';
+            }
+
+            // Pré-seleciona o papel correto no dropdown
+            if (role) {
+                roleSelect.value = role;
+            }
+
+            // Define a action do formulário (group_id já está na URL)
+            form.action = "{{ url_for('main.add_member_to_team', group_id=grupo.id) }}";
+        });
+    }
+
+    // Lógica para o campo de logo no modal de edição
+    const removeLogoCheckbox = document.getElementById('remove_logo_check');
+    const editLogoFileInput = document.getElementById('edit_logo_file');
+
+    // Inicializa o estado: se o checkbox de remover estiver marcado, o input de file é desabilitado
+    if (removeLogoCheckbox && editLogoFileInput) {
+        // Verifica o estado inicial ao carregar a página
+        if (removeLogoCheckbox.checked) {
+            editLogoFileInput.disabled = true;
         }
 
-        // Pré-seleciona o papel correto no dropdown
-        if (role) {
-            roleSelect.value = role;
-        }
+        removeLogoCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                editLogoFileInput.disabled = true;
+                editLogoFileInput.value = ''; // Limpa o arquivo selecionado, se houver
+            } else {
+                editLogoFileInput.disabled = false;
+            }
+        });
 
-        // Define a action do formulário (group_id já está na URL)
-        form.action = "{{ url_for('main.add_member_to_team', group_id=grupo.id) }}";
-    });
+        // Se um novo arquivo for selecionado, desmarca o checkbox de remover
+        editLogoFileInput.addEventListener('change', function() {
+            if (this.value && removeLogoCheckbox.checked) {
+                removeLogoCheckbox.checked = false;
+                // Não precisa setar editLogoFileInput.disabled = false; aqui, pois o navegador já cuida disso
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
-</div>
 {% endblock %}

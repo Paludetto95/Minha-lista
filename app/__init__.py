@@ -1,4 +1,4 @@
-# app/__init__.py (VERSÃO FINAL COM A INDENTAÇÃO CORRIGIDA)
+# app/__init__.py (VERSÃO FINAL COM A INDENTAÇÃO CORRIGIDA E PARTNER_LOGOS_FOLDER ROBUSTO)
 
 import os
 from flask import Flask
@@ -27,7 +27,25 @@ def create_app(config_class=Config):
 
     # Cria a pasta de uploads temporários se ela não existir
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
+        try:
+            os.makedirs(app.config['UPLOAD_FOLDER'])
+            print(f"DEBUG: Pasta UPLOAD_FOLDER criada: {app.config['UPLOAD_FOLDER']}")
+        except OSError as e:
+            print(f"ERRO: Falha ao criar UPLOAD_FOLDER: {e} no caminho {app.config['UPLOAD_FOLDER']}")
+    else:
+        print(f"DEBUG: Pasta UPLOAD_FOLDER já existe: {app.config['UPLOAD_FOLDER']}")
+    
+    # ADICIONADO: Cria a pasta para logos de parceiros se ela não existir
+    # ADICIONADO: Mensagens de depuração e tratamento de erro para criação de pastas
+    if not os.path.exists(app.config['PARTNER_LOGOS_FOLDER']):
+        try:
+            os.makedirs(app.config['PARTNER_LOGOS_FOLDER'])
+            print(f"DEBUG: Pasta PARTNER_LOGOS_FOLDER criada: {app.config['PARTNER_LOGOS_FOLDER']}")
+        except OSError as e:
+            print(f"ERRO: Falha ao criar PARTNER_LOGOS_FOLDER: {e} no caminho {app.config['PARTNER_LOGOS_FOLDER']}")
+    else:
+        print(f"DEBUG: Pasta PARTNER_LOGOS_FOLDER já existe: {app.config['PARTNER_LOGOS_FOLDER']}")
+
 
     # Inicializa as extensões com a aplicação
     db.init_app(app)
@@ -39,6 +57,4 @@ def create_app(config_class=Config):
         from app import routes, models
         app.register_blueprint(routes.bp)
 
-    # ===== CORREÇÃO AQUI =====
-    # A linha 'return' deve estar dentro da função 'create_app'
     return app
