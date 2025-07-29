@@ -1,11 +1,12 @@
-<!-- app/templates/admin/manage_users.html (VERSÃO COM TEMA CORRIGIDO) -->
+<!-- app/templates/admin/manage_users.html (VERSÃO ATUALIZADA COM PERMISSÕES) -->
 {% extends "base.html" %}
 
 {% block content %}
 <div class="container mt-4">
     <h2 class="mb-4">Gerir Utilizadores</h2>
 
-    <!-- Formulário para adicionar novo utilizador -->
+    <!-- Formulário para adicionar novo utilizador - VISÍVEL APENAS PARA SUPER ADMIN -->
+    {% if current_user.role == 'super_admin' %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header">Adicionar Novo Utilizador</div>
         <div class="card-body">
@@ -25,6 +26,7 @@
             </form>
         </div>
     </div>
+    {% endif %} {# Fim da condição para super_admin #}
 
     <!-- Tabela de utilizadores existentes -->
     <div class="card shadow-sm">
@@ -32,7 +34,6 @@
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle">
-                    <!-- ===== CORREÇÃO APLICADA AQUI ===== -->
                     <thead class="table-secondary">
                         <tr>
                             <th>Usuário</th>
@@ -47,7 +48,19 @@
                     <tbody>
                         {% for user in users %}
                         <tr>
-                            <td>{{ user.username }}</td>
+                            <td>
+                                {# Edição do Nome de Utilizador: Apenas para Super Admin ou Admin Parceiro para consultores do seu grupo #}
+                                {% if current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id) %}
+                                <form action="{{ url_for('main.update_user_name', user_id=user.id) }}" method="POST" class="no-loader">
+                                    <div class="input-group">
+                                        <input type="text" name="username" class="form-control form-control-sm" value="{{ user.username }}" required>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Salvar Nome"><i class="fas fa-save"></i></button>
+                                    </div>
+                                </form>
+                                {% else %}
+                                {{ user.username }}
+                                {% endif %}
+                            </td>
                             <td>{{ user.email }}</td>
                             <td><span class="badge" style="background-color: {{ user.grupo.color or '#6c757d' }}">{{ user.grupo.nome if user.grupo else 'N/A' }}</span></td>
                             <td>
@@ -66,8 +79,14 @@
                                 {% else %}<span class="text-muted">N/A</span>{% endif %}
                             </td>
                             <td>
-                                {% if user.id != current_user.id %}
-                                <form action="{{ url_for('main.delete_user', id=user.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer apagar este utilizador?');"><button type="submit" class="btn btn-sm btn-outline-danger" title="Apagar Usuário"><i class="fas fa-trash"></i></button></form>
+                                {# Botão Apagar Usuário:
+                                   - Super Admin pode apagar qualquer um (exceto a si mesmo)
+                                   - Admin Parceiro pode apagar apenas consultores do seu grupo (e não a si mesmo)
+                                #}
+                                {% if current_user.id != user.id and (current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id)) %}
+                                <form action="{{ url_for('main.delete_user', id=user.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer apagar este utilizador?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Apagar Usuário"><i class="fas fa-trash"></i></button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>

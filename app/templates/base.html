@@ -73,7 +73,7 @@
 
         /* TEMA ESCURO (DARK) */
         body[data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
-        body[data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #121212 0%, #1c1c1c 100%) !important; }
+        body[data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #191919 0%, #1c1c1c 100%) !important; }
         body[data-theme="dark"] .card, 
         body[data-theme="dark"] .list-group-item,
         body[data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
@@ -129,6 +129,15 @@
 
         /* REGRAS DE BARRA DE PROGRESSO */
         body[data-theme="dark"] .progress { background-color: #495057; }
+        /* ADICIONADO: Estilo para o texto da mensagem de progresso */
+        #progressMessage {
+            font-size: 0.9rem;
+            color: #6c757d; /* Ou uma cor que se destaque no tema atual */
+            margin-top: 10px;
+        }
+        body[data-theme="dark"] #progressMessage {
+             color: #adb5bd;
+        }
 
         /* TEMA OCEANO (AZUL) */
         body[data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
@@ -238,24 +247,155 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+    <!-- ADICIONADO: Modal de Barra de Progresso (Genérico) -->
+    <div class="modal fade" id="progressBarModal" tabindex="-1" aria-labelledby="progressBarModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="progressBarModalLabel">Processando Operação...</h5>
+                    <!-- O botão de fechar será removido ou desabilitado durante o processo e habilitado no final -->
+                </div>
+                <div class="modal-body">
+                    <div class="progress mb-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="progressBar">0%</div>
+                    </div>
+                    <p class="text-center" id="progressMessage">Iniciando...</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProgressBarModalButton" style="display: none;">Fechar</button>
+                    <!-- O botão de fechar aparece apenas quando a tarefa é concluída ou falha -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
             integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
             crossorigin="anonymous"></script>
     
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
     <script>
-        document.querySelectorAll('form').forEach(form => {
-            form.addEventListener('submit', function() {
-                if (!form.classList.contains('no-loader') && form.checkValidity()) {
-                    document.getElementById('loader-overlay').style.display = 'flex';
+        document.addEventListener('DOMContentLoaded', function() {
+            // Script do Loader de Tela Cheia para submissões de formulário
+            document.querySelectorAll('form').forEach(form => {
+                form.addEventListener('submit', function() {
+                    if (!form.classList.contains('no-loader') && form.checkValidity()) {
+                        document.getElementById('loader-overlay').style.display = 'flex';
+                    }
+                });
+            });
+            window.addEventListener('pageshow', function(event) {
+                if (event.persisted) {
+                    document.getElementById('loader-overlay').style.display = 'none';
                 }
             });
-        });
-        window.addEventListener('pageshow', function(event) {
-            if (event.persisted) {
-                document.getElementById('loader-overlay').style.display = 'none';
-            }
+
+            // Lógica do Modal de Barra de Progresso
+            const progressBarModal = new bootstrap.Modal(document.getElementById('progressBarModal'));
+            const progressBar = document.getElementById('progressBar');
+            const progressMessage = document.getElementById('progressMessage');
+            const closeProgressBarModalButton = document.getElementById('closeProgressBarModalButton');
+
+            let pollingInterval; // Variável para armazenar o ID do intervalo de polling
+
+            // Função para exibir flash messages via JS (AGORA GLOBAL)
+            window.flashMessage = function(category, message) { // <--- MODIFICADO AQUI
+                const alertContainer = document.querySelector('main .container-fluid .row .col-md-10');
+                if (alertContainer) {
+                    // Remove alertas existentes para não acumular
+                    const existingAlerts = alertContainer.querySelectorAll('.alert');
+                    existingAlerts.forEach(alert => alert.remove());
+
+                    const alertHtml = `
+                        <div class="alert alert-${category} alert-dismissible fade show" role="alert">
+                            ${message}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                        </div>
+                    `;
+                    alertContainer.insertAdjacentHTML('afterbegin', alertHtml);
+                    // Adiciona um pequeno delay para remover o alerta, se for um sucesso temporário
+                    if (category === 'success' || category === 'info') {
+                        setTimeout(() => {
+                            const newAlert = alertContainer.querySelector('.alert');
+                            if (newAlert) {
+                                new bootstrap.Alert(newAlert).close();
+                            }
+                        }, 5000); // 5 segundos
+                    }
+                }
+            };
+
+            // Função para iniciar o polling
+            window.startPollingProgress = function(taskId) {
+                // Resetar o modal
+                progressBar.style.width = '0%';
+                progressBar.setAttribute('aria-valuenow', 0);
+                progressBar.textContent = '0%';
+                progressBar.classList.remove('bg-success', 'bg-danger');
+                progressBar.classList.add('bg-primary', 'progress-bar-animated', 'progress-bar-striped');
+                progressMessage.textContent = 'Iniciando operação...';
+                closeProgressBarModalButton.style.display = 'none'; // Esconde o botão de fechar
+
+                progressBarModal.show(); // Mostra o modal
+
+                // Limpa qualquer intervalo anterior para evitar múltiplos pollings
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                }
+
+                pollingInterval = setInterval(function() {
+                    fetch(`/task_status/${taskId}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                // Se a resposta não for 200 OK (ex: 403, 404, 500)
+                                return response.json().then(errData => { throw new Error(errData.message || `Erro HTTP: ${response.status}`); });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            progressBar.style.width = data.progress + '%';
+                            progressBar.setAttribute('aria-valuenow', data.progress);
+                            progressBar.textContent = data.progress + '%';
+                            progressMessage.textContent = data.message;
+
+                            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+                                clearInterval(pollingInterval); // Para o polling
+                                progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                                closeProgressBarModalButton.style.display = 'block'; // Mostra o botão de fechar
+
+                                if (data.status === 'COMPLETED') {
+                                    progressBar.classList.add('bg-success');
+                                    window.flashMessage('success', data.message); // Usa a função global
+                                    setTimeout(() => {
+                                        progressBarModal.hide();
+                                        window.location.reload(); 
+                                    }, 1500); // Dá um pequeno tempo para o usuário ver 100%
+                                } else if (data.status === 'FAILED') {
+                                    progressBar.classList.add('bg-danger');
+                                    window.flashMessage('danger', data.message); // Usa a função global
+                                    setTimeout(() => {
+                                        progressBarModal.hide();
+                                        window.location.reload(); 
+                                    }, 3000); // Mostra por mais tempo em caso de erro
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro ao buscar status da tarefa:', error);
+                            clearInterval(pollingInterval);
+                            progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                            progressBar.classList.add('bg-danger');
+                            progressMessage.textContent = `Erro ao carregar o progresso da tarefa: ${error.message}`;
+                            closeProgressBarModalButton.style.display = 'block';
+                            window.flashMessage('danger', 'Ocorreu um erro ao monitorar a tarefa em segundo plano. Verifique o console do navegador para detalhes.');
+                            setTimeout(() => {
+                                progressBarModal.hide();
+                                window.location.reload(); 
+                            }, 3000);
+                        });
+                }, 1000); // Polling a cada 1 segundo
+            };
         });
     </script>
 

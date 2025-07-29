@@ -4,6 +4,7 @@ from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from datetime import datetime, timedelta
+import uuid # <-- ADICIONE ESTA LINHA
 
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -97,6 +98,22 @@ class ActivityLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     action_type = db.Column(db.String(50)) 
     tabulation = db.relationship('Tabulation')
+
+# --- NOVO MODELO PARA TAREFAS EM SEGUNDO PLANO ---
+class BackgroundTask(db.Model):
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4())) # UUID para ID único
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    task_type = db.Column(db.String(100), nullable=False) # Ex: 'delete_mailing', 'delete_product'
+    status = db.Column(db.String(50), default='PENDING', nullable=False) # PENDING, RUNNING, COMPLETED, FAILED
+    progress = db.Column(db.Integer, default=0, nullable=False) # Porcentagem 0-100
+    total_items = db.Column(db.Integer, nullable=True) # Total de itens a processar (ex: total de leads)
+    items_processed = db.Column(db.Integer, default=0, nullable=True) # Itens já processados
+    start_time = db.Column(db.DateTime, default=datetime.utcnow)
+    end_time = db.Column(db.DateTime, nullable=True)
+    message = db.Column(db.Text, nullable=True) # Mensagens adicionais ou erro
+
+    user = db.relationship('User', backref='background_tasks') # Relacionamento de volta com o usuário que iniciou a tarefa
+
 
 @login_manager.user_loader
 def load_user(id):

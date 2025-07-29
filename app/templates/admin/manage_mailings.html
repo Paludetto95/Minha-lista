@@ -1,4 +1,4 @@
-<!-- app/templates/admin/manage_mailings.html (VERSÃO COM TEMA CORRIGIDO) -->
+<!-- app/templates/admin/manage_mailings.html (VERSÃO COM BOTÃO DE EXCLUIR AJUSTADO PARA BACKGROUND TASK) -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -20,10 +20,7 @@
                 </h2>
                 <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#accordionMailings">
                     <div class="accordion-body p-0">
-                        <!-- ===== 'table-striped' ADICIONADO AQUI ===== -->
                         <table class="table table-hover table-striped align-middle mb-0">
-                            <!-- Cabeçalho da sub-tabela -->
-                            <!-- ===== 'table-light' TROCADO POR 'table-secondary' ===== -->
                             <thead class="table-secondary">
                                 <tr>
                                     <th>Estado</th>
@@ -44,14 +41,16 @@
                                                 <i class="fas fa-file-csv"></i> Exportar
                                             </a>
                                             
-                                            <form action="{{ url_for('main.delete_mailing') }}" method="POST" onsubmit="return confirm('ATENÇÃO! Isso iniciará a exclusão em segundo plano de {{ mailing.total_leads }} leads de {{ mailing.estado }}. Deseja continuar?');">
-                                                <input type="hidden" name="produto_id" value="{{ mailing.produto_id }}">
-                                                <input type="hidden" name="estado" value="{{ mailing.estado }}">
-                                                
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir mailing de {{ mailing.estado }}">
-                                                    <i class="fas fa-trash"></i> Excluir
-                                                </button>
-                                            </form>
+                                            <!-- MODIFICADO: Botão de exclusão para acionar o modal de progresso -->
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-danger btn-delete-mailing" 
+                                                    data-produto-id="{{ mailing.produto_id }}" 
+                                                    data-estado="{{ mailing.estado }}" 
+                                                    data-mailing-name="{{ produto_nome }} ({{ mailing.estado }})"
+                                                    data-total-leads="{{ mailing.total_leads }}"
+                                                    title="Excluir mailing de {{ mailing.estado }}">
+                                                <i class="fas fa-trash"></i> Excluir
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -70,4 +69,62 @@
         {% endfor %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Seleciona todos os botões de exclusão de mailing
+    const deleteButtons = document.querySelectorAll('.btn-delete-mailing');
+
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const produtoId = this.dataset.produtoId;
+            const estado = this.dataset.estado;
+            const mailingName = this.dataset.mailingName;
+            const totalLeads = this.dataset.totalLeads;
+
+            // Pergunta de confirmação mais detalhada
+            const confirmMessage = `ATENÇÃO! Isso iniciará a exclusão em segundo plano de ${totalLeads} leads do mailing '${mailingName}'. Deseja continuar?`;
+
+            if (confirm(confirmMessage)) {
+                // Desabilita o botão para evitar cliques múltiplos
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Excluindo...';
+
+                // Faz a requisição AJAX para iniciar a exclusão em segundo plano
+                fetch('{{ url_for('main.delete_mailing') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'produto_id': produtoId,
+                        'estado': estado
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        // Inicia o monitoramento da barra de progresso
+                        window.startPollingProgress(data.task_id);
+                    } else {
+                        // Caso ocorra um erro antes de iniciar a tarefa
+                        flashMessage('danger', data.message || 'Erro ao iniciar a exclusão.');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="fas fa-trash"></i> Excluir';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro na requisição AJAX:', error);
+                    flashMessage('danger', 'Erro na comunicação com o servidor ao tentar excluir o mailing.');
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-trash"></i> Excluir';
+                });
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

@@ -1,4 +1,4 @@
-# app/routes.py (VERSÃO FINAL COMPLETA E INTEGRAL COM GRUPOS, PAPÉIS E TEMAS)
+# app/routes.py (VERSÃO FINAL COMPLETA E INTEGRAL COM GRUPOS, PAPÉIS E TEMAS E BACKGROUND TASKS)
 
 import pandas as pd
 import io
@@ -13,11 +13,13 @@ from functools import wraps
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
-from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo
+# MODIFICADO: Importar BackgroundTask
+from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask
 from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql import text # ADICIONADO: Para execuções SQL diretas
 
 bp = Blueprint('main', __name__)
 
@@ -37,6 +39,30 @@ def darken_color(hex_color, amount=0.8):
     rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     dark_rgb = tuple(int(c * amount) for c in rgb)
     return '#{:02x}{:02x}{:02x}'.format(*dark_rgb)
+
+# ADICIONADO: Função para iniciar tarefas em segundo plano
+def start_background_task(task_func, task_type, user_id, initial_message="", *args, **kwargs):
+    app_context = current_app._get_current_object()
+    
+    with app_context.app_context():
+        # Cria o registro da tarefa no banco de dados
+        task = BackgroundTask(
+            user_id=user_id,
+            task_type=task_type,
+            status='PENDING',
+            message=initial_message,
+            progress=0,
+            items_processed=0,
+            total_items=0
+        )
+        db.session.add(task)
+        db.session.commit()
+        task_id = task.id
+    
+    # Inicia a thread que executará a função real
+    thread = threading.Thread(target=task_func, args=(app_context, task_id, *args), kwargs=kwargs)
+    thread.start()
+    return task_id
 
 # --- DECORADORES DE PERMISSÃO ---
 def require_role(*roles):
@@ -253,7 +279,7 @@ def upload_step2_process():
         existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
         leads_para_adicionar = []
         leads_ignorados = 0
-        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'status', 'data_criacao', 'data_tabulacao', 'consultor_id', 'tabulation_id', 'produto_id', 'estado']
+        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
         for index, row in df.iterrows():
             row_renamed = row.rename(inversed_mapping)
             cpf_digits = re.sub(r'\D', '', str(row_renamed.get('cpf', '')))
@@ -308,7 +334,6 @@ def manage_teams():
 def team_details(group_id):
     grupo = Grupo.query.get_or_404(group_id)
     
-    # ===== CORREÇÃO APLICADA AQUI =====
     # Busca TODOS os usuários deste grupo
     users_in_group = User.query.filter_by(grupo_id=grupo.id).order_by(User.username).all()
 
@@ -437,6 +462,12 @@ def add_user():
     password = request.form.get('password')
     role = request.form.get('role', 'consultor')
     grupo_id = request.form.get('grupo_id')
+    
+    # Verifica permissão no backend, mesmo que o botão esteja oculto no frontend
+    if current_user.role != 'super_admin':
+        flash('Você não tem permissão para criar novos usuários.', 'danger')
+        return redirect(url_for('main.manage_users'))
+
     if not all([username, email, password, role, grupo_id]):
         flash('Todos os campos são obrigatórios.', 'danger')
         return redirect(url_for('main.manage_users'))
@@ -446,12 +477,70 @@ def add_user():
     if User.query.filter_by(email=email).first():
         flash('Esse email já está a ser utilizado.', 'danger')
         return redirect(url_for('main.manage_users'))
+    
     new_user = User(username=username, email=email, role=role, grupo_id=int(grupo_id))
     new_user.set_password(password)
     db.session.add(new_user)
     db.session.commit()
     flash('Utilizador criado com sucesso!', 'success')
     return redirect(url_for('main.manage_users'))
+
+# NOVA ROTA: Atualiza o nome de usuário (para Super Admin e Admin Parceiro)
+@bp.route('/users/update_name/<int:user_id>', methods=['POST'])
+@login_required
+@require_role('super_admin', 'admin_parceiro')
+def update_user_name(user_id):
+    user_to_update = User.query.get_or_404(user_id)
+
+    # CRÍTICO: Verificação de permissões no backend
+    if current_user.role == 'super_admin':
+        # Super admin pode editar o nome de qualquer usuário
+        pass
+    elif current_user.role == 'admin_parceiro':
+        # Admin parceiro SÓ PODE editar consultores (role 'consultor')
+        # E que pertencem ao SEU PRÓPRIO grupo (grupo_id)
+        if user_to_update.role == 'consultor' and user_to_update.grupo_id == current_user.grupo_id:
+            pass
+        else:
+            flash('Você não tem permissão para editar o nome deste usuário ou ele não pertence ao seu grupo.', 'danger')
+            return redirect(url_for('main.parceiro_manage_users')) # Redireciona para a página de gerenciar usuários do parceiro
+    else:
+        # Outros papéis não têm permissão para editar nomes
+        flash('Você não tem permissão para realizar esta ação.', 'danger')
+        return redirect(url_for('main.index')) # Redireciona para o índice padrão
+
+    new_username = request.form.get('username')
+
+    if not new_username or not new_username.strip():
+        flash('O nome de usuário não pode ser vazio.', 'warning')
+        if current_user.role == 'super_admin':
+            return redirect(url_for('main.manage_users'))
+        else: # admin_parceiro
+            return redirect(url_for('main.parceiro_manage_users'))
+
+    # Verifica se o novo nome de usuário já existe para outro usuário (case-insensitive)
+    existing_user_with_name = User.query.filter(
+        User.username.ilike(new_username.strip()), # .ilike para busca case-insensitive
+        User.id != user_id
+    ).first()
+
+    if existing_user_with_name:
+        flash(f'O nome de usuário "{new_username.strip()}" já está em uso por outro usuário.', 'danger')
+        if current_user.role == 'super_admin':
+            return redirect(url_for('main.manage_users'))
+        else: # admin_parceiro
+            return redirect(url_for('main.parceiro_manage_users'))
+
+    user_to_update.username = new_username.strip()
+    db.session.commit()
+    flash('Nome de usuário atualizado com sucesso!', 'success')
+
+    # Redireciona para a página de gerenciamento de usuários apropriada, dependendo do papel do usuário logado
+    if current_user.role == 'super_admin':
+        return redirect(url_for('main.manage_users'))
+    else: # admin_parceiro
+        return redirect(url_for('main.parceiro_manage_users'))
+
 
 @bp.route('/admin/users/update_limits/<int:user_id>', methods=['POST'])
 @login_required
@@ -472,16 +561,43 @@ def update_user_limits(user_id):
 
 @bp.route('/admin/users/delete/<int:id>', methods=['POST'])
 @login_required
-@require_role('super_admin')
+@require_role('super_admin', 'admin_parceiro') # Agora admin_parceiro também pode deletar
 def delete_user(id):
+    user_to_delete = User.query.get_or_404(id)
+
+    # Não permite que um usuário se auto-delete
     if id == current_user.id:
         flash('Não pode eliminar a sua própria conta.', 'danger')
-        return redirect(url_for('main.manage_users'))
-    user_to_delete = User.query.get_or_404(id)
+        if current_user.role == 'super_admin':
+            return redirect(url_for('main.manage_users'))
+        else: # admin_parceiro
+            return redirect(url_for('main.parceiro_manage_users'))
+
+    # Lógica de permissão para exclusão
+    if current_user.role == 'super_admin':
+        # Super Admin pode apagar qualquer one (exceto a si mesmo, já tratado)
+        pass
+    elif current_user.role == 'admin_parceiro':
+        # Admin Parceiro só pode apagar consultores do seu próprio grupo
+        if user_to_delete.role == 'consultor' and user_to_delete.grupo_id == current_user.grupo_id:
+            pass # Permissão concedida
+        else:
+            flash('Você não tem permissão para apagar este usuário ou ele não pertence ao seu grupo.', 'danger')
+            return redirect(url_for('main.parceiro_manage_users'))
+    else:
+        # Outros papéis não têm permissão para apagar
+        flash('Você não tem permissão para realizar esta ação.', 'danger')
+        return redirect(url_for('main.index'))
+
     db.session.delete(user_to_delete)
     db.session.commit()
     flash('Utilizador eliminado com sucesso!', 'success')
-    return redirect(url_for('main.manage_users'))
+    
+    # Redireciona para a página de gerenciamento de usuários apropriada
+    if current_user.role == 'super_admin':
+        return redirect(url_for('main.manage_users'))
+    else: # admin_parceiro
+        return redirect(url_for('main.parceiro_manage_users'))
 
 @bp.route('/admin/products')
 @login_required
@@ -500,27 +616,30 @@ def add_product():
             db.session.add(Produto(name=name))
             db.session.commit()
             flash('Produto adicionado com sucesso!', 'success')
-        except:
+        except IntegrityError: # Captura erro de duplicidade de nome
             db.session.rollback()
             flash('Erro: Este produto já existe.', 'danger')
     return redirect(url_for('main.manage_products'))
 
+# MODIFICADO: Rota de exclusão de produto para iniciar tarefa em segundo plano
 @bp.route('/admin/products/delete/<int:id>', methods=['POST'])
 @login_required
 @require_role('super_admin')
 def delete_product(id):
     product_to_delete = Produto.query.get_or_404(id)
-    try:
-        db.session.delete(product_to_delete)
-        db.session.commit()
-        flash(f'Produto "{product_to_delete.name}" excluído com sucesso!', 'success')
-    except IntegrityError:
-        db.session.rollback()
-        flash(f'Erro: O produto "{product_to_delete.name}" não pode ser excluído porque está em uso.', 'danger')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Ocorreu um erro inesperado: {e}', 'danger')
-    return redirect(url_for('main.manage_products'))
+    product_name = product_to_delete.name
+    
+    # Inicia a tarefa em segundo plano
+    task_id = start_background_task(
+        delete_product_in_background,
+        'delete_product',
+        current_user.id,
+        initial_message=f"A exclusão do produto '{product_name}' e seus leads associados está sendo processada em segundo plano.",
+        product_id=id
+    )
+    # MODIFICADO: Retorna a mensagem inicial explícita no JSON
+    return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão do produto '{product_name}' e seus leads associados foi iniciada em segundo plano."})
+
 
 @bp.route('/admin/layouts')
 @login_required
@@ -542,21 +661,192 @@ def delete_layout(layout_id):
         db.session.rollback()
         flash(f'Ocorreu um erro ao excluir o layout: {e}', 'danger')
     return redirect(url_for('main.manage_layouts'))
-    
-def delete_leads_in_background(app, produto_id, estado):
-    with app.app_context():
+
+# MODIFICADO: Função de exclusão de leads em segundo plano para reportar progresso
+def delete_leads_in_background(app, task_id, produto_id, estado):
+    with app.app_context(): # <--- GARANTA QUE ESTA LINHA ESTEJA CORRETAMENTE INDENTADA (Ex: 4 espaços)
+        task = BackgroundTask.query.get(task_id)
+        if not task: return
+        
+        task.status = 'RUNNING'
+        task.start_time = datetime.utcnow()
+        task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
+        db.session.add(task)
+        db.session.commit()
+        db.session.refresh(task) # <--- ADICIONADO AQUI
+        
         try:
-            leads_query = Lead.query.filter_by(produto_id=produto_id, estado=estado)
-            batch_size = 1000
+            # Conta o total de leads a serem excluídos para este mailing
+            total_leads_to_delete = Lead.query.filter_by(produto_id=produto_id, estado=estado).count()
+            task.total_items = total_leads_to_delete
+            task.items_processed = 0
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+
+            if total_leads_to_delete == 0:
+                task.status = 'COMPLETED'
+                task.progress = 100
+                task.message = f"Nenhum lead encontrado para o mailing de Produto {produto_id}, Estado {estado}. Concluído."
+                task.end_time = datetime.utcnow()
+                db.session.add(task)
+                db.session.commit()
+                db.session.refresh(task) # <--- ADICIONADO AQUI
+                return
+
+            batch_size = 1000 # Processa em lotes de 1000 leads
+            processed_count = 0
+
+            # Loop para deletar em lotes
             while True:
-                leads_to_delete_ids = [lead.id for lead in leads_query.limit(batch_size).with_entities(Lead.id).all()]
-                if not leads_to_delete_ids: break
+                # Pega IDs dos leads no lote
+                leads_to_delete_ids = [
+                    lead.id for lead in db.session.query(Lead.id)
+                    .filter_by(produto_id=produto_id, estado=estado)
+                    .limit(batch_size).all()
+                ]
+
+                if not leads_to_delete_ids:
+                    break # Não há mais leads para deletar
+
+                # Deleta logs de atividade relacionados
+                ActivityLog.query.filter(ActivityLog.lead_id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
+                
+                # Deleta consumos de leads relacionados
+                LeadConsumption.query.filter(LeadConsumption.lead_id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
+                
+                # Deleta os leads em si
+                db.session.query(Lead).filter(Lead.id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
+                
+                db.session.commit() # Comita as deleções do lote
+                # db.session.refresh(task) # Não precisa aqui, pois o objeto task não está sendo diretamente alterado
+
+                processed_count += len(leads_to_delete_ids)
+                task.items_processed = processed_count
+                task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
+                task.message = f"Processando... {processed_count}/{total_leads_to_delete} leads excluídos."
+                db.session.add(task)
+                db.session.commit()
+                db.session.refresh(task) # <--- ADICIONADO AQUI
+
+            task.status = 'COMPLETED'
+            task.progress = 100
+            task.message = f"Exclusão do mailing de Produto {produto_id}, Estado {estado} concluída. Total de {processed_count} leads excluídos."
+            task.end_time = datetime.utcnow()
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+
+        except Exception as e:
+            db.session.rollback()
+            task.status = 'FAILED'
+            task.message = f"Erro na exclusão do mailing: {str(e)}"
+            task.end_time = datetime.utcnow()
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+        finally:
+            db.session.remove() # Garante que a sessão seja fechada corretamente para a thread
+
+# ADICIONADO: Nova função para exclusão de produtos em segundo plano
+def delete_product_in_background(app, task_id, product_id): # <--- GARANTA QUE ESTA LINHA COMECE NA COLUNA MAIS À ESQUERDA (SEM INDENTAÇÃO)
+    with app.app_context(): # <--- E QUE ESTA LINHA ESTEJA CORRETAMENTE INDENTADA (Ex: 4 espaços)
+        task = BackgroundTask.query.get(task_id)
+        if not task: return
+
+        task.status = 'RUNNING'
+        task.start_time = datetime.utcnow()
+        task.message = f"Iniciando exclusão do produto e seus leads associados..."
+        db.session.add(task)
+        db.session.commit()
+        db.session.refresh(task) # <--- ADICIONADO AQUI
+
+        try:
+            produto = Produto.query.get(product_id)
+            if not produto:
+                raise ValueError("Produto não encontrado.")
+
+            product_name = produto.name
+            
+            # Contar o total de leads associados a este produto
+            total_leads_to_delete = Lead.query.filter_by(produto_id=product_id).count()
+            task.total_items = total_leads_to_delete
+            task.items_processed = 0
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+
+            # Se não houver leads, apenas deleta o produto
+            if total_leads_to_delete == 0:
+                task.status = 'COMPLETED'
+                task.progress = 100
+                task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
+                task.end_time = datetime.utcnow()
+                db.session.add(task)
+                db.session.commit()
+                db.session.refresh(task) # <--- ADICIONADO AQUI
+                
+                # Deleta o produto se não houver leads associados
+                # Colocado aqui para garantir que o produto seja excluído mesmo que não haja leads
+                # E para que a mensagem de sucesso com "Nenhum lead associado" seja enviada primeiro
+                produto_final = Produto.query.get(product_id)
+                if produto_final:
+                    db.session.delete(produto_final)
+                    db.session.commit()
+                
+                return
+
+            batch_size = 1000
+            processed_count = 0
+
+            # Excluir leads associados em lotes
+            while True:
+                leads_to_delete_ids = [
+                    lead.id for lead in db.session.query(Lead.id)
+                    .filter_by(produto_id=product_id)
+                    .limit(batch_size).all()
+                ]
+                
+                if not leads_to_delete_ids:
+                    break
+
                 ActivityLog.query.filter(ActivityLog.lead_id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
                 LeadConsumption.query.filter(LeadConsumption.lead_id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
                 db.session.query(Lead).filter(Lead.id.in_(leads_to_delete_ids)).delete(synchronize_session=False)
+                
                 db.session.commit()
+
+                processed_count += len(leads_to_delete_ids)
+                task.items_processed = processed_count
+                task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
+                task.message = f"Processando leads do produto '{product_name}': {processed_count}/{total_leads_to_delete} excluídos."
+                db.session.add(task)
+                db.session.commit()
+                db.session.refresh(task) # <--- ADICIONADO AQUI
+
+            # Após deletar todos os leads, deleta o produto
+            db.session.delete(produto)
+            db.session.commit()
+
+            task.status = 'COMPLETED'
+            task.progress = 100
+            task.message = f"Exclusão do produto '{product_name}' e seus {processed_count} leads associados concluída com sucesso."
+            task.end_time = datetime.utcnow()
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+
         except Exception as e:
             db.session.rollback()
+            task.status = 'FAILED'
+            task.message = f"Erro na exclusão do produto: {str(e)}"
+            task.end_time = datetime.utcnow()
+            db.session.add(task)
+            db.session.commit()
+            db.session.refresh(task) # <--- ADICIONADO AQUI
+        finally:
+            db.session.remove() # Garante que a sessão seja fechada corretamente para a thread
+
 
 @bp.route('/admin/mailings')
 @login_required
@@ -568,19 +858,30 @@ def manage_mailings():
         mailings_por_produto[group.produto_nome].append(group)
     return render_template('admin/manage_mailings.html', title="Gerir Mailings", mailings_por_produto=mailings_por_produto)
 
+# MODIFICADO: Rota de exclusão de mailing para iniciar tarefa em segundo plano
 @bp.route('/admin/mailings/delete', methods=['POST'])
 @login_required
 @require_role('super_admin')
 def delete_mailing():
     produto_id = request.form.get('produto_id')
     estado = request.form.get('estado')
+    
     if not produto_id or not estado:
-        flash('Informações do mailing inválidas.', 'danger')
-        return redirect(url_for('main.manage_mailings'))
-    thread = threading.Thread(target=delete_leads_in_background, args=(current_app._get_current_object(), produto_id, estado))
-    thread.start()
-    flash('A exclusão do mailing foi iniciada em segundo plano.', 'info')
-    return redirect(url_for('main.manage_mailings'))
+        return jsonify({'status': 'error', 'message': 'Informações do mailing inválidas.'})
+    
+    produto_nome = Produto.query.get(produto_id).name if Produto.query.get(produto_id) else 'Desconhecido'
+
+    # Inicia a tarefa em segundo plano
+    task_id = start_background_task(
+        delete_leads_in_background,
+        'delete_mailing',
+        current_user.id,
+        initial_message=f"A exclusão dos leads do mailing '{produto_nome}' ({estado}) está sendo processada em segundo plano.",
+        produto_id=int(produto_id),
+        estado=estado
+    )
+    return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão dos leads do mailing '{produto_nome}' ({estado}) foi iniciada em segundo plano."})
+
 
 @bp.route('/admin/mailings/export')
 @login_required
@@ -671,6 +972,29 @@ def export_tabulations():
     csv_data = output.getvalue()
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename=relatorio_completo_atividades.csv"})
 
+# ADICIONADO: Rota para verificar o status da tarefa em segundo plano
+@bp.route('/task_status/<string:task_id>', methods=['GET'])
+@login_required
+def get_task_status(task_id):
+    task = BackgroundTask.query.get(task_id)
+    if not task:
+        return jsonify({'status': 'NOT_FOUND', 'message': 'Tarefa não encontrada'}), 404
+    
+    # Adiciona a lógica para verificar se o usuário atual tem permissão para ver essa tarefa
+    # Por exemplo, apenas o usuário que iniciou a tarefa ou um super_admin.
+    if current_user.id != task.user_id and current_user.role != 'super_admin':
+        return jsonify({'status': 'FORBIDDEN', 'message': 'Você não tem permissão para ver esta tarefa.'}), 403
+
+    return jsonify({
+        'task_id': task.id,
+        'status': task.status,
+        'progress': task.progress,
+        'message': task.message,
+        'total_items': task.total_items,
+        'items_processed': task.items_processed,
+        'end_time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else None
+    })
+
 # --- ROTAS DO ADMIN DO PARCEIRO ---
 
 @bp.route('/parceiro/dashboard')
@@ -709,7 +1033,7 @@ def parceiro_monitor():
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         agents_data.append({'id': agent.id, 'name': agent.username, 'status': agent.current_status, 'last_login': agent.last_login, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
-    agents_data.sort(key=lambda x: (x['conversions_conversions'], x['calls_today']), reverse=True)
+    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True) # Corrigido typo aqui, era 'conversions_conversions'
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
 
 @bp.route('/parceiro/performance_dashboard')
@@ -794,27 +1118,12 @@ def parceiro_export_performance():
 @login_required
 @require_role('admin_parceiro')
 def parceiro_manage_users():
+    # Admin Parceiro só deve ver e gerenciar consultores do SEU PRÓPRIO grupo
     users = User.query.filter(User.grupo_id == current_user.grupo_id, User.role == 'consultor').order_by(User.username).all()
+    # Para o formulário de adicionar novo usuário (que é do Super Admin), não precisamos de `grupos` aqui.
+    # No entanto, se o admin parceiro pudesse adicionar, precisaríamos filtrar grupos.
     return render_template('parceiro/manage_users.html', title="Gerir Nomes da Equipe", users=users)
 
-@bp.route('/parceiro/users/edit/<int:user_id>', methods=['POST'])
-@login_required
-@require_role('admin_parceiro')
-def parceiro_edit_user(user_id):
-    user_to_edit = User.query.get_or_404(user_id)
-    if user_to_edit.grupo_id != current_user.grupo_id:
-        flash('Acesso negado.', 'danger')
-        return redirect(url_for('main.parceiro_manage_users'))
-    new_username = request.form.get('username')
-    if new_username:
-        existing_user = User.query.filter(User.username == new_username, User.id != user_id).first()
-        if existing_user:
-            flash(f'O nome de usuário "{new_username}" já está em uso.', 'danger')
-        else:
-            user_to_edit.username = new_username
-            db.session.commit()
-            flash('Nome do usuário atualizado com sucesso!', 'success')
-    return redirect(url_for('main.parceiro_manage_users'))
 
 # --- ROTAS DO CONSULTOR ---
 
@@ -853,6 +1162,7 @@ def pegar_leads_selecionados():
     for key, value in request.form.items():
         if key.startswith('leads_') and value.isdigit() and int(value) > 0:
             quantidade_a_pegar = int(value)
+            # CORREÇÃO: Typo "limite_total_a_pegare" para "limite_total_a_pegar"
             if leads_pegos_total + quantidade_a_pegar > limite_total_a_pegar:
                 quantidade_a_pegar = limite_total_a_pegar - leads_pegos_total
             if quantidade_a_pegar <= 0: continue
