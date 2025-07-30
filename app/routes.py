@@ -1,5 +1,3 @@
-# app/routes.py (VERSÃO FINAL PARA RAILWAY VOLUMES - SEM S3)
-
 import pandas as pd
 import io
 import re
@@ -39,7 +37,7 @@ def save_partner_logo(file):
         filename = secure_filename(str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower())
         filepath = os.path.join(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
         try:
-            # Garante que a pasta existe antes de salvar
+            # Garante que a pasta existe antes de salvar (já feito em __init__.py, mas bom ter aqui tbm)
             os.makedirs(current_app.config['PARTNER_LOGOS_FULL_PATH'], exist_ok=True)
             file.save(filepath)
             print(f"DEBUG: Logo '{filename}' salvo no Volume em: {filepath}")
@@ -298,7 +296,7 @@ def upload_step1():
 def upload_step2_process():
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
-    produto_id = request.form.get('produto_id')
+    produto_id = form_data.get('produto_id')
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -347,7 +345,6 @@ def upload_step2_process():
             row_data = {} 
             additional_data = {}
 
-            # Preencher os dados mapeados para colunas diretas
             for system_field, original_header_lower in mapping.items():
                 valor = row.get(original_header_lower)
                 if system_field in campos_do_modelo_lead: 
@@ -368,13 +365,11 @@ def upload_step2_process():
                     else:
                         row_data[system_field] = str(valor).strip() if pd.notna(valor) else None
             
-            # Para colunas que não foram mapeadas diretamente, mas existem na planilha, e não são CPF/Nome/Telefone (já tratados)
             for original_header in original_headers:
                 original_header_lower = original_header.lower().strip()
-                if original_header_lower not in mapping.values(): # Verifica se a coluna original não foi mapeada para um campo direto
+                if original_header_lower not in mapping.values():
                     valor = row.get(original_header_lower)
                     if pd.notna(valor):
-                        # Evita adicionar campos que são tratados diretamente ou são chaves principais
                         if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
                            original_header_lower not in [mapping['cpf'].lower(), mapping['nome'].lower()]:
                             additional_data[original_header.title()] = str(valor).strip()
@@ -389,11 +384,11 @@ def upload_step2_process():
                 'cpf': cpf_digits,
                 'status': 'Novo',
                 'data_criacao': datetime.utcnow(),
-                'additional_data': additional_data # Usa o additional_data já filtrado
+                'additional_data': additional_data 
             }
-            final_lead_data.update(row_data) # Adiciona todos os campos mapeados diretamente
+            final_lead_data.update(row_data) 
             
-            if 'nome' not in final_lead_data: # Garante que 'nome' seja sempre adicionado
+            if 'nome' not in final_lead_data:
                 final_lead_data['nome'] = str(row_data.get('nome', 'Sem Nome')).strip()
 
 
@@ -1329,6 +1324,13 @@ def get_task_status(task_id):
         'end_time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else None
     })
 
+# ADICIONADO: Nova rota para servir as imagens do volume persistente
+@bp.route('/partner_logos/<filename>')
+def serve_partner_logo(filename):
+    # send_from_directory é uma função segura para servir arquivos de um diretório
+    # Ele verifica se o filename está dentro do diretório base fornecido
+    return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
+
 @bp.route('/admin/system_logs')
 @login_required
 @require_role('super_admin')
@@ -1562,7 +1564,7 @@ def parceiro_monitor():
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
-        agents_data.append({'id': agent.id, 'name': agent.username, 'status': agent.current_status, 'last_login': agent.last_login, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
+        agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'last_login': agent.last_login, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
 

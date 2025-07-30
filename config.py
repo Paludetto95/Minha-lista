@@ -1,4 +1,4 @@
-# config.py (VERSÃO PARA RAILWAY VOLUME)
+# config.py (VERSÃO FINAL PARA RAILWAY VOLUME)
 
 import os
 from dotenv import load_dotenv
