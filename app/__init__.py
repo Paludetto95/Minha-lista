@@ -1,4 +1,4 @@
-# app/__init__.py (VERSÃO FINAL COM A INDENTAÇÃO CORRIGIDA E PARTNER_LOGOS_FOLDER ROBUSTO)
+# app/__init__.py (VERSÃO COM CORREÇÃO DO KEYERROR PARA PASTAS)
 
 import os
 from flask import Flask
@@ -20,15 +20,13 @@ def create_app(config_class=Config):
     Application Factory: Cria e configura a instância da aplicação Flask.
     """
     app = Flask(__name__)
-    app.config.from_object(config_class)
+    app.config.from_object(config_class) # <--- ESSA LINHA PRECISA SER EXECUTADA PRIMEIRO
 
-    # Adiciona a função 'enumerate' do Python ao ambiente global do Jinja2
-    app.jinja_env.globals.update(enumerate=enumerate)
-
+    # ADICIONADO: As configurações agora estão disponíveis em app.config
     # Cria a pasta de uploads temporários se ela não existir
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         try:
-            os.makedirs(app.config['UPLOAD_FOLDER'])
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             print(f"DEBUG: Pasta UPLOAD_FOLDER criada: {app.config['UPLOAD_FOLDER']}")
         except OSError as e:
             print(f"ERRO: Falha ao criar UPLOAD_FOLDER: {e} no caminho {app.config['UPLOAD_FOLDER']}")
@@ -36,16 +34,17 @@ def create_app(config_class=Config):
         print(f"DEBUG: Pasta UPLOAD_FOLDER já existe: {app.config['UPLOAD_FOLDER']}")
     
     # ADICIONADO: Cria a pasta para logos de parceiros se ela não existir
-    # ADICIONADO: Mensagens de depuração e tratamento de erro para criação de pastas
-    if not os.path.exists(app.config['PARTNER_LOGOS_FOLDER']):
+    if not os.path.exists(app.config['PARTNER_LOGOS_FULL_PATH']):
         try:
-            os.makedirs(app.config['PARTNER_LOGOS_FOLDER'])
-            print(f"DEBUG: Pasta PARTNER_LOGOS_FOLDER criada: {app.config['PARTNER_LOGOS_FOLDER']}")
+            os.makedirs(app.config['PARTNER_LOGOS_FULL_PATH'], exist_ok=True)
+            print(f"DEBUG: Pasta de logos no Volume criada: {app.config['PARTNER_LOGOS_FULL_PATH']}")
         except OSError as e:
-            print(f"ERRO: Falha ao criar PARTNER_LOGOS_FOLDER: {e} no caminho {app.config['PARTNER_LOGOS_FOLDER']}")
+            print(f"ERRO: Falha ao criar PARTNER_LOGOS_FULL_PATH: {e} no caminho {app.config['PARTNER_LOGOS_FULL_PATH']}")
     else:
-        print(f"DEBUG: Pasta PARTNER_LOGOS_FOLDER já existe: {app.config['PARTNER_LOGOS_FOLDER']}")
+        print(f"DEBUG: Pasta de logos no Volume já existe: {app.config['PARTNER_LOGOS_FULL_PATH']}")
 
+    # Restante do código em __init__.py
+    app.jinja_env.globals.update(enumerate=enumerate) # Pode ficar aqui ou mover para cima se preferir, não afeta este erro
 
     # Inicializa as extensões com a aplicação
     db.init_app(app)

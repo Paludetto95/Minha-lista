@@ -1,4 +1,4 @@
-# config.py (VERSÃO FINAL E CORRIGIDA COM POOL_RECYCLE E PARTNER_LOGOS_FOLDER)
+# config.py (VERSÃO PARA RAILWAY VOLUME)
 
 import os
 from dotenv import load_dotenv
@@ -40,8 +40,14 @@ class Config:
     # Define a pasta para uploads temporários de arquivos.
     UPLOAD_FOLDER = os.path.join(basedir, 'temp_uploads')
 
-    # ADICIONADO: Define a pasta para os logos dos parceiros
-    PARTNER_LOGOS_FOLDER = os.path.join(basedir, 'static', 'partner_logos') # <--- JÁ ESTÁ AQUI
+    # NOVO: Caminho para o Volume montado no Railway para arquivos persistentes
+    # IMPORTANTE: SUBSTITUA '/mnt/uploads' pelo Mount Path REAL que você definiu no Railway!
+    # No .env local, você pode definir PERSISTENT_STORAGE_PATH como './_local_uploads_persistente'
+    PERSISTENT_STORAGE_PATH = os.environ.get('PERSISTENT_STORAGE_PATH', '/mnt/uploads') 
+    
+    # Onde os logos serão armazenados DENTRO do volume persistente
+    PARTNER_LOGOS_FOLDER_NAME = 'partner_logos'
+    PARTNER_LOGOS_FULL_PATH = os.path.join(PERSISTENT_STORAGE_PATH, PARTNER_LOGOS_FOLDER_NAME)
 
     # ===== ADIÇÃO PARA ESTABILIDADE DA CONEXÃO =====
     # Recicla conexões que estão inativas por mais de 30 minutos (1800s).

@@ -1,3 +1,5 @@
+# app/routes.py (VERSÃO FINAL PARA RAILWAY VOLUMES - SEM S3)
+
 import pandas as pd
 import io
 import re
@@ -8,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from collections import defaultdict
 from functools import wraps
-from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort
+from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
@@ -18,6 +20,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import text
 from werkzeug.utils import secure_filename
+
+# REMOVIDO: Importação de boto3 e suas exceções
 
 bp = Blueprint('main', __name__)
 
@@ -29,29 +33,36 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# MODIFICADO: Salvar logo para o Volume Persistente (removido lógica S3)
 def save_partner_logo(file):
     if file and allowed_file(file.filename):
         filename = secure_filename(str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower())
-        filepath = os.path.join(current_app.config['PARTNER_LOGOS_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
         try:
+            # Garante que a pasta existe antes de salvar
+            os.makedirs(current_app.config['PARTNER_LOGOS_FULL_PATH'], exist_ok=True)
             file.save(filepath)
+            print(f"DEBUG: Logo '{filename}' salvo no Volume em: {filepath}")
             return filename
         except Exception as e:
-            print(f"ERRO ao salvar logo: {e}")
+            print(f"ERRO: Falha ao salvar logo no Volume: {e} no caminho {filepath}")
             return None
     return None
 
+# MODIFICADO: Deletar logo do Volume Persistente (removido lógica S3)
 def delete_partner_logo(filename):
     if filename:
-        filepath = os.path.join(current_app.config['PARTNER_LOGOS_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
         if os.path.exists(filepath):
             try:
                 os.remove(filepath)
+                print(f"DEBUG: Logo '{filename}' deletado do Volume em: {filepath}")
                 return True
             except Exception as e:
-                print(f"ERRO ao deletar logo: {e}")
+                print(f"ERRO: Falha ao deletar logo do Volume: {e} no caminho {filepath}")
                 return False
     return False
+
 
 def generate_gradient(start_hex, end_hex, n_steps):
     if n_steps <= 1: return [start_hex]
@@ -108,6 +119,7 @@ def log_system_action(action_type, entity_type=None, entity_id=None, description
         db.session.rollback()
         print(f"ERRO: Falha ao salvar SystemLog: {e}")
 
+# --- DECORADORES DE PERMISSÃO ---
 def require_role(*roles):
     def decorator(f):
         @wraps(f)
@@ -121,12 +133,14 @@ def require_role(*roles):
         return decorated_function
     return decorator
 
+# --- FUNÇÃO HELPER DE STATUS ---
 def update_user_status(user, new_status):
     user.current_status = new_status
     user.status_timestamp = datetime.utcnow()
     user.last_activity_at = datetime.utcnow()
     db.session.add(user)
 
+# --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.index'))
@@ -284,7 +298,7 @@ def upload_step1():
 def upload_step2_process():
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
-    produto_id = form_data.get('produto_id')
+    produto_id = request.form.get('produto_id')
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -328,31 +342,65 @@ def upload_step2_process():
         leads_para_adicionar = []
         leads_ignorados = 0
         campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
+        
         for index, row in df.iterrows():
-            row_renamed = row.rename(inversed_mapping)
-            cpf_digits = re.sub(r'\D', '', str(row_renamed.get('cpf', '')))
+            row_data = {} 
+            additional_data = {}
+
+            # Preencher os dados mapeados para colunas diretas
+            for system_field, original_header_lower in mapping.items():
+                valor = row.get(original_header_lower)
+                if system_field in campos_do_modelo_lead: 
+                    if 'telefone' in system_field:
+                        row_data[system_field] = re.sub(r'\D', '', str(valor)) if pd.notna(valor) else None
+                    elif system_field == 'estado':
+                        row_data[system_field] = str(valor).strip().upper()[:2] if pd.notna(valor) else None
+                    elif system_field == 'nascimento': 
+                        if pd.notna(valor):
+                            try:
+                                row_data[system_field] = pd.to_datetime(valor).strftime('%d/%m/%Y')
+                            except ValueError:
+                                row_data[system_field] = str(valor).strip()
+                        else:
+                            row_data[system_field] = None
+                    elif system_field == 'idade': 
+                         row_data[system_field] = int(valor) if pd.notna(valor) and str(valor).isdigit() else None
+                    else:
+                        row_data[system_field] = str(valor).strip() if pd.notna(valor) else None
+            
+            # Para colunas que não foram mapeadas diretamente, mas existem na planilha, e não são CPF/Nome/Telefone (já tratados)
+            for original_header in original_headers:
+                original_header_lower = original_header.lower().strip()
+                if original_header_lower not in mapping.values(): # Verifica se a coluna original não foi mapeada para um campo direto
+                    valor = row.get(original_header_lower)
+                    if pd.notna(valor):
+                        # Evita adicionar campos que são tratados diretamente ou são chaves principais
+                        if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
+                           original_header_lower not in [mapping['cpf'].lower(), mapping['nome'].lower()]:
+                            additional_data[original_header.title()] = str(valor).strip()
+
+            cpf_digits = re.sub(r'\D', '', str(row_data.get('cpf', '')))
             if not cpf_digits or len(cpf_digits) != 11 or cpf_digits in existing_cpfs:
                 leads_ignorados += 1
                 continue
-            lead_data = {'produto_id': produto_id, 'cpf': cpf_digits, 'status': 'Novo', 'data_criacao': datetime.utcnow()}
-            additional_data = {}
-            for original_header in original_headers:
-                original_header_lower = original_header.lower().strip()
-                system_field = inversed_mapping.get(original_header_lower)
-                valor = row.get(original_header_lower)
-                if system_field and system_field in campos_do_modelo_lead:
-                    if 'telefone' in system_field:
-                        lead_data[system_field] = re.sub(r'\D', '', str(valor))
-                    elif system_field == 'estado':
-                        lead_data[system_field] = str(valor).strip().upper()[:2]
-                    else:
-                        lead_data[system_field] = str(valor).strip()
-                else:
-                    additional_data[original_header.title()] = valor
-            lead_data['additional_data'] = {k: v for k, v in additional_data.items() if pd.notna(v)}
-            novo_lead = Lead(**lead_data)
+            
+            final_lead_data = {
+                'produto_id': produto_id,
+                'cpf': cpf_digits,
+                'status': 'Novo',
+                'data_criacao': datetime.utcnow(),
+                'additional_data': additional_data # Usa o additional_data já filtrado
+            }
+            final_lead_data.update(row_data) # Adiciona todos os campos mapeados diretamente
+            
+            if 'nome' not in final_lead_data: # Garante que 'nome' seja sempre adicionado
+                final_lead_data['nome'] = str(row_data.get('nome', 'Sem Nome')).strip()
+
+
+            novo_lead = Lead(**final_lead_data)
             leads_para_adicionar.append(novo_lead)
             existing_cpfs.add(cpf_digits)
+
         if leads_para_adicionar:
             db.session.bulk_save_objects(leads_para_adicionar)
             leads_importados = len(leads_para_adicionar)
@@ -418,7 +466,7 @@ def add_group():
     logo_file = request.files.get('logo_file')
     
     logo_filename = None
-    if logo_file and logo_file.filename: # Verifica se um arquivo foi realmente enviado
+    if logo_file and logo_file.filename:
         logo_filename = save_partner_logo(logo_file)
         if not logo_filename:
             flash('Formato de arquivo de logo inválido ou erro ao salvar.', 'danger')
@@ -480,7 +528,7 @@ def edit_group_name_color(group_id):
                 flash('Erro ao remover arquivo de logo existente.', 'warning')
                 log_system_action('GROUP_LOGO_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
                                   description=f"Erro ao remover arquivo de logo '{grupo.logo_filename}' para o grupo '{grupo.nome}'.")
-    elif new_logo_file and new_logo_file.filename: # Verifica se um novo arquivo foi realmente enviado
+    elif new_logo_file and new_logo_file.filename:
         if allowed_file(new_logo_file.filename):
             saved_filename = save_partner_logo(new_logo_file)
             if saved_filename:
@@ -1577,9 +1625,9 @@ def parceiro_export_performance():
         start_date = datetime.combine(today, time.min)
         end_date = datetime.combine(today, time.max)
     user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id, role='consultor').with_entities(User.id)]
-    consultants_in_group = User.query.filter(User.id.in_(user_ids_in_group)).all()
+    consultants = User.query.filter(User.id.in_(user_ids_in_group)).all()
     performance_data = []
-    for consultant in consultants_in_group:
+    for consultant in consultants:
         total_calls = ActivityLog.query.filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date)).count()
         total_conversions = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
