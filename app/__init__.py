@@ -29,9 +29,8 @@ def create_app(config_class=Config):
     else:
         print(f"DEBUG: Pasta UPLOAD_FOLDER já existe: {app.config['UPLOAD_FOLDER']}")
     
-    # Cria a pasta de logos dentro do Volume persistente
-    # A pasta do volume (ex: /mnt/data) é montada pelo Railway.
-    # Nós precisamos criar a subpasta 'partner_logos' dentro dela.
+    # Cria a pasta de logos DENTRO do VOLUME persistente
+    # É CRUCIAL que app.config['PARTNER_LOGOS_FULL_PATH'] esteja definido corretamente aqui
     if not os.path.exists(app.config['PARTNER_LOGOS_FULL_PATH']):
         try:
             os.makedirs(app.config['PARTNER_LOGOS_FULL_PATH'], exist_ok=True)
@@ -41,7 +40,7 @@ def create_app(config_class=Config):
     else:
         print(f"DEBUG: Pasta de logos no Volume já existe: {app.config['PARTNER_LOGOS_FULL_PATH']}")
 
-    app.jinja_env.globals.update(enumerate=enumerate) # Pode ficar aqui ou mover para cima se preferir
+    app.jinja_env.globals.update(enumerate=enumerate)
 
     db.init_app(app)
     migrate.init_app(app, db) 

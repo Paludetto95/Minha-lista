@@ -355,7 +355,7 @@ def upload_step2_process():
                     elif system_field == 'nascimento': 
                         if pd.notna(valor):
                             try:
-                                row_data[system_field] = pd.to_datetime(valor).strftime('%d/%m/%Y')
+                                row_data[system_field] = pd.to_datetime(valor).strftime('%Y-%m-%d') # Salva como YYYY-MM-DD para consistência com input type="date"
                             except ValueError:
                                 row_data[system_field] = str(valor).strip()
                         else:
@@ -1325,6 +1325,8 @@ def get_task_status(task_id):
     })
 
 # ADICIONADO: Nova rota para servir as imagens do volume persistente
+# Esta rota serve as imagens do caminho PARTNER_LOGOS_FULL_PATH.
+# O navegador acessará algo como /partner_logos/nome_do_arquivo.png
 @bp.route('/partner_logos/<filename>')
 def serve_partner_logo(filename):
     # send_from_directory é uma função segura para servir arquivos de um diretório
@@ -1599,9 +1601,9 @@ def parceiro_performance_dashboard():
         fig = go.Figure(data=[go.Pie(labels=pie_data['labels'], values=pie_data['data'], marker=dict(colors=pie_data['colors'], line=dict(color='#ffffff', width=2)), hole=.4, textinfo='percent', insidetextorientation='radial')])
         fig.update_layout(title_text=None, showlegend=False, height=300, margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         pie_chart_html = pio.to_html(fig, full_html=False, include_plotlyjs='cdn', config={'displayModeBar': False})
-    consultants_in_group = User.query.filter(User.id.in_(user_ids_in_group)).all()
+    consultants = User.query.filter(User.id.in_(user_ids_in_group)).all()
     performance_data = []
-    for consultant in consultants_in_group:
+    for consultant in consultants:
         total_calls = ActivityLog.query.filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date)).count()
         total_conversions = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
