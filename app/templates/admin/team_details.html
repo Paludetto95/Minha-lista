@@ -61,7 +61,6 @@
             </a>
             {# EXIBIÇÃO DO LOGO ATUAL NA PÁGINA #}
             {% if grupo.logo_filename %}
-                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
                 <img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" 
                      alt="Logo {{ grupo.nome }}" 
                      class="team-details-logo">
