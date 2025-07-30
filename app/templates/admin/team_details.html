@@ -61,7 +61,8 @@
             </a>
             {# EXIBIÇÃO DO LOGO ATUAL NA PÁGINA #}
             {% if grupo.logo_filename %}
-                <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                <img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" 
                      alt="Logo {{ grupo.nome }}" 
                      class="team-details-logo">
             {% endif %}
@@ -174,7 +175,8 @@
                 <label class="form-label">Logo da Equipe (Opcional)</label>
                 {% if grupo.logo_filename %}
                     <div class="current-logo-container mb-2">
-                        <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                        {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                        <img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" 
                              alt="Logo Atual" style="height: 40px;">
                         <span>Logo Atual: {{ grupo.logo_filename }}</span>
                     </div>
@@ -319,5 +321,4 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-{% endblock %}
 {% endblock %}

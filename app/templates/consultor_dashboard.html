@@ -1,10 +1,60 @@
-<!-- templates/consultor_dashboard.html (VERSÃO FINAL COM ActivityLog) -->
+<!-- templates/consultor_dashboard.html (VERSÃO FINAL COM LOGO DO PARCEIRO) -->
 {% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Estilos para o logo do parceiro no painel */
+    .partner-dashboard-logo {
+        max-height: 50px; /* Altura máxima para o logo */
+        width: auto;
+        margin-right: 15px; /* Espaçamento entre o logo e o texto/título */
+        vertical-align: middle; /* Alinha verticalmente com o texto */
+        object-fit: contain; /* Garante que a imagem se ajuste sem cortar */
+        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
+        border: 1px solid #dee2e6;
+        padding: 3px;
+        border-radius: 5px;
+    }
+    body[data-theme="dark"] .partner-dashboard-logo {
+        background-color: #343a40; /* Fundo escuro para logos no tema dark */
+        border-color: #495057;
+    }
+
+    .dashboard-title-container {
+        display: flex;
+        align-items: center;
+        gap: 15px; /* Espaçamento entre os elementos */
+    }
+
+    .dashboard-group-name {
+        font-size: 1.5rem; /* Ajusta o tamanho da fonte para o nome do grupo */
+        font-weight: bold;
+        color: var(--bs-body-color); /* Usa a cor do texto do tema atual */
+    }
+    body[data-theme="dark"] .dashboard-group-name {
+        color: #fff; /* Garante branco no tema escuro */
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="mb-0">Painel do Consultor</h2>
+        {# MODIFICADO: Título do painel para exibir logo e nome do grupo #}
+        <div class="dashboard-title-container">
+            {% if current_user.grupo and current_user.grupo.logo_filename %}
+                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                <img src="{{ url_for('main.serve_partner_logo', filename=current_user.grupo.logo_filename) }}" 
+                     alt="Logo {{ current_user.grupo.nome }}" 
+                     class="partner-dashboard-logo">
+                <span class="dashboard-group-name">{{ current_user.grupo.nome }}</span>
+            {% else %}
+                <h2>Painel do Consultor</h2>
+            {% endif %}
+        </div>
+        {# FIM MODIFICAÇÃO TÍTULO DO PAINEL #}
+
         {% if leads_em_atendimento > 0 %}
             <a href="{{ url_for('main.atendimento') }}" class="btn btn-success btn-lg">
                 <i class="fas fa-headset"></i> Iniciar Atendimento ({{ leads_em_atendimento }})

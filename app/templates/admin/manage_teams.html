@@ -57,7 +57,8 @@
                     <a href="{{ url_for('main.team_details', group_id=grupo.id) }}" class="team-card-link">
                         <div class="card-body text-center"> {# Centralizado o conteúdo do card #}
                             {% if grupo.logo_filename %}
-                                <img src="{{ url_for('static', filename='partner_logos/' + grupo.logo_filename) }}" 
+                                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                                <img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" 
                                      alt="Logo {{ grupo.nome }}" 
                                      class="team-logo-thumbnail">
                             {% endif %}

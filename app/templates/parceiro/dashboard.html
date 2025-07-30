@@ -44,7 +44,8 @@
         {# MODIFICADO: Título do painel para exibir logo e nome do grupo #}
         <div class="dashboard-title-container">
             {% if current_user.grupo and current_user.grupo.logo_filename %}
-                <img src="{{ url_for('static', filename='partner_logos/' + current_user.grupo.logo_filename) }}" 
+                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                <img src="{{ url_for('main.serve_partner_logo', filename=current_user.grupo.logo_filename) }}" 
                      alt="Logo {{ current_user.grupo.nome }}" 
                      class="partner-dashboard-logo">
                 <span class="dashboard-group-name">{{ current_user.grupo.nome }}</span>
