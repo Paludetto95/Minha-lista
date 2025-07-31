@@ -27,15 +27,15 @@
         max-height: 50px;
         margin-bottom: 10px;
         object-fit: contain; /* Garante que a imagem se ajuste sem cortar */
-        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
-        border: 1px solid #dee2e6;
-        padding: 3px;
-        border-radius: 5px;
+        /* REMOVIDO: background-color e border */
+        padding: 0; /* Remove padding se não quiser espaçamento */
+        border-radius: 0; /* Remove border-radius se não quiser cantos arredondados do "fundo" */
     }
-    body[data-theme="dark"] .team-logo-thumbnail {
-        background-color: #343a40; /* Fundo escuro para logos no tema dark */
-        border-color: #495057;
-    }
+    /* As regras para tema dark também não são mais necessárias se o background-color foi removido */
+    /* body[data-theme="dark"] .team-logo-thumbnail {
+        background-color: transparent;
+        border-color: transparent;
+    } */
 </style>
 {% endblock %}
 
