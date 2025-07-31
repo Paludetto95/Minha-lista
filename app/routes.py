@@ -250,6 +250,15 @@ def admin_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
+# NOVA ROTA ADICIONADA PARA CORRIGIR O ERRO
+@bp.route('/admin/system-logs')
+@login_required
+@require_role('super_admin')
+def admin_system_logs_page():
+    page = request.args.get('page', 1, type=int)
+    logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).paginate(page=page, per_page=20, error_out=False)
+    return render_template('admin/system_logs.html', title="Logs do Sistema", logs=logs)
+
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
 @require_role('super_admin')
@@ -2037,4 +2046,4 @@ def retabulate_lead(lead_id):
     db.session.add(retab_log)
     db.session.commit()
     flash(f'Tabulação do lead {lead.nome} atualizada!', 'success')
-    return redirect(request.referrer or url_for('main.index'))
+    return redirect(request.referrer or url_for('main.index')
