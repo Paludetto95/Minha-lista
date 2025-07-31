@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="card-title mb-0"><i class="fas fa-check-circle me-2"></i>Confirmar Higienização de Leads</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Initial Loading State -->
+                    <div id="loading-state">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border text-primary me-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div>
+                                <h5 class="mb-0">A processar a sua planilha...</h5>
+                                <p id="task-message" class="text-muted mb-0">Aguarde enquanto comparamos os CPFs com a base de dados. Isto pode demorar alguns minutos.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results State (hidden by default) -->
+                    <div id="results-state" style="display: none;">
+                        <h5 id="results-title"></h5>
+                        <p class="text-muted">Abaixo estão os leads encontrados na base de dados que correspondem aos CPFs do seu ficheiro. Por favor, reveja e confirme a exclusão.</p>
+                        <form action="{{ url_for('main.hygiene_confirm_page', task_id=task_id) }}" method="post" id="confirm-form">
+                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>ID do Lead</th>
+                                            <th>Nome</th>
+                                            <th>CPF</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leads-table-body">
+                                        <!-- Rows will be inserted by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="alert alert-danger mt-3">
+                                <strong>Atenção:</strong> Esta ação é irreversível. Todos os leads listados e os seus históricos de atividade serão permanentemente apagados.
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                                <a href="{{ url_for('main.hygiene_upload_page') }}" class="btn btn-secondary">Cancelar</a>
+                                <button type="submit" class="btn btn-danger"><i class="fas fa-trash-alt me-2"></i>Confirmar e Apagar Leads</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Error State (hidden by default) -->
+                    <div id="error-state" style="display: none;" class="alert alert-danger">
+                        <h5>Ocorreu um Erro</h5>
+                        <p id="error-message"></p>
+                        <a href="{{ url_for('main.hygiene_upload_page') }}" class="btn btn-secondary">Voltar</a>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const taskId = "{{ task_id }}";
+    const loadingState = document.getElementById('loading-state');
+    const resultsState = document.getElementById('results-state');
+    const errorState = document.getElementById('error-state');
+    const taskMessage = document.getElementById('task-message');
+    const resultsTitle = document.getElementById('results-title');
+    const leadsTableBody = document.getElementById('leads-table-body');
+    const errorMessage = document.getElementById('error-message');
+    const confirmForm = document.getElementById('confirm-form');
+
+    let intervalId;
+
+    function checkTaskStatus() {
+        fetch(`/task_status/${taskId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Falha ao comunicar com o servidor.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                taskMessage.textContent = data.message;
+
+                if (data.status === 'COMPLETED') {
+                    clearInterval(intervalId);
+                    loadingState.style.display = 'none';
+                    errorState.style.display = 'none';
+                    
+                    const leads = data.details.leads_to_delete_preview;
+                    resultsTitle.textContent = `Foram encontrados ${leads.length} leads para higienização.`;
+
+                    if (leads.length > 0) {
+                        leadsTableBody.innerHTML = ''; // Limpa a tabela
+                        leads.forEach(lead => {
+                            const row = `<tr>
+                                <td>${lead.id}</td>
+                                <td>${lead.nome}</td>
+                                <td>${lead.cpf}</td>
+                            </tr>`;
+                            leadsTableBody.insertAdjacentHTML('beforeend', row);
+                        });
+                        resultsState.style.display = 'block';
+                    } else {
+                        // Se não encontrou leads, mostra uma mensagem de erro amigável
+                        errorMessage.textContent = "Nenhum lead correspondente foi encontrado na base de dados com os CPFs fornecidos.";
+                        errorState.style.display = 'block';
+                    }
+                } else if (data.status === 'FAILED') {
+                    clearInterval(intervalId);
+                    loadingState.style.display = 'none';
+                    resultsState.style.display = 'none';
+                    errorMessage.textContent = data.message;
+                    errorState.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Erro no polling:', error);
+                clearInterval(intervalId);
+                loadingState.style.display = 'none';
+                errorMessage.textContent = 'Ocorreu um erro ao verificar o estado da tarefa. Por favor, tente novamente.';
+                errorState.style.display = 'block';
+            });
+    }
+    
+    // Inicia o polling
+    intervalId = setInterval(checkTaskStatus, 2000); // Verifica a cada 2 segundos
+    checkTaskStatus(); // Faz a primeira verificação imediatamente
+
+    // Adiciona o loader de tela cheia ao confirmar a exclusão
+    confirmForm.addEventListener('submit', function() {
+        document.getElementById('loader-overlay').style.display = 'flex';
+    });
+});
+</script>
+{% endblock %}

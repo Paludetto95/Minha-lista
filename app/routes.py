@@ -95,8 +95,13 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     thread.start()
     return task_id
 
-def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None):
-    user_id = current_user.id if current_user.is_authenticated else None
+# FUNÇÃO CORRIGIDA
+def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None, user_id=None):
+    if user_id is None:
+        try:
+            user_id = current_user.id if current_user.is_authenticated else None
+        except RuntimeError: # Ocorre quando está fora de um contexto de requisição
+            user_id = None
     
     log_entry = SystemLog(
         user_id=user_id,
@@ -250,7 +255,6 @@ def admin_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
-# NOVA ROTA ADICIONADA PARA CORRIGIR O ERRO
 @bp.route('/admin/system-logs')
 @login_required
 @require_role('super_admin')
@@ -1326,7 +1330,8 @@ def get_task_status(task_id):
         'message': task.message,
         'total_items': task.total_items,
         'items_processed': task.items_processed,
-        'end_time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else None
+        'end_time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else None,
+        'details': task.details
     })
 
 # ADICIONADO: Nova rota para servir as imagens do volume persistente
@@ -2046,4 +2051,4 @@ def retabulate_lead(lead_id):
     db.session.add(retab_log)
     db.session.commit()
     flash(f'Tabulação do lead {lead.nome} atualizada!', 'success')
-    return redirect(request.referrer or url_for('main.index')
+    return redirect(request.referrer or url_for('main.index'))
