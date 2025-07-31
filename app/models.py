@@ -155,7 +155,8 @@ class SystemLog(db.Model):
     entity_id = db.Column(db.String(36), nullable=True)
     description = db.Column(db.Text, nullable=True)
     details = db.Column(db.JSON, nullable=True)
-    user = db.relationship('User', backref='system_logs')
+    user = db.relationship('User')
+
 
 @login_manager.user_loader
 def load_user(id):
