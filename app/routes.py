@@ -1,3 +1,5 @@
+# app/routes.py (CÓDIGO COMPLETO - FINAL E MAIS RECENTE)
+
 import pandas as pd
 import io
 import re
@@ -12,12 +14,11 @@ from flask import render_template, flash, redirect, url_for, request, Blueprint,
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import text
-from werkzeug.utils import secure_filename
 
 bp = Blueprint('main', __name__)
 
@@ -129,8 +130,8 @@ def require_role(*roles):
 # --- FUNÇÃO HELPER DE STATUS ---
 def update_user_status(user, new_status):
     user.current_status = new_status
-    user.status_timestamp = datetime.now(timezone.utc)
-    user.last_activity_at = datetime.now(timezone.utc)
+    user.status_timestamp = datetime.utcnow()
+    user.last_activity_at = datetime.utcnow()
     db.session.add(user)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
@@ -142,7 +143,7 @@ def login():
         if user is None or not user.check_password(request.form.get('password')):
             flash('Email ou senha inválidos', 'danger')
             return redirect(url_for('main.login'))
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.utcnow()
         db.session.add(user)
         login_user(user, remember=request.form.get('remember_me') is not None)
         if user.role == 'consultor':
@@ -228,17 +229,17 @@ def admin_monitor():
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        if agent.role == 'consultor' and datetime.now(timezone.utc) - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
+        if agent.role == 'consultor' and datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
-                agent.status_timestamp = datetime.now(timezone.utc)
+                agent.status_timestamp = datetime.utcnow()
                 db.session.add(agent)
                 db.session.commit()
         else:
             real_status = agent.current_status
 
-        time_in_status = datetime.now(timezone.utc) - agent.status_timestamp
+        time_in_status = datetime.utcnow() - agent.status_timestamp
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
         timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
@@ -271,7 +272,7 @@ def upload_step1():
         temp_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_filename)
         uploaded_file.stream.seek(0)
         with open(temp_filepath, 'wb') as f:
-            f.write(uploaded_file.stream.read())
+             f.write(uploaded_file.stream.read())
         headers = df.columns.tolist()
         sample_rows = df.head(2).to_dict(orient='records')
         system_fields = ['nome', 'cpf', 'telefone', 'telefone_2','cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
@@ -291,7 +292,7 @@ def upload_step1():
 def upload_step2_process():
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
-    produto_id = form_data.get('produto_id')
+    produto_id = request.form.get('produto_id')
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -304,7 +305,7 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
-        df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
+        df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str)
         for i in range(len(df_headers.columns)):
             if f'include_column_{i}' in form_data:
                 selected_system_field = form_data.get(f'mapping_{i}')
@@ -334,7 +335,7 @@ def upload_step2_process():
         existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
         leads_para_adicionar = []
         leads_ignorados = 0
-        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
+        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2','cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
         
         for index, row in df.iterrows():
             row_data = {} 
@@ -356,7 +357,7 @@ def upload_step2_process():
                         else:
                             row_data[system_field] = None
                     elif system_field == 'idade': 
-                        row_data[system_field] = int(valor) if pd.notna(valor) and str(valor).isdigit() else None
+                         row_data[system_field] = int(valor) if pd.notna(valor) and str(valor).isdigit() else None
                     else:
                         row_data[system_field] = str(valor).strip() if pd.notna(valor) else None
             
@@ -378,7 +379,7 @@ def upload_step2_process():
                 'produto_id': produto_id,
                 'cpf': cpf_digits,
                 'status': 'Novo',
-                'data_criacao': datetime.now(timezone.utc),
+                'data_criacao': datetime.utcnow(),
                 'additional_data': additional_data 
             }
             final_lead_data.update(row_data) 
@@ -568,7 +569,7 @@ def delete_group(group_id):
         log_system_action('GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
                           description=f"Arquivo de logo '{logo_to_delete}' excluído do disco para o grupo '{group_name}'.")
 
-    flash(f'Equipe "{group_name}" excluída com sucesso!', 'success')
+    flash(f'Equipe "{grupo.nome}" excluída com sucesso!', 'success')
     log_system_action('GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
     return redirect(url_for('main.manage_teams'))
 
@@ -973,7 +974,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
         if not task: return
         
         task.status = 'RUNNING'
-        task.start_time = datetime.now(timezone.utc)
+        task.start_time = datetime.utcnow()
         task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
         db.session.add(task)
         db.session.commit()
@@ -997,7 +998,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Nenhum lead encontrado para o mailing de Produto {produto_id}, Estado {estado}. Concluído."
-                task.end_time = datetime.now(timezone.utc)
+                task.end_time = datetime.utcnow()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1037,7 +1038,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do mailing de Produto {produto_id}, Estado {estado} concluída. Total de {processed_count} leads excluídos."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1049,7 +1050,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do mailing: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1065,7 +1066,7 @@ def delete_product_in_background(app, task_id, product_id):
         if not task: return
 
         task.status = 'RUNNING'
-        task.start_time = datetime.now(timezone.utc)
+        task.start_time = datetime.utcnow()
         task.message = f"Iniciando exclusão do produto e seus leads associados..."
         db.session.add(task)
         db.session.commit()
@@ -1089,7 +1090,7 @@ def delete_product_in_background(app, task_id, product_id):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
-                task.end_time = datetime.now(timezone.utc)
+                task.end_time = datetime.utcnow()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1136,7 +1137,7 @@ def delete_product_in_background(app, task_id, product_id):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do produto '{product_name}' e seus {processed_count} leads associados concluída com sucesso."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1148,7 +1149,7 @@ def delete_product_in_background(app, task_id, product_id):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do produto: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1422,7 +1423,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath, user_id_for_task):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Comparação concluída. {len(leads_found)} leads encontrados para higienização."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             task.details = {'leads_to_delete_preview': leads_found}
             db.session.add(task)
             db.session.commit()
@@ -1435,7 +1436,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath, user_id_for_task):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na planilha: {ve}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1446,7 +1447,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath, user_id_for_task):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Ocorreu um erro inesperado: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1532,7 +1533,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = "Nenhum lead para higienizar. Concluído."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1542,47 +1543,46 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
         batch_size = 1000
         processed_count = 0
 
-        try:
-            for i in range(0, total_leads_to_delete, batch_size):
-                batch_ids = leads_to_delete_ids[i:i+batch_size]
+        for i in range(0, total_leads_to_delete, batch_size):
+            batch_ids = leads_to_delete_ids[i:i+batch_size]
 
-                # Deleta logs de atividade relacionados
-                ActivityLog.query.filter(ActivityLog.lead_id.in_(batch_ids)).delete(synchronize_session=False)
-                # Deleta consumos de leads relacionados
-                LeadConsumption.query.filter(LeadConsumption.lead_id.in_(batch_ids)).delete(synchronize_session=False)
-                # Deleta os leads em si
-                db.session.query(Lead).filter(Lead.id.in_(batch_ids)).delete(synchronize_session=False)
-                
-                db.session.commit()
+            ActivityLog.query.filter(ActivityLog.lead_id.in_(batch_ids)).delete(synchronize_session=False)
+            LeadConsumption.query.filter(LeadConsumption.lead_id.in_(batch_ids)).delete(synchronize_session=False)
+            db.session.query(Lead).filter(Lead.id.in_(batch_ids)).delete(synchronize_session=False)
+            
+            db.session.commit()
 
-                processed_count += len(batch_ids)
-                task.items_processed = processed_count
-                task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
-                task.message = f"Higienizando... {processed_count}/{total_leads_to_delete} leads removidos."
-                db.session.add(task)
-                db.session.commit()
-                db.session.refresh(task)
-
-            task.status = 'COMPLETED'
-            task.progress = 100
-            task.message = f"Higienização concluída. Total de {processed_count} leads removidos do sistema."
-            task.end_time = datetime.now(timezone.utc)
+            processed_count += len(batch_ids)
+            task.items_processed = processed_count
+            task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
+            task.message = f"Higienizando... {processed_count}/{total_leads_to_delete} leads removidos."
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
-            log_system_action('HYGIENE_DELETE_COMPLETED', description=f"Higienização concluída. {processed_count} leads removidos.", details={'total_removed': processed_count})
 
-        except Exception as e:
-            db.session.rollback()
-            task.status = 'FAILED'
-            task.message = f"Erro na higienização: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
-            db.session.add(task)
-            db.session.commit()
-            db.session.refresh(task)
-            log_system_action('HYGIENE_DELETE_FAILED', description=f"Higienização falhou: {e}.", details={'error': str(e)})
-        finally:
-            db.session.remove()
+        task.status = 'COMPLETED'
+        task.progress = 100
+        task.message = f"Higienização concluída. Total de {processed_count} leads removidos do sistema."
+        task.end_time = datetime.utcnow()
+        db.session.add(task)
+        db.session.commit()
+        db.session.refresh(task)
+        log_system_action('HYGIENE_DELETE_COMPLETED', description=f"Higienização concluída. {processed_count} leads removidos.", details={'total_removed': processed_count})
+
+    except Exception as e:
+        db.session.rollback()
+        task.status = 'FAILED'
+        task.message = f"Erro na higienização: {str(e)}"
+        task.end_time = datetime.utcnow()
+        db.session.add(task)
+        db.session.commit()
+        db.session.refresh(task)
+        log_system_action('HYGIENE_DELETE_FAILED', description=f"Higienização falhou: {e}.", details={'error': str(e)})
+    finally:
+        db.session.remove()
+
+# --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS (MANTIDAS) ---
+# ... (restante do routes.py, incluindo as rotas de exportação filtrada, parceiro, consultor)
 
 # --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS (MANTIDAS) ---
 @bp.route('/admin/reports')
