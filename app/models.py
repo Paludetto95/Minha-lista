@@ -1,5 +1,3 @@
-# app/models.py (VERSÃO COM TODOS OS CAMPOS DO LEAD PARA IMPORTAÇÃO)
-
 from app import db, login_manager
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
@@ -11,7 +9,7 @@ class Grupo(db.Model):
     nome = db.Column(db.String(120), unique=True, nullable=False, index=True)
     is_active = db.Column(db.Boolean, default=True)
     color = db.Column(db.String(7), default='#6c757d')
-    logo_filename = db.Column(db.String(255), nullable=True) # Este campo já existe
+    logo_filename = db.Column(db.String(255), nullable=True) 
     
     users = db.relationship('User', backref='grupo', lazy='dynamic')
 
@@ -144,6 +142,7 @@ class BackgroundTask(db.Model):
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime, nullable=True)
     message = db.Column(db.Text, nullable=True)
+    details = db.Column(db.JSON, nullable=True) # ADICIONADO: Para armazenar CPFs encontrados ou Lead IDs
 
     user = db.relationship('User', backref='background_tasks')
 
