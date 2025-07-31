@@ -152,7 +152,7 @@ class SystemLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     action_type = db.Column(db.String(100), nullable=False, index=True)
     entity_type = db.Column(db.String(50), nullable=True, index=True)
-    entity_id = db.Column(db.Integer, nullable=True, index=True)
+    entity_id = db.Column(db.String(36), nullable=True)
     description = db.Column(db.Text, nullable=True)
     details = db.Column(db.JSON, nullable=True)
 
