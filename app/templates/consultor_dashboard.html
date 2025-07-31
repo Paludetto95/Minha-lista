@@ -6,34 +6,29 @@
 <style>
     /* Estilos para o logo do parceiro no painel */
     .partner-dashboard-logo {
-        max-height: 50px; /* Altura máxima para o logo */
+        /* MODIFICADO: Aumenta a altura máxima para o logo no painel do consultor */
+        max-height: 70px; 
         width: auto;
-        margin-right: 15px; /* Espaçamento entre o logo e o texto/título */
-        vertical-align: middle; /* Alinha verticalmente com o texto */
-        object-fit: contain; /* Garante que a imagem se ajuste sem cortar */
-        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
-        border: 1px solid #dee2e6;
-        padding: 3px;
-        border-radius: 5px;
-    }
-    body[data-theme="dark"] .partner-dashboard-logo {
-        background-color: #343a40; /* Fundo escuro para logos no tema dark */
-        border-color: #495057;
+        margin-right: 15px;
+        vertical-align: middle;
+        object-fit: contain;
+        padding: 0;
+        border-radius: 0;
     }
 
     .dashboard-title-container {
         display: flex;
         align-items: center;
-        gap: 15px; /* Espaçamento entre os elementos */
+        gap: 15px;
     }
 
     .dashboard-group-name {
-        font-size: 1.5rem; /* Ajusta o tamanho da fonte para o nome do grupo */
+        font-size: 1.5rem;
         font-weight: bold;
-        color: var(--bs-body-color); /* Usa a cor do texto do tema atual */
+        color: var(--bs-body-color);
     }
     body[data-theme="dark"] .dashboard-group-name {
-        color: #fff; /* Garante branco no tema escuro */
+        color: #fff;
     }
 </style>
 {% endblock %}

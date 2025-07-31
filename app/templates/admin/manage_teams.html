@@ -7,14 +7,12 @@
     .team-card {
         transition: all 0.2s ease-in-out;
         border: 1px solid #dee2e6;
-        /* A borda superior será controlada pelo estilo inline */
         border-top-width: 4px;
     }
     .team-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 8px 25px rgba(0,0,0,0.1);
         border-color: #0d6efd;
-        /* Mantém a cor da borda superior no hover */
         border-top-color: var(--card-border-color) !important;
     }
     .team-card-link {
@@ -23,19 +21,14 @@
         display: block;
     }
     .team-logo-thumbnail {
-        max-width: 80px;
-        max-height: 50px;
+        /* MODIFICADO: Aumenta o tamanho máximo para que preencha mais a largura do card */
+        max-width: 100%; /* Permite que a logo use 100% da largura disponível do pai */
+        max-height: 80px; /* Aumenta a altura máxima para acomodar logos maiores */
         margin-bottom: 10px;
-        object-fit: contain; /* Garante que a imagem se ajuste sem cortar */
-        /* REMOVIDO: background-color e border */
-        padding: 0; /* Remove padding se não quiser espaçamento */
-        border-radius: 0; /* Remove border-radius se não quiser cantos arredondados do "fundo" */
+        object-fit: contain;
+        padding: 0;
+        border-radius: 0;
     }
-    /* As regras para tema dark também não são mais necessárias se o background-color foi removido */
-    /* body[data-theme="dark"] .team-logo-thumbnail {
-        background-color: transparent;
-        border-color: transparent;
-    } */
 </style>
 {% endblock %}
 

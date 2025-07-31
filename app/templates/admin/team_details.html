@@ -4,53 +4,51 @@
 {% block styles %}
 {{ super() }}
 <style>
-    /* Estilos específicos para o logo na página de detalhes da equipe */
+    /* Estilos específicos para o logo na página de detalhes da equipe (cabeçalho da página) */
     .team-details-logo {
-        max-width: 150px;
-        max-height: 100px;
+        /* MODIFICADO: Aumenta o tamanho máximo para o logo no cabeçalho da página */
+        max-width: 200px;
+        max-height: 120px;
         object-fit: contain;
         margin-right: 15px;
-        border: 1px solid #dee2e6;
-        padding: 5px;
-        border-radius: 8px;
-        background-color: #f8f9fa; /* Fundo claro para logos com transparência */
+        padding: 0;
+        border-radius: 0;
     }
-    body[data-theme="dark"] .team-details-logo {
-        background-color: #343a40; /* Fundo escuro para logos no tema dark */
-        border-color: #495057;
-    }
+
+    /* Estilo para o container de "Logo Atual" no modal de edição */
     .current-logo-container {
         display: flex;
         align-items: center;
         margin-top: 15px;
         margin-bottom: 15px;
-        padding: 10px;
-        border: 1px dashed #ced4da;
+        padding: 5px;
+        border: 1px solid #ced4da;
         border-radius: 5px;
-        background-color: #f1f1f1;
+        background-color: transparent;
         font-size: 0.9rem;
     }
     body[data-theme="dark"] .current-logo-container {
-        background-color: #495057;
+        background-color: transparent;
         border-color: #6c757d;
         color: #dee2e6;
     }
+    /* Estilo para a imagem dentro do container de "Logo Atual" no modal */
     .current-logo-container img {
-        max-width: 80px;
-        max-height: 50px;
+        /* MODIFICADO: Aumenta o tamanho da miniatura do logo dentro do modal de edição */
+        max-width: 100px;
+        max-height: 60px;
         object-fit: contain;
         margin-right: 10px;
         border: 1px solid #adb5bd;
-        background-color: #fff;
+        background-color: #fff; /* Mantém um fundo para visualização do PNG transparente no modal */
         padding: 2px;
     }
     body[data-theme="dark"] .current-logo-container img {
-        background-color: #343a40;
+        background-color: #343a40; /* Fundo escuro para a miniatura no tema dark */
         border-color: #adb5bd;
     }
 </style>
 {% endblock %}
-
 
 {% block content %}
 <div class="container mt-4">
