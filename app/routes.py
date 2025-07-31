@@ -2038,3 +2038,6 @@ def retabulate_lead(lead_id):
     db.session.commit()
     flash(f'Tabulação do lead {lead.nome} atualizada!', 'success')
     return redirect(request.referrer or url_for('main.index'))
+
+##force push##
+##teste##
