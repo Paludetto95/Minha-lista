@@ -1380,8 +1380,7 @@ def hygiene_upload_page():
             'hygiene_compare',
             current_user.id,
             initial_message="Iniciando comparação de CPFs para higienização...",
-            filepath=temp_hygiene_filepath,
-            user_id_for_task=current_user.id
+            filepath=temp_hygiene_filepath
         )
         log_system_action('HYGIENE_UPLOAD_INITIATED', description=f"Upload de arquivo para higienização iniciado. Task ID: {task_id}")
         
@@ -1390,10 +1389,12 @@ def hygiene_upload_page():
     return render_template('admin/hygiene_upload.html', title='Higienizar Leads')
 
 # Função em segundo plano para comparar CPFs
-def hygiene_compare_cpfs_background(app, task_id, filepath, user_id_for_task):
+def hygiene_compare_cpfs_background(app, task_id, filepath):
     with app.app_context():
         task = BackgroundTask.query.get(task_id)
         if not task: return
+        
+        user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
         task.message = "Lendo CPFs da planilha e comparando com leads existentes..."
@@ -1489,20 +1490,20 @@ def hygiene_confirm_page(task_id):
         flash('Tarefa de higienização não encontrada ou inválida.', 'danger')
         return redirect(url_for('main.hygiene_upload_page'))
     
+    # Se a tarefa ainda estiver a correr, renderiza a página de espera
     if task.status == 'PENDING' or task.status == 'RUNNING':
         return render_template('admin/hygiene_confirm.html', 
-                               title='Higienização - Confirmar', 
-                               task_id=task.id, 
-                               task_status=task.status,
-                               task_message=task.message,
-                               leads_to_delete=[])
+                               title='Higienização - A Processar', 
+                               task_id=task.id)
     
+    # Se a tarefa falhou, mostra uma mensagem de erro
     if task.status == 'FAILED':
-        flash(f"A comparação de CPFs falhou: {task.message}", 'danger')
+        flash(f"A tarefa de comparação de CPFs falhou: {task.message}", 'danger')
         log_system_action('HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task.id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
         return redirect(url_for('main.hygiene_upload_page'))
 
-    leads_to_delete = task.details.get('leads_to_delete_preview', [])
+    # Se a tarefa estiver concluída, obtém os detalhes
+    leads_to_delete = task.details.get('leads_to_delete_preview', []) if task.details else []
     
     if request.method == 'POST':
         if not leads_to_delete:
@@ -1523,13 +1524,10 @@ def hygiene_confirm_page(task_id):
         flash('A higienização dos leads foi iniciada em segundo plano. Você será notificado sobre o progresso.', 'info')
         return redirect(url_for('main.hygiene_confirm_page', task_id=new_delete_task_id))
 
+    # Renderiza a página de confirmação com os resultados
     return render_template('admin/hygiene_confirm.html', 
                            title='Higienização - Confirmar', 
-                           task_id=task.id, 
-                           task_status=task.status,
-                           task_message=task.message,
-                           leads_to_delete=leads_to_delete,
-                           total_found=len(leads_to_delete))
+                           task_id=task.id)
 
 # Função em segundo plano para deletar os leads confirmados
 def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
