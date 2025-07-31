@@ -110,7 +110,7 @@ def log_system_action(action_type, entity_type=None, entity_id=None, description
         user_id=user_id,
         action_type=action_type,
         entity_type=entity_type,
-        entity_id=entity_id,
+        entity_id=str(entity_id) if entity_id is not None else None, # Garante que o ID é uma string
         description=description,
         details=details
     )
