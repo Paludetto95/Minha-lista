@@ -95,12 +95,15 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     thread.start()
     return task_id
 
-# FUNÇÃO CORRIGIDA
+# FUNÇÃO CORRIGIDA para aceitar user_id em threads
 def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None, user_id=None):
     if user_id is None:
         try:
-            user_id = current_user.id if current_user.is_authenticated else None
-        except RuntimeError: # Ocorre quando está fora de um contexto de requisição
+            # Isto funciona num contexto de pedido normal
+            if current_user and current_user.is_authenticated:
+                user_id = current_user.id
+        except RuntimeError:
+            # Isto acontece num thread em segundo plano, user_id permanecerá None se não for passado
             user_id = None
     
     log_entry = SystemLog(
@@ -986,6 +989,8 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
         task = BackgroundTask.query.get(task_id)
         if not task: return
         
+        user_id_for_task = task.user_id
+
         task.status = 'RUNNING'
         task.start_time = datetime.now(timezone.utc)
         task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
@@ -1017,7 +1022,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
                 db.session.refresh(task)
                 log_system_action('MAILING_DELETE_COMPLETED', entity_type='Mailing', entity_id=produto_id, 
                                   description=f"Exclusão do mailing de produto {produto_id}, estado {estado} concluída (0 leads).",
-                                  details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': 0})
+                                  details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': 0}, user_id=user_id_for_task)
                 return
 
             batch_size = 1000 
@@ -1057,7 +1062,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             db.session.refresh(task)
             log_system_action('MAILING_DELETE_COMPLETED', entity_type='Mailing', entity_id=produto_id, 
                               description=f"Exclusão do mailing de produto {produto_id}, estado {estado} concluída. {processed_count} leads excluídos.",
-                              details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': processed_count})
+                              details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': processed_count}, user_id=user_id_for_task)
 
         except Exception as e:
             db.session.rollback()
@@ -1069,7 +1074,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             db.session.refresh(task)
             log_system_action('MAILING_DELETE_FAILED', entity_type='Mailing', entity_id=produto_id, 
                               description=f"Erro ao excluir mailing de produto {produto_id}, estado {estado}.",
-                              details={'estado': estado, 'produto_id': produto_id, 'error': str(e)})
+                              details={'estado': estado, 'produto_id': produto_id, 'error': str(e)}, user_id=user_id_for_task)
         finally:
             db.session.remove() 
 
@@ -1077,6 +1082,8 @@ def delete_product_in_background(app, task_id, product_id):
     with app.app_context(): 
         task = BackgroundTask.query.get(task_id)
         if not task: return
+        
+        user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
         task.start_time = datetime.now(timezone.utc)
@@ -1114,7 +1121,7 @@ def delete_product_in_background(app, task_id, product_id):
                     db.session.commit()
                 log_system_action('PRODUCT_DELETE_COMPLETED', entity_type='Product', entity_id=product_id, 
                                   description=f"Produto '{product_name}' excluído (0 leads associados).",
-                                  details={'product_name': product_name, 'total_leads_deleted': 0})
+                                  details={'product_name': product_name, 'total_leads_deleted': 0}, user_id=user_id_for_task)
                 return
 
             batch_size = 1000
@@ -1156,7 +1163,7 @@ def delete_product_in_background(app, task_id, product_id):
             db.session.refresh(task)
             log_system_action('PRODUCT_DELETE_COMPLETED', entity_type='Product', entity_id=product_id, 
                               description=f"Produto '{product_name}' e seus {processed_count} leads associados excluídos.",
-                              details={'product_name': product_name, 'total_leads_deleted': processed_count})
+                              details={'product_name': product_name, 'total_leads_deleted': processed_count}, user_id=user_id_for_task)
 
         except Exception as e:
             db.session.rollback()
@@ -1168,7 +1175,7 @@ def delete_product_in_background(app, task_id, product_id):
             db.session.refresh(task)
             log_system_action('PRODUCT_DELETE_FAILED', entity_type='Product', entity_id=product_id, 
                               description=f"Erro ao excluir produto '{product_name}'.",
-                              details={'product_name': product_name, 'error': str(e)})
+                              details={'product_name': product_name, 'error': str(e)}, user_id=user_id_for_task)
         finally:
             db.session.remove() 
 
@@ -1492,7 +1499,7 @@ def hygiene_confirm_page(task_id):
     
     if task.status == 'FAILED':
         flash(f"A comparação de CPFs falhou: {task.message}", 'danger')
-        log_system_action('HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task_id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
+        log_system_action('HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task.id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
         return redirect(url_for('main.hygiene_upload_page'))
 
     leads_to_delete = task.details.get('leads_to_delete_preview', [])
@@ -1529,6 +1536,8 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
     with app.app_context():
         task = BackgroundTask.query.get(task_id)
         if not task: return
+        
+        user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
         task.message = "Iniciando exclusão dos leads..."
@@ -1552,7 +1561,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
-                log_system_action('HYGIENE_DELETE_COMPLETED', description="Higienização concluída (0 leads).")
+                log_system_action('HYGIENE_DELETE_COMPLETED', description="Higienização concluída (0 leads).", user_id=user_id_for_task)
                 return
 
             batch_size = 1000
@@ -1582,7 +1591,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
-            log_system_action('HYGIENE_DELETE_COMPLETED', description=f"Higienização concluída. {processed_count} leads removidos.", details={'total_removed': processed_count})
+            log_system_action('HYGIENE_DELETE_COMPLETED', description=f"Higienização concluída. {processed_count} leads removidos.", details={'total_removed': processed_count}, user_id=user_id_for_task)
 
         except Exception as e:
             db.session.rollback()
@@ -1592,7 +1601,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
-            log_system_action('HYGIENE_DELETE_FAILED', description=f"Higienização falhou: {e}.", details={'error': str(e)})
+            log_system_action('HYGIENE_DELETE_FAILED', description=f"Higienização falhou: {e}.", details={'error': str(e)}, user_id=user_id_for_task)
         finally:
             db.session.remove()
 
