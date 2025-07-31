@@ -1,5 +1,4 @@
 # app/routes.py (CÓDIGO COMPLETO - FINAL E MAIS RECENTE)
-
 import pandas as pd
 import io
 import re
@@ -305,7 +304,7 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
-        df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str)
+        df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
         for i in range(len(df_headers.columns)):
             if f'include_column_{i}' in form_data:
                 selected_system_field = form_data.get(f'mapping_{i}')
@@ -335,7 +334,7 @@ def upload_step2_process():
         existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
         leads_para_adicionar = []
         leads_ignorados = 0
-        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2','cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
+        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
         
         for index, row in df.iterrows():
             row_data = {} 
@@ -1583,7 +1582,6 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
 
 # --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS (MANTIDAS) ---
 # ... (restante do routes.py, incluindo as rotas de exportação filtrada, parceiro, consultor)
-
 # --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS (MANTIDAS) ---
 @bp.route('/admin/reports')
 @login_required
