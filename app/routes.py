@@ -12,7 +12,7 @@ from flask import render_template, flash, redirect, url_for, request, Blueprint,
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
-from app.models import Log # Log foi removido, mas pode ser um alias para SystemLog em outro lugar
+# A linha com o "import Log" foi REMOVIDA daqui. Esta é a correção.
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
 from datetime import datetime, date, time, timedelta, timezone
 from sqlalchemy import func, cast, Date, or_, case, and_
@@ -57,7 +57,6 @@ def delete_partner_logo(filename):
                 return False
     return False
 
-
 def generate_gradient(start_hex, end_hex, n_steps):
     if n_steps <= 1: return [start_hex]
     start_rgb = tuple(int(start_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
@@ -95,22 +94,19 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     thread.start()
     return task_id
 
-# FUNÇÃO CORRIGIDA para aceitar user_id em threads
 def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None, user_id=None):
     if user_id is None:
         try:
-            # Isto funciona num contexto de pedido normal
             if current_user and current_user.is_authenticated:
                 user_id = current_user.id
         except RuntimeError:
-            # Isto acontece num thread em segundo plano, user_id permanecerá None se não for passado
             user_id = None
     
     log_entry = SystemLog(
         user_id=user_id,
         action_type=action_type,
         entity_type=entity_type,
-        entity_id=str(entity_id) if entity_id is not None else None, # Garante que o ID é uma string
+        entity_id=str(entity_id) if entity_id is not None else None,
         description=description,
         details=details
     )
@@ -121,7 +117,7 @@ def log_system_action(action_type, entity_type=None, entity_id=None, description
         db.session.rollback()
         print(f"ERRO: Falha ao salvar SystemLog: {e}")
 
-# --- DECORADORES DE PERMISSÃO ---
+# --- DECORADORES ---
 def require_role(*roles):
     def decorator(f):
         @wraps(f)
@@ -135,7 +131,6 @@ def require_role(*roles):
         return decorated_function
     return decorator
 
-# --- FUNÇÃO HELPER DE STATUS ---
 def update_user_status(user, new_status):
     user.current_status = new_status
     user.status_timestamp = datetime.now(timezone.utc)
@@ -217,7 +212,8 @@ def profile():
             flash('Seleção de tema inválida.', 'danger')
         return redirect(url_for('main.profile'))
     return render_template('profile.html', title="Minhas Configurações")
-
+    
+# --- ROTAS DE ADMIN ---
 @bp.route('/admin/dashboard')
 @login_required
 @require_role('super_admin')
@@ -258,31 +254,55 @@ def admin_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
-# --- ROTA CORRIGIDA ---
 @bp.route('/admin/system-logs')
 @login_required
 @require_role('super_admin')
 def admin_system_logs_page():
-    """
-    Exibe os logs do sistema com paginação.
-    Apenas super administradores podem acessar.
-    """
     page = request.args.get('page', 1, type=int)
-    
-    # O objeto 'paginate' contém os itens da página atual e os controles de paginação.
-    # Ele será passado para o template com o nome 'pagination', que é o que o template espera.
-    pagination = SystemLog.query.order_by(SystemLog.timestamp.desc()).paginate(
-        page=page, per_page=20, error_out=False
-    )
-    
-    # Extrai a lista de logs da página atual para ser usada no loop do template.
+    search_query = request.args.get('search_query', '').strip()
+    filter_type = request.args.get('filter_type', 'all').strip()
+    filter_user_id = request.args.get('filter_user', 'all').strip()
+
+    logs_query = SystemLog.query.options(joinedload(SystemLog.user_performer)).order_by(SystemLog.timestamp.desc())
+
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        logs_query = logs_query.filter(
+            or_(
+                SystemLog.description.ilike(search_pattern),
+                SystemLog.action_type.ilike(search_pattern)
+            )
+        )
+
+    if filter_type != 'all':
+        logs_query = logs_query.filter(SystemLog.action_type == filter_type)
+
+    if filter_user_id != 'all':
+        if filter_user_id == 'none':
+            logs_query = logs_query.filter(SystemLog.user_id.is_(None))
+        else:
+            try:
+                user_id_int = int(filter_user_id)
+                logs_query = logs_query.filter(SystemLog.user_id == user_id_int)
+            except (ValueError, TypeError):
+                flash("ID de usuário inválido para o filtro.", "warning")
+
+    pagination = logs_query.paginate(page=page, per_page=25, error_out=False)
     logs = pagination.items
-    
+
+    action_types_for_select = [item[0] for item in db.session.query(SystemLog.action_type).distinct().order_by(SystemLog.action_type)]
+    all_users_for_filter = User.query.order_by(User.username).all()
+
     return render_template(
-        'admin/system_logs.html', 
-        title="Logs do Sistema", 
-        logs=logs,                # A lista de logs para a página atual
-        pagination=pagination     # O objeto de paginação completo para os links
+        'admin/system_logs.html',
+        title="Logs do Sistema",
+        logs=logs,
+        pagination=pagination,
+        search_query=search_query,
+        filter_type=filter_type,
+        filter_user_id=filter_user_id,
+        action_types_for_select=action_types_for_select,
+        all_users_for_filter=all_users_for_filter
     )
 
 @bp.route('/upload_step1', methods=['POST'])
