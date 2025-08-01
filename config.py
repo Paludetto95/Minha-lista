@@ -1,4 +1,4 @@
-# config.py (VERSÃO FINAL CORRIGIDA)
+# config.py (VERSÃO CORRIGIDA)
 
 import os
 from dotenv import load_dotenv
@@ -12,8 +12,17 @@ class Config:
 
     # --- Configuração da Base de Dados ---
     DATABASE_URL_FROM_ENV = os.environ.get('DATABASE_URL')
+    
+    # Adicionando a lógica para incluir o plugin de autenticação
     if DATABASE_URL_FROM_ENV and DATABASE_URL_FROM_ENV.startswith("mysql://"):
-        SQLALCHEMY_DATABASE_URI = DATABASE_URL_FROM_ENV.replace("mysql://", "mysql+pymysql://", 1)
+        # Substitui o protocolo para usar PyMySQL
+        uri = DATABASE_URL_FROM_ENV.replace("mysql://", "mysql+pymysql://", 1)
+        # Adiciona o parâmetro do plugin de autenticação
+        if '?' not in uri:
+            uri += '?auth_plugin=caching_sha2_password'
+        else:
+            uri += '&auth_plugin=caching_sha2_password'
+        SQLALCHEMY_DATABASE_URI = uri
     elif DATABASE_URL_FROM_ENV:
         SQLALCHEMY_DATABASE_URI = DATABASE_URL_FROM_ENV
     else:
@@ -29,13 +38,7 @@ class Config:
     }
 
     # --- Configuração de Pastas ---
-
-    # Pasta para uploads temporários
     UPLOAD_FOLDER = os.path.join(basedir, 'temp_uploads')
-    
-    # Caminho para o Volume montado no Railway para arquivos persistentes
     PERSISTENT_STORAGE_PATH = os.environ.get('PERSISTENT_STORAGE_PATH', '/mnt/data') 
-    
-    # Onde os logos serão armazenados DENTRO do volume persistente
     PARTNER_LOGOS_FOLDER_NAME = 'partner_logos'
     PARTNER_LOGOS_FULL_PATH = os.path.join(PERSISTENT_STORAGE_PATH, PARTNER_LOGOS_FOLDER_NAME)
