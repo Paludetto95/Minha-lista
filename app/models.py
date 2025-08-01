@@ -2,6 +2,7 @@ from datetime import datetime
 from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+import uuid
 
 @login_manager.user_loader
 def load_user(id):
@@ -23,7 +24,7 @@ class User(UserMixin, db.Model):
     daily_pull_limit = db.Column(db.Integer, default=100)
 
     # CORREÇÃO: Usar back_populates para resolver o conflito de relacionamento
-    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic')
+    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
