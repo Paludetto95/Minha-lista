@@ -1,4 +1,3 @@
-<!-- app/templates/admin/system_logs.html -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -8,7 +7,7 @@
             <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary me-3" title="Voltar ao Painel">
                 <i class="fas fa-arrow-left"></i>
             </a>
-            <h2 class="mb-0">Logs Do Sistema</h2>
+            <h2 class="mb-0">Logs do Sistema</h2>
         </div>
     </div>
 
@@ -18,7 +17,7 @@
                 <h5 class="mb-0">Registros de Atividades</h5>
                 <form action="{{ url_for('main.admin_system_logs_page') }}" method="GET" class="d-flex flex-grow-1 flex-wrap gap-2 justify-content-end align-items-center">
                     <div class="flex-grow-1 me-2" style="max-width: 250px;">
-                        <input type="text" name="search_query" class="form-control" placeholder="Buscar por descrição ou tipo..." value="{{ search_query }}">
+                        <input type="text" name="search_query" class="form-control" placeholder="Buscar por descrição ou tipo..." value="{{ search_query or '' }}">
                     </div>
                     <div class="me-2" style="max-width: 150px;">
                         <select name="filter_type" class="form-select">
@@ -32,7 +31,7 @@
                         <select name="filter_user" class="form-select">
                             <option value="all" {% if filter_user_id == 'all' %}selected{% endif %}>Todos os Usuários</option>
                             {% for user_item in all_users_for_filter %}
-                                <option value="{{ user_item.id }}" {% if filter_user_id|int == user_item.id %}selected{% endif %}>{{ user_item.username }}</option>
+                                <option value="{{ user_item.id }}" {% if filter_user_id|string == user_item.id|string %}selected{% endif %}>{{ user_item.username }}</option>
                             {% endfor %}
                             <option value="none" {% if filter_user_id == 'none' %}selected{% endif %}>Sem Usuário (Sistema)</option>
                         </select>
@@ -91,8 +90,7 @@
                 </table>
             </div>
         </div>
-        <!-- Paginação -->
-        {% if pagination.pages > 1 %}
+        {% if pagination and pagination.pages > 1 %}
         <div class="card-footer bg-light">
             <nav aria-label="Paginação de logs">
                 <ul class="pagination justify-content-center mb-0">

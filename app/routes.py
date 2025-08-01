@@ -1,4 +1,3 @@
-# app/routes.py (CÓDIGO COMPLETO - CORRIGIDO)
 import pandas as pd
 import io
 import re
@@ -13,6 +12,7 @@ from flask import render_template, flash, redirect, url_for, request, Blueprint,
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
+from app.models import Log # Log foi removido, mas pode ser um alias para SystemLog em outro lugar
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
 from datetime import datetime, date, time, timedelta, timezone
 from sqlalchemy import func, cast, Date, or_, case, and_
@@ -209,8 +209,8 @@ def profile():
             current_user.theme = theme_choice
             db.session.commit()
             log_system_action('USER_THEME_CHANGED', entity_type='User', entity_id=current_user.id, 
-                              description=f"Usuário '{current_user.username}' mudou o tema.",
-                              details={'old_theme': old_theme, 'new_theme': theme_choice})
+                                description=f"Usuário '{current_user.username}' mudou o tema.",
+                                details={'old_theme': old_theme, 'new_theme': theme_choice})
             flash_message = """Tema atualizado com sucesso!<script>localStorage.setItem('userTheme', '{new_theme}');window.location.reload();</script>""".format(new_theme=theme_choice)
             flash(flash_message, 'success')
         else:
@@ -258,13 +258,32 @@ def admin_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
+# --- ROTA CORRIGIDA ---
 @bp.route('/admin/system-logs')
 @login_required
 @require_role('super_admin')
 def admin_system_logs_page():
+    """
+    Exibe os logs do sistema com paginação.
+    Apenas super administradores podem acessar.
+    """
     page = request.args.get('page', 1, type=int)
-    logs = SystemLog.query.order_by(SystemLog.timestamp.desc()).paginate(page=page, per_page=20, error_out=False)
-    return render_template('admin/system_logs.html', title="Logs do Sistema", logs=logs)
+    
+    # O objeto 'paginate' contém os itens da página atual e os controles de paginação.
+    # Ele será passado para o template com o nome 'pagination', que é o que o template espera.
+    pagination = SystemLog.query.order_by(SystemLog.timestamp.desc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+    
+    # Extrai a lista de logs da página atual para ser usada no loop do template.
+    logs = pagination.items
+    
+    return render_template(
+        'admin/system_logs.html', 
+        title="Logs do Sistema", 
+        logs=logs,                # A lista de logs para a página atual
+        pagination=pagination     # O objeto de paginação completo para os links
+    )
 
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
@@ -585,7 +604,7 @@ def delete_group(group_id):
         log_system_action('GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
                           description=f"Arquivo de logo '{logo_to_delete}' excluído do disco para o grupo '{group_name}'.")
 
-    flash(f'Equipe "{grupo.nome}" excluída com sucesso!', 'success')
+    flash(f'Equipe "{group_name}" excluída com sucesso!', 'success')
     log_system_action('GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
     return redirect(url_for('main.manage_teams'))
 
@@ -1805,7 +1824,7 @@ def parceiro_performance_dashboard():
     else: # 'hoje'
         start_date = datetime.combine(today, time.min)
         end_date = datetime.combine(today, time.max)
-        
+    
     user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id, role='consultor').with_entities(User.id)]
     
     total_calls_team = 0
