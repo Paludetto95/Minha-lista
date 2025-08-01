@@ -23,7 +23,10 @@ class User(UserMixin, db.Model):
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
 
-    # CORREÇÃO: Usar back_populates para resolver o conflito de relacionamento
+    # Relacionamentos corrigidos
+    leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
+    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
+    tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic', foreign_keys='BackgroundTask.user_id')
     system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
 
     def set_password(self, password):
@@ -76,18 +79,16 @@ class Lead(db.Model):
     additional_data = db.Column(db.JSON)
 
     produto = db.relationship('Produto', backref='leads')
-    consultor = db.relationship('User', backref='leads')
+    consultor = db.relationship('User', back_populates='leads')
     tabulation = db.relationship('Tabulation', backref='leads')
 
 class Proposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    # Relações
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False)
     banco_id = db.Column(db.Integer, db.ForeignKey('banco.id'), nullable=False)
     convenio_id = db.Column(db.Integer, db.ForeignKey('convenio.id'), nullable=False)
     situacao_id = db.Column(db.Integer, db.ForeignKey('situacao.id'), nullable=False)
     tipo_operacao_id = db.Column(db.Integer, db.ForeignKey('tipo_de_operacao.id'), nullable=False)
-    # Campos
     valor_total = db.Column(db.Float)
     valor_parcela = db.Column(db.Float)
     prazo = db.Column(db.Integer)
@@ -139,11 +140,11 @@ class ActivityLog(db.Model):
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     tabulation_id = db.Column(db.Integer, db.ForeignKey('tabulation.id'), nullable=True)
-    action_type = db.Column(db.String(50), nullable=False) # Ex: 'Tabulação', 'Reciclagem'
+    action_type = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
     lead = db.relationship('Lead', backref='activity_logs')
-    user = db.relationship('User', backref='activity_logs')
+    user = db.relationship('User', back_populates='activity_logs')
     tabulation = db.relationship('Tabulation', backref='activity_logs')
 
 class Grupo(db.Model):
@@ -157,7 +158,7 @@ class BackgroundTask(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     task_type = db.Column(db.String(50), nullable=False)
-    status = db.Column(db.String(20), nullable=False) # PENDING, RUNNING, COMPLETED, FAILED
+    status = db.Column(db.String(20), nullable=False)
     message = db.Column(db.Text)
     progress = db.Column(db.Integer, default=0)
     start_time = db.Column(db.DateTime)
@@ -165,7 +166,7 @@ class BackgroundTask(db.Model):
     total_items = db.Column(db.Integer, default=0)
     items_processed = db.Column(db.Integer, default=0)
     details = db.Column(db.JSON, nullable=True)
-    user = db.relationship('User', backref='tasks')
+    user = db.relationship('User', back_populates='tasks')
 
 class SystemLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -173,12 +174,8 @@ class SystemLog(db.Model):
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
     action_type = db.Column(db.String(50), index=True)
     entity_type = db.Column(db.String(50), nullable=True)
-    
-    # CORREÇÃO: Alterado de Integer para String para aceitar UUIDs
     entity_id = db.Column(db.String(36), nullable=True)
-    
     description = db.Column(db.Text, nullable=True)
     details = db.Column(db.JSON, nullable=True)
 
-    # CORREÇÃO: Usar back_populates para resolver o conflito de relacionamento
     user = db.relationship('User', back_populates='system_logs')
