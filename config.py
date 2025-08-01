@@ -1,5 +1,3 @@
-# config.py (VERSÃO CORRIGIDA)
-
 import os
 from dotenv import load_dotenv
 
@@ -13,19 +11,17 @@ class Config:
     # --- Configuração da Base de Dados ---
     DATABASE_URL_FROM_ENV = os.environ.get('DATABASE_URL')
     
-    # Adicionando a lógica para incluir o plugin de autenticação
+    # Lógica de conexão atualizada para resolver o TypeError
     if DATABASE_URL_FROM_ENV and DATABASE_URL_FROM_ENV.startswith("mysql://"):
-        # Substitui o protocolo para usar PyMySQL
-        uri = DATABASE_URL_FROM_ENV.replace("mysql://", "mysql+pymysql://", 1)
-        # Adiciona o parâmetro do plugin de autenticação
-        if '?' not in uri:
-            uri += '?auth_plugin=caching_sha2_password'
-        else:
-            uri += '&auth_plugin=caching_sha2_password'
-        SQLALCHEMY_DATABASE_URI = uri
+        # Apenas substitui o protocolo para usar PyMySQL.
+        # O driver PyMySQL lida com a autenticação 'caching_sha2_password' automaticamente.
+        # A adição explícita de '?auth_plugin=...' foi removida pois causava o erro.
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL_FROM_ENV.replace("mysql://", "mysql+pymysql://", 1)
     elif DATABASE_URL_FROM_ENV:
+        # Mantém a URL para outros tipos de banco de dados (ex: postgres, sqlite)
         SQLALCHEMY_DATABASE_URI = DATABASE_URL_FROM_ENV
     else:
+        # Fallback para um banco de dados SQLite local se a variável de ambiente não for encontrada
         print("AVISO: Váriavel DATABASE_URL não encontrada. Usando banco de dados SQLite local 'app.db'.")
         SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.db')
 
