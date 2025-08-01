@@ -23,11 +23,12 @@ class User(UserMixin, db.Model):
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
 
-    # Relacionamentos corrigidos
-    leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
+    # CORREÇÃO: Usar back_populates para resolver o conflito de relacionamento
+    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
     activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
     tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic', foreign_keys='BackgroundTask.user_id')
-    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
+    leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
+
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
