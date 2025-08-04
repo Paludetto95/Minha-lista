@@ -13,7 +13,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case, and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -26,17 +26,18 @@ bp = Blueprint('main', __name__)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'csv', 'xlsx'}
 
 def allowed_file(filename):
+    """Verifica se a extensão de um arquivo é permitida."""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def save_partner_logo(file):
+    """Salva o logo de um parceiro de forma segura, evitando conflitos de nome."""
     if file and allowed_file(file.filename):
-        filename = secure_filename(str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower())
+        filename = secure_filename(f"{uuid.uuid4()}.{file.filename.rsplit('.', 1)[1].lower()}")
         filepath = os.path.join(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
         try:
             os.makedirs(current_app.config['PARTNER_LOGOS_FULL_PATH'], exist_ok=True)
             file.save(filepath)
-            print(f"DEBUG: Logo '{filename}' salvo no Volume em: {filepath}")
             return filename
         except Exception as e:
             print(f"ERRO: Falha ao salvar logo no Volume: {e} no caminho {filepath}")
@@ -44,35 +45,20 @@ def save_partner_logo(file):
     return None
 
 def delete_partner_logo(filename):
+    """Remove um arquivo de logo do armazenamento."""
     if filename:
         filepath = os.path.join(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
         if os.path.exists(filepath):
             try:
                 os.remove(filepath)
-                print(f"DEBUG: Logo '{filename}' deletado do Volume em: {filepath}")
                 return True
             except Exception as e:
                 print(f"ERRO: Falha ao deletar logo do Volume: {e} no caminho {filepath}")
                 return False
     return False
 
-def generate_gradient(start_hex, end_hex, n_steps):
-    if n_steps <= 1: return [start_hex]
-    start_rgb = tuple(int(start_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-    end_rgb = tuple(int(end_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-    gradient = []
-    for i in range(n_steps):
-        intermediate_rgb = [int(start_rgb[j] + (float(i) / (n_steps - 1)) * (end_rgb[j] - start_rgb[j])) for j in range(3)]
-        gradient.append('#{:02x}{:02x}{:02x}'.format(*intermediate_rgb))
-    return gradient
-
-def darken_color(hex_color, amount=0.8):
-    hex_color = hex_color.lstrip('#')
-    rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    dark_rgb = tuple(int(c * amount) for c in rgb)
-    return '#{:02x}{:02x}{:02x}'.format(*dark_rgb)
-
 def start_background_task(task_func, task_type, user_id, initial_message="", *args, **kwargs):
+    """Inicia uma tarefa em segundo plano e a registra no banco de dados."""
     app_context = current_app._get_current_object()
     
     with app_context.app_context():
@@ -94,6 +80,7 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     return task_id
 
 def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None, user_id=None):
+    """Centraliza o registro de logs do sistema."""
     if user_id is None:
         try:
             if current_user and current_user.is_authenticated:
@@ -117,12 +104,16 @@ def log_system_action(action_type, entity_type=None, entity_id=None, description
         print(f"ERRO: Falha ao salvar SystemLog: {e}")
 
 # --- DECORADORES ---
+
 def require_role(*roles):
+    """Decorador para restringir acesso a rotas com base no papel do usuário."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated: return redirect(url_for('main.login'))
-            if current_user.role == 'super_admin': return f(*args, **kwargs)
+            if not current_user.is_authenticated:
+                return redirect(url_for('main.login'))
+            if current_user.role == 'super_admin':
+                return f(*args, **kwargs)
             if current_user.role not in roles:
                 flash('Acesso negado. Você não tem permissão para ver esta página.', 'danger')
                 return redirect(url_for('main.index'))
@@ -131,45 +122,43 @@ def require_role(*roles):
     return decorator
 
 def update_user_status(user, new_status):
-    # CORREÇÃO: Usar datetime.utcnow() para consistência
+    """Atualiza o status e a última atividade de um usuário."""
     user.current_status = new_status
     user.status_timestamp = datetime.utcnow()
     user.last_activity_at = datetime.utcnow()
     db.session.add(user)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
+
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('main.index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
     if request.method == 'POST':
         user = User.query.filter_by(email=request.form.get('email')).first()
-        if user is None or not user.check_password(request.form.get('password')):
-            flash('Email ou senha inválidos', 'danger')
-            return redirect(url_for('main.login'))
-        # CORREÇÃO: Usar datetime.utcnow() para consistência
-        user.last_login = datetime.utcnow()
-        db.session.add(user)
-        login_user(user, remember=request.form.get('remember_me') is not None)
-        if user.role == 'consultor':
-            update_user_status(user, 'Ocioso')
-        db.session.commit()
-        log_system_action('LOGIN', entity_type='User', entity_id=user.id, description=f"Usuário '{user.username}' logou no sistema.")
-        return redirect(url_for('main.index'))
+        if user and user.check_password(request.form.get('password')):
+            user.last_login = datetime.utcnow()
+            if user.role == 'consultor':
+                update_user_status(user, 'Ocioso')
+            db.session.commit()
+            login_user(user, remember=request.form.get('remember_me'))
+            log_system_action('LOGIN', entity_type='User', entity_id=user.id, description=f"Usuário '{user.username}' logou no sistema.")
+            return redirect(url_for('main.index'))
+        flash('Email ou senha inválidos', 'danger')
     return render_template('login.html', title='Login')
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
-    if User.query.first() is not None:
+    if User.query.first():
         flash('O registro está desabilitado.', 'warning')
         return redirect(url_for('main.login'))
     if request.method == 'POST':
-        grupo_principal = Grupo.query.filter_by(nome="Equipe Principal").first()
-        if not grupo_principal:
-            grupo_principal = Grupo(nome="Equipe Principal")
-            db.session.add(grupo_principal)
-            db.session.flush()
-        user = User(username=request.form.get('username'), email=request.form.get('email'), role='super_admin', grupo_id=grupo_principal.id)
-        user.set_password(request.form.get('password'))
+        grupo = Grupo.query.filter_by(nome="Equipe Principal").first() or Grupo(nome="Equipe Principal")
+        db.session.add(grupo)
+        db.session.flush()
+
+        user = User(username=request.form['username'], email=request.form['email'], role='super_admin', grupo_id=grupo.id)
+        user.set_password(request.form['password'])
         db.session.add(user)
         db.session.commit()
         log_system_action('USER_REGISTERED_INITIAL_ADMIN', entity_type='User', entity_id=user.id, description=f"Primeiro Super Admin '{user.username}' registrado.")
@@ -180,7 +169,7 @@ def register():
 @bp.route('/logout')
 @login_required
 def logout():
-    log_system_action('LOGOUT', entity_type='User', entity_id=current_user.id, description=f"Usuário '{current_user.username}' deslogou do sistema.")
+    log_system_action('LOGOUT', entity_type='User', entity_id=current_user.id, description=f"Usuário '{current_user.username}' deslogou.")
     if current_user.is_authenticated and current_user.role == 'consultor':
         update_user_status(current_user, 'Offline')
         db.session.commit()
@@ -191,30 +180,29 @@ def logout():
 @bp.route('/index')
 @login_required
 def index():
-    if current_user.role == 'super_admin': return redirect(url_for('main.admin_dashboard'))
-    elif current_user.role == 'admin_parceiro': return redirect(url_for('main.parceiro_dashboard'))
-    else: return redirect(url_for('main.consultor_dashboard'))
+    role_dashboard_map = {
+        'super_admin': 'main.admin_dashboard',
+        'admin_parceiro': 'main.parceiro_dashboard',
+        'consultor': 'main.consultor_dashboard'
+    }
+    return redirect(url_for(role_dashboard_map.get(current_user.role, 'main.login')))
 
 @bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
     if request.method == 'POST':
-        old_theme = current_user.theme
-        theme_choice = request.form.get('theme')
-        if theme_choice in ['default', 'dark', 'ocean']:
-            current_user.theme = theme_choice
-            db.session.commit()
+        theme = request.form.get('theme')
+        if theme in ['default', 'dark', 'ocean']:
             log_system_action('USER_THEME_CHANGED', entity_type='User', entity_id=current_user.id, 
-                                description=f"Usuário '{current_user.username}' mudou o tema.",
-                                details={'old_theme': old_theme, 'new_theme': theme_choice})
-            flash_message = """Tema atualizado com sucesso!<script>localStorage.setItem('userTheme', '{new_theme}');window.location.reload();</script>""".format(new_theme=theme_choice)
-            flash(flash_message, 'success')
-        else:
-            flash('Seleção de tema inválida.', 'danger')
-        return redirect(url_for('main.profile'))
+                              description=f"Usuário '{current_user.username}' mudou o tema.",
+                              details={'old': current_user.theme, 'new': theme})
+            current_user.theme = theme
+            db.session.commit()
+            flash(f"""Tema atualizado com sucesso!<script>localStorage.setItem('userTheme', '{theme}');window.location.reload();</script>""", 'success')
     return render_template('profile.html', title="Minhas Configurações")
     
 # --- ROTAS DE ADMIN ---
+
 @bp.route('/admin/dashboard')
 @login_required
 @require_role('super_admin')
@@ -222,8 +210,17 @@ def admin_dashboard():
     all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     page = request.args.get('page', 1, type=int)
-    recent_activity = ActivityLog.query.options(joinedload(ActivityLog.lead), joinedload(ActivityLog.user), joinedload(ActivityLog.tabulation)).order_by(ActivityLog.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
-    return render_template('admin/admin_dashboard.html', title='Dashboard do Admin', all_products=all_products, all_layouts=all_layouts, recent_activity=recent_activity)
+    recent_activity = ActivityLog.query.options(
+        joinedload(ActivityLog.lead), 
+        joinedload(ActivityLog.user), 
+        joinedload(ActivityLog.tabulation)
+    ).order_by(ActivityLog.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
+    
+    return render_template('admin/admin_dashboard.html', 
+                           title='Dashboard do Admin', 
+                           all_products=all_products, 
+                           all_layouts=all_layouts, 
+                           recent_activity=recent_activity)
 
 @bp.route('/admin/monitor')
 @login_required
@@ -233,33 +230,33 @@ def admin_monitor():
     start_of_day = datetime.combine(date.today(), time.min)
     agents_data = []
     for agent in consultants:
-        inactivity_threshold_minutes = 2 
-        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
-        if agent.role == 'consultor' and agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
-            real_status = 'Offline'
-            if agent.current_status != 'Offline':
-                agent.current_status = 'Offline'
-                # CORREÇÃO: Usar datetime.utcnow() para consistência
-                agent.status_timestamp = datetime.utcnow()
-                db.session.add(agent)
-                db.session.commit()
-        else:
-            real_status = agent.current_status
-
-        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
-        time_in_status = datetime.utcnow() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
-        hours, remainder = divmod(time_in_status.total_seconds(), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        inactivity_threshold = timedelta(minutes=2)
+        is_inactive = (agent.last_activity_at is not None) and ((datetime.utcnow() - agent.last_activity_at) > inactivity_threshold)
         
+        real_status = agent.current_status
+        if is_inactive and agent.current_status != 'Offline':
+            real_status = 'Offline'
+            agent.current_status = 'Offline'
+            agent.status_timestamp = datetime.utcnow()
+            db.session.add(agent)
+
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
-        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(
+            ActivityLog.user_id == agent.id, 
+            ActivityLog.timestamp >= start_of_day, 
+            Tabulation.is_positive_conversion == True
+        ).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
-        agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'last_login': agent.last_login, 'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 'calls_today': calls_today, 'conversions_today': conversions_today})
-    
+        
+        agents_data.append({
+            'id': agent.id, 'name': agent.username, 'status': real_status, 
+            'last_login': agent.last_login, 
+            'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 
+            'calls_today': calls_today, 'conversions_today': conversions_today
+        })
+    db.session.commit()
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
-
 
 @bp.route('/admin/system-logs')
 @login_required
@@ -270,7 +267,8 @@ def admin_system_logs_page():
     filter_type = request.args.get('filter_type', 'all').strip()
     filter_user_id = request.args.get('filter_user', 'all').strip()
 
-    logs_query = SystemLog.query.options(joinedload(SystemLog.user_performer)).order_by(SystemLog.timestamp.desc())
+    # CORREÇÃO: O nome da relação é 'user', e não 'user_performer'.
+    logs_query = SystemLog.query.options(joinedload(SystemLog.user)).order_by(SystemLog.timestamp.desc())
 
     if search_query:
         search_pattern = f"%{search_query}%"
@@ -441,7 +439,6 @@ def upload_step2_process():
                 'produto_id': produto_id,
                 'cpf': cpf_digits,
                 'status': 'Novo',
-                # CORREÇÃO: Usar datetime.utcnow() para consistência
                 'data_criacao': datetime.utcnow(),
                 'additional_data': additional_data 
             }
@@ -524,14 +521,14 @@ def add_group():
         logo_filename = save_partner_logo(logo_file)
         if not logo_filename:
             flash('Formato de arquivo de logo inválido ou erro ao salvar.', 'danger')
-            log_system_action('GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', description=f"Tentativa de upload de logo para novo grupo '{nome}' falhou.")
+            log_system_action(action_type='GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', description=f"Tentativa de upload de logo para novo grupo '{nome}' falhou.")
             return redirect(url_for('main.manage_teams'))
 
     if nome:
         existing_group = Grupo.query.filter_by(nome=nome).first()
         if existing_group:
             flash('Uma equipe com este nome já existe.', 'danger')
-            log_system_action('GROUP_CREATE_FAILED', entity_type='Group', description=f"Tentativa de criar grupo com nome duplicado: '{nome}'.")
+            log_system_action(action_type='GROUP_CREATE_FAILED', entity_type='Group', description=f"Tentativa de criar grupo com nome duplicado: '{nome}'.")
             if logo_filename:
                 delete_partner_logo(logo_filename)
         else:
@@ -539,7 +536,7 @@ def add_group():
             db.session.add(new_group)
             db.session.commit()
             flash('Equipe adicionada com sucesso!', 'success')
-            log_system_action('GROUP_CREATED', entity_type='Group', entity_id=new_group.id, 
+            log_system_action(action_type='GROUP_CREATED', entity_type='Group', entity_id=new_group.id, 
                               description=f"Grupo '{new_group.nome}' criado.",
                               details={'color': new_group.color, 'logo_filename': new_group.logo_filename})
     return redirect(url_for('main.manage_teams'))
@@ -563,7 +560,7 @@ def edit_group_name_color(group_id):
     if new_name and new_name != grupo.nome:
         if Grupo.query.filter(Grupo.nome == new_name, Grupo.id != group_id).first():
             flash(f'Erro: Já existe uma equipe com o nome "{new_name}".', 'danger')
-            log_system_action('GROUP_UPDATE_FAILED', entity_type='Group', entity_id=grupo.id, 
+            log_system_action(action_type='GROUP_UPDATE_FAILED', entity_type='Group', entity_id=grupo.id, 
                               description=f"Tentativa de renomear grupo '{old_name}' para nome duplicado: '{new_name}'.")
             return redirect(url_for('main.team_details', group_id=group_id))
         grupo.nome = new_name
@@ -580,7 +577,7 @@ def edit_group_name_color(group_id):
                 grupo.logo_filename = None
             else:
                 flash('Erro ao remover arquivo de logo existente.', 'warning')
-                log_system_action('GROUP_LOGO_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
+                log_system_action(action_type='GROUP_LOGO_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
                                   description=f"Erro ao remover arquivo de logo '{grupo.logo_filename}' para o grupo '{grupo.nome}'.")
     elif new_logo_file and new_logo_file.filename:
         if allowed_file(new_logo_file.filename):
@@ -592,17 +589,17 @@ def edit_group_name_color(group_id):
                 grupo.logo_filename = saved_filename
             else:
                 flash('Erro ao salvar o novo arquivo de logo.', 'danger')
-                log_system_action('GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
+                log_system_action(action_type='GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
                                   description=f"Erro ao salvar novo logo para o grupo '{grupo.nome}'.")
         else:
             flash('Formato de arquivo de logo inválido. Use PNG, JPG, JPEG ou GIF.', 'danger')
-            log_system_action('GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
+            log_system_action(action_type='GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
                               description=f"Tentativa de upload de logo com formato inválido para o grupo '{grupo.nome}'.")
 
     if changes:
         db.session.commit()
         flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
-        log_system_action('GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
+        log_system_action(action_type='GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
                           description=f"Grupo '{grupo.nome}' atualizado.",
                           details=changes)
     else:
@@ -620,7 +617,7 @@ def delete_group(group_id):
 
     if grupo.users.count() > 0:
         flash(f'Erro: Não é possível excluir a equipe "{grupo.nome}" porque ela ainda contém usuários.', 'danger')
-        log_system_action('GROUP_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
+        log_system_action(action_type='GROUP_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
                           description=f"Tentativa de excluir grupo '{group_name}' falhou: contém usuários.")
         return redirect(url_for('main.manage_teams'))
     
@@ -629,11 +626,11 @@ def delete_group(group_id):
     
     if logo_to_delete:
         delete_partner_logo(logo_to_delete)
-        log_system_action('GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
+        log_system_action(action_type='GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
                           description=f"Arquivo de logo '{logo_to_delete}' excluído do disco para o grupo '{group_name}'.")
 
     flash(f'Equipe "{group_name}" excluída com sucesso!', 'success')
-    log_system_action('GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
+    log_system_action(action_type='GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
     return redirect(url_for('main.manage_teams'))
 
 @bp.route('/admin/teams/add_member/<int:group_id>', methods=['POST'])
@@ -650,7 +647,7 @@ def add_member_to_team(group_id):
 
     if user.grupo_id == group_id and user.role == new_role:
         flash(f'Erro: {user.username} já é {new_role} nesta equipe.', 'warning')
-        log_system_action('TEAM_MEMBER_ADD_FAILED', entity_type='User', entity_id=user.id, 
+        log_system_action(action_type='TEAM_MEMBER_ADD_FAILED', entity_type='User', entity_id=user.id, 
                           description=f"Tentativa de adicionar '{user.username}' ao grupo '{grupo.nome}' falhou: já pertence com o mesmo papel.")
         return redirect(url_for('main.team_details', group_id=group_id))
     
@@ -658,7 +655,7 @@ def add_member_to_team(group_id):
     user.role = new_role
     db.session.commit()
     flash(f'{user.username} adicionado(a) como {new_role} à equipe {grupo.nome}!', 'success')
-    log_system_action('TEAM_MEMBER_UPDATED', entity_type='User', entity_id=user.id, 
+    log_system_action(action_type='TEAM_MEMBER_UPDATED', entity_type='User', entity_id=user.id, 
                       description=f"Usuário '{user.username}' movido/atualizado para equipe '{grupo.nome}' como '{new_role}'.",
                       details={'old_group_id': old_group_id, 'old_role': old_role, 
                                'new_group_id': group_id, 'new_role': new_role})
@@ -676,12 +673,12 @@ def remove_member_from_team(group_id, user_id):
 
     if user_to_remove.role == 'super_admin':
         flash('Não é possível remover um Super Administrador de uma equipe.', 'danger')
-        log_system_action('TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
                           description=f"Tentativa de remover Super Admin '{user_to_remove.username}' da equipe '{grupo.nome}'.")
         return redirect(url_for('main.team_details', group_id=group_id))
     if user_to_remove.grupo_id != group_id:
         flash(f'Erro: {user_to_remove.username} não pertence à equipe {grupo.nome}.', 'danger')
-        log_system_action('TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
                           description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: não é membro.")
         return redirect(url_for('main.team_details', group_id=group_id))
     
@@ -691,13 +688,13 @@ def remove_member_from_team(group_id, user_id):
         user_to_remove.role = 'consultor'
         db.session.commit()
         flash(f'{user_to_remove.username} removido(a) da equipe {grupo.nome} e movido(a) para Equipe Principal.', 'info')
-        log_system_action('TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
+        log_system_action(action_type='TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
                           description=f"Usuário '{user_to_remove.username}' removido da equipe '{grupo.nome}' e movido para '{equipe_principal.nome}'.",
                           details={'old_group_id': old_group_id, 'old_role': old_role, 
                                    'new_group_id': equipe_principal.id, 'new_role': 'consultor'})
     else:
         flash('Erro: Não foi possível mover o usuário para uma equipe padrão. Crie uma "Equipe Principal".', 'danger')
-        log_system_action('TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
                           description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: Equipe Principal não encontrada.")
     return redirect(url_for('main.team_details', group_id=group_id))
 
@@ -734,28 +731,18 @@ def manage_users():
             flash("ID de grupo inválido para filtro.", "warning")
 
     if sort_by == 'username':
-        if sort_order == 'desc':
-            users_query = users_query.order_by(User.username.desc())
-        else:
-            users_query = users_query.order_by(User.username.asc())
+        order_column = User.username.desc() if sort_order == 'desc' else User.username.asc()
     elif sort_by == 'email':
-        if sort_order == 'desc':
-            users_query = users_query.order_by(User.email.desc())
-        else:
-            users_query = users_query.order_by(User.email.asc())
+        order_column = User.email.desc() if sort_order == 'desc' else User.email.asc()
     elif sort_by == 'group':
         users_query = users_query.join(Grupo)
-        if sort_order == 'desc':
-            users_query = users_query.order_by(Grupo.nome.desc())
-        else:
-            users_query = users_query.order_by(Grupo.nome.asc())
+        order_column = Grupo.nome.desc() if sort_order == 'desc' else Grupo.nome.asc()
     elif sort_by == 'role':
-        if sort_order == 'desc':
-            users_query = users_query.order_by(User.role.desc())
-        else:
-            users_query = users_query.order_by(User.role.asc())
+        order_column = User.role.desc() if sort_order == 'desc' else User.role.asc()
+    else:
+        order_column = User.username.asc()
 
-    users = users_query.all()
+    users = users_query.order_by(order_column).all()
     
     grupos = Grupo.query.order_by(Grupo.nome).all()
 
@@ -781,22 +768,17 @@ def add_user():
     role = request.form.get('role', 'consultor')
     grupo_id = request.form.get('grupo_id')
     
-    if current_user.role != 'super_admin':
-        flash('Você não tem permissão para criar novos usuários.', 'danger')
-        log_system_action('USER_CREATE_FAILED', description=f"Tentativa não autorizada de criar usuário por '{current_user.username}'.")
-        return redirect(url_for('main.manage_users'))
-
     if not all([username, email, password, role, grupo_id]):
         flash('Todos os campos são obrigatórios.', 'danger')
-        log_system_action('USER_CREATE_FAILED', description=f"Tentativa de criar usuário falhou: campos obrigatórios vazios. Por: '{current_user.username}'.")
+        log_system_action(action_type='USER_CREATE_FAILED', description=f"Tentativa de criar usuário falhou: campos obrigatórios vazios. Por: '{current_user.username}'.")
         return redirect(url_for('main.manage_users'))
     if User.query.filter_by(username=username).first():
         flash('Esse nome de utilizador já existe.', 'danger')
-        log_system_action('USER_CREATE_FAILED', description=f"Tentativa de criar usuário '{username}' falhou: nome de usuário já existe. Por: '{current_user.username}'.")
+        log_system_action(action_type='USER_CREATE_FAILED', description=f"Tentativa de criar usuário '{username}' falhou: nome de usuário já existe. Por: '{current_user.username}'.")
         return redirect(url_for('main.manage_users'))
     if User.query.filter_by(email=email).first():
         flash('Esse email já está a ser utilizado.', 'danger')
-        log_system_action('USER_CREATE_FAILED', description=f"Tentativa de criar usuário '{username}' com email '{email}' falhou: email já utilizado. Por: '{current_user.username}'.")
+        log_system_action(action_type='USER_CREATE_FAILED', description=f"Tentativa de criar usuário '{username}' com email '{email}' falhou: email já utilizado. Por: '{current_user.username}'.")
         return redirect(url_for('main.manage_users'))
     
     new_user = User(username=username, email=email, role=role, grupo_id=int(grupo_id))
@@ -804,7 +786,7 @@ def add_user():
     db.session.add(new_user)
     db.session.commit()
     flash('Utilizador criado com sucesso!', 'success')
-    log_system_action('USER_CREATED', entity_type='User', entity_id=new_user.id, 
+    log_system_action(action_type='USER_CREATED', entity_type='User', entity_id=new_user.id, 
                       description=f"Usuário '{new_user.username}' criado com papel '{new_user.role}' no grupo '{new_user.grupo.nome}'.",
                       details={'email': new_user.email, 'role': new_user.role, 'grupo_id': new_user.grupo_id})
     return redirect(url_for('main.manage_users'))
@@ -814,62 +796,39 @@ def add_user():
 @require_role('super_admin', 'admin_parceiro')
 def update_user_name(user_id):
     user_to_update = User.query.get_or_404(user_id)
+    redirect_url = url_for('main.parceiro_manage_users') if current_user.role == 'admin_parceiro' else url_for('main.manage_users')
 
-    if current_user.role == 'super_admin':
-        pass
-    elif current_user.role == 'admin_parceiro':
-        if user_to_update.role == 'consultor' and user_to_update.grupo_id == current_user.grupo_id:
-            pass
-        else:
-            flash('Você não tem permissão para editar o nome deste usuário ou ele não pertence ao seu grupo.', 'danger')
-            log_system_action('USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
-                              description=f"Tentativa não autorizada de editar nome de usuário '{user_to_update.username}' por '{current_user.username}'.",
-                              details={'reason': 'Permissão negada ou fora do grupo.'})
-            return redirect(url_for('main.parceiro_manage_users'))
-    else:
-        flash('Você não tem permissão para realizar esta ação.', 'danger')
-        log_system_action('USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
+    if current_user.role == 'admin_parceiro' and not (user_to_update.role == 'consultor' and user_to_update.grupo_id == current_user.grupo_id):
+        flash('Você não tem permissão para editar o nome deste usuário ou ele não pertence ao seu grupo.', 'danger')
+        log_system_action(action_type='USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
                           description=f"Tentativa não autorizada de editar nome de usuário '{user_to_update.username}' por '{current_user.username}'.",
-                          details={'reason': 'Papel não autorizado.'})
-        return redirect(url_for('main.index'))
+                          details={'reason': 'Permissão negada ou fora do grupo.'})
+        return redirect(redirect_url)
 
     old_username = user_to_update.username
     new_username = request.form.get('username')
 
     if not new_username or not new_username.strip():
         flash('O nome de usuário não pode ser vazio.', 'warning')
-        log_system_action('USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
+        log_system_action(action_type='USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
                           description=f"Tentativa de renomear '{old_username}' falhou: nome vazio. Por: '{current_user.username}'.")
-        if current_user.role == 'super_admin':
-            return redirect(url_for('main.manage_users'))
-        else:
-            return redirect(url_for('main.parceiro_manage_users'))
+        return redirect(redirect_url)
 
-    existing_user_with_name = User.query.filter(
-        User.username.ilike(new_username.strip()),
-        User.id != user_id
-    ).first()
-
+    existing_user_with_name = User.query.filter(User.username.ilike(new_username.strip()), User.id != user_id).first()
     if existing_user_with_name:
         flash(f'O nome de usuário "{new_username.strip()}" já está em uso por outro usuário.', 'danger')
-        log_system_action('USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
+        log_system_action(action_type='USER_UPDATE_FAILED', entity_type='User', entity_id=user_id, 
                           description=f"Tentativa de renomear '{old_username}' para '{new_username}' falhou: nome já em uso. Por: '{current_user.username}'.")
-        if current_user.role == 'super_admin':
-            return redirect(url_for('main.manage_users'))
-        else:
-            return redirect(url_for('main.parceiro_manage_users'))
+        return redirect(redirect_url)
 
     user_to_update.username = new_username.strip()
     db.session.commit()
     flash('Nome de usuário atualizado com sucesso!', 'success')
-    log_system_action('USER_NAME_UPDATED', entity_type='User', entity_id=user_id, 
+    log_system_action(action_type='USER_NAME_UPDATED', entity_type='User', entity_id=user_id, 
                       description=f"Nome do usuário '{old_username}' alterado para '{new_username}'.",
                       details={'old_username': old_username, 'new_username': new_username})
 
-    if current_user.role == 'super_admin':
-        return redirect(url_for('main.manage_users'))
-    else:
-        return redirect(url_for('main.parceiro_manage_users'))
+    return redirect(redirect_url)
 
 @bp.route('/admin/users/update_limits/<int:user_id>', methods=['POST'])
 @login_required
@@ -895,7 +854,7 @@ def update_user_limits(user_id):
         if changes:
             db.session.commit()
             flash(f'Limites do usuário {user.username} atualizados com sucesso!', 'success')
-            log_system_action('USER_LIMITS_UPDATED', entity_type='User', entity_id=user.id, 
+            log_system_action(action_type='USER_LIMITS_UPDATED', entity_type='User', entity_id=user.id, 
                               description=f"Limites de '{user.username}' atualizados.",
                               details=changes)
         else:
@@ -904,7 +863,7 @@ def update_user_limits(user_id):
     except (ValueError, TypeError) as e:
         db.session.rollback()
         flash('Valores de limite inválidos. Por favor, insira apenas números.', 'danger')
-        log_system_action('USER_LIMITS_UPDATE_FAILED', entity_type='User', entity_id=user.id, 
+        log_system_action(action_type='USER_LIMITS_UPDATE_FAILED', entity_type='User', entity_id=user.id, 
                           description=f"Tentativa de atualizar limites de '{user.username}' falhou: valores inválidos.",
                           details={'error': str(e), 'form_data': request.form.to_dict()})
     return redirect(url_for('main.manage_users'))
@@ -914,15 +873,13 @@ def update_user_limits(user_id):
 @require_role('super_admin', 'admin_parceiro')
 def delete_user(id):
     user_to_delete = User.query.get_or_404(id)
+    redirect_url = url_for('main.parceiro_manage_users') if current_user.role == 'admin_parceiro' else url_for('main.manage_users')
 
     if id == current_user.id:
         flash('Não pode eliminar a sua própria conta.', 'danger')
-        log_system_action('USER_DELETE_FAILED', entity_type='User', entity_id=id, 
+        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id, 
                           description=f"Tentativa de auto-excluir a conta '{user_to_delete.username}'.")
-        if current_user.role == 'super_admin':
-            return redirect(url_for('main.manage_users'))
-        else:
-            return redirect(url_for('main.parceiro_manage_users'))
+        return redirect(redirect_url)
 
     delete_permitted = False
     if current_user.role == 'super_admin':
@@ -933,12 +890,10 @@ def delete_user(id):
     
     if not delete_permitted:
         flash('Você não tem permissão para apagar este usuário ou ele não pertence ao seu grupo.', 'danger')
-        log_system_action('USER_DELETE_FAILED', entity_type='User', entity_id=id, 
+        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id, 
                           description=f"Tentativa não autorizada de apagar usuário '{user_to_delete.username}' por '{current_user.username}'.",
                           details={'reason': 'Permissão negada ou fora do grupo.'})
-        if current_user.role == 'super_admin':
-            return redirect(url_for('main.manage_users'))
-        return redirect(url_for('main.parceiro_manage_users'))
+        return redirect(redirect_url)
 
     username_deleted = user_to_delete.username
     user_email_deleted = user_to_delete.email
@@ -948,15 +903,18 @@ def delete_user(id):
     db.session.delete(user_to_delete)
     db.session.commit()
     flash('Utilizador eliminado com sucesso!', 'success')
-    log_system_action('USER_DELETED', entity_type='User', entity_id=id, 
+    log_system_action(action_type='USER_DELETED', entity_type='User', entity_id=id, 
                       description=f"Usuário '{username_deleted}' (Email: {user_email_deleted}, Perfil: {user_role_deleted}, Equipe: {user_group_deleted}) excluído.",
                       details={'deleted_username': username_deleted, 'deleted_email': user_email_deleted, 
                                'deleted_role': user_role_deleted, 'deleted_group': user_group_deleted})
     
-    if current_user.role == 'super_admin':
-        return redirect(url_for('main.manage_users'))
-    else:
-        return redirect(url_for('main.parceiro_manage_users'))
+    return redirect(redirect_url)
+
+@bp.route('/partner_logos/<filename>')
+def serve_partner_logo(filename):
+    return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
+
+# --- ROTAS DE GESTÃO (ADMIN) ---
 
 @bp.route('/admin/products')
 @login_required
@@ -976,12 +934,12 @@ def add_product():
             db.session.add(new_product)
             db.session.commit()
             flash('Produto adicionado com sucesso!', 'success')
-            log_system_action('PRODUCT_CREATED', entity_type='Product', entity_id=new_product.id, 
+            log_system_action(action_type='PRODUCT_CREATED', entity_type='Product', entity_id=new_product.id, 
                               description=f"Produto '{new_product.name}' criado.")
         except IntegrityError:
             db.session.rollback()
             flash('Erro: Este produto já existe.', 'danger')
-            log_system_action('PRODUCT_CREATE_FAILED', entity_type='Product', 
+            log_system_action(action_type='PRODUCT_CREATE_FAILED', entity_type='Product', 
                               description=f"Tentativa de criar produto com nome duplicado: '{name}'.")
     return redirect(url_for('main.manage_products'))
 
@@ -999,7 +957,7 @@ def delete_product(id):
         initial_message=f"A exclusão do produto '{product_name}' e seus leads associados está sendo processada em segundo plano.",
         product_id=id
     )
-    log_system_action('PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
+    log_system_action(action_type='PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
                       description=f"Exclusão do produto '{product_name}' e seus leads iniciada em segundo plano.",
                       details={'task_id': task_id})
     return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão do produto '{product_name}' e seus leads associados foi iniciada em segundo plano."})
@@ -1021,12 +979,12 @@ def delete_layout(layout_id):
         db.session.delete(layout_to_delete)
         db.session.commit()
         flash(f'Layout "{layout_name}" excluído com sucesso!', 'success')
-        log_system_action('LAYOUT_DELETED', entity_type='LayoutMailing', entity_id=layout_id, 
+        log_system_action(action_type='LAYOUT_DELETED', entity_type='LayoutMailing', entity_id=layout_id, 
                           description=f"Layout '{layout_name}' excluído.")
     except Exception as e:
         db.session.rollback()
         flash(f'Ocorreu um erro ao excluir o layout: {e}', 'danger')
-        log_system_action('LAYOUT_DELETE_FAILED', entity_type='LayoutMailing', entity_id=layout_id, 
+        log_system_action(action_type='LAYOUT_DELETE_FAILED', entity_type='LayoutMailing', entity_id=layout_id, 
                           description=f"Erro ao excluir layout '{layout_name}'.",
                           details={'error': str(e)})
     return redirect(url_for('main.manage_layouts'))
@@ -1159,13 +1117,14 @@ def delete_product_in_background(app, task_id, product_id):
                 task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
                 task.end_time = datetime.utcnow()
                 db.session.add(task)
-                db.session.commit()
-                db.session.refresh(task)
                 
                 produto_final = Produto.query.get(product_id)
                 if produto_final:
                     db.session.delete(produto_final)
-                    db.session.commit()
+                
+                db.session.commit()
+                db.session.refresh(task)
+                
                 log_system_action('PRODUCT_DELETE_COMPLETED', entity_type='Product', entity_id=product_id, 
                                   description=f"Produto '{product_name}' excluído (0 leads associados).",
                                   details={'product_name': product_name, 'total_leads_deleted': 0}, user_id=user_id_for_task)
@@ -1256,7 +1215,7 @@ def delete_mailing():
         produto_id=int(produto_id),
         estado=estado
     )
-    log_system_action('MAILING_DELETE_BACKGROUND_INITIATED', entity_type='Mailing', entity_id=int(produto_id), 
+    log_system_action(action_type='MAILING_DELETE_BACKGROUND_INITIATED', entity_type='Mailing', entity_id=int(produto_id), 
                       description=f"Exclusão do mailing de produto {produto_nome}, estado {estado} iniciada em segundo plano.",
                       details={'estado': estado, 'produto_id': produto_id, 'task_id': task_id})
 
@@ -1321,14 +1280,14 @@ def add_tabulation():
         try:
             db.session.commit()
             flash('Tabulação criada com sucesso!', 'success')
-            log_system_action('TABULATION_CREATED', entity_type='Tabulation', entity_id=new_tabulation.id, 
+            log_system_action(action_type='TABULATION_CREATED', entity_type='Tabulation', entity_id=new_tabulation.id, 
                               description=f"Tabulação '{new_tabulation.name}' criada.",
                               details={'color': new_tabulation.color, 'is_recyclable': new_tabulation.is_recyclable, 
                                        'recycle_in_days': new_tabulation.recycle_in_days, 'is_positive_conversion': new_tabulation.is_positive_conversion})
         except IntegrityError:
             db.session.rollback()
             flash('Essa tabulação já existe.', 'danger')
-            log_system_action('TABULATION_CREATE_FAILED', entity_type='Tabulation', 
+            log_system_action(action_type='TABULATION_CREATE_FAILED', entity_type='Tabulation', 
                               description=f"Tentativa de criar tabulação com nome duplicado: '{name}'.")
     return redirect(url_for('main.manage_tabulations'))
 
@@ -1342,12 +1301,12 @@ def delete_tabulation(id):
         db.session.delete(tabulation_to_delete)
         db.session.commit()
         flash('Tabulação eliminada com sucesso!', 'success')
-        log_system_action('TABULATION_DELETED', entity_type='Tabulation', entity_id=id, 
+        log_system_action(action_type='TABULATION_DELETED', entity_type='Tabulation', entity_id=id, 
                           description=f"Tabulação '{tabulation_name}' excluída.")
     except Exception as e:
         db.session.rollback()
         flash(f'Ocorreu um erro ao excluir a tabulação: {e}', 'danger')
-        log_system_action('TABULATION_DELETE_FAILED', entity_type='Tabulation', entity_id=id, 
+        log_system_action(action_type='TABULATION_DELETE_FAILED', entity_type='Tabulation', entity_id=id, 
                           description=f"Erro ao excluir tabulação '{tabulation_name}'.",
                           details={'error': str(e)})
     return redirect(url_for('main.manage_tabulations'))
@@ -1388,11 +1347,6 @@ def get_task_status(task_id):
         'details': task.details
     })
 
-# Rota para servir as imagens do volume persistente
-@bp.route('/partner_logos/<filename>')
-def serve_partner_logo(filename):
-    return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
-
 # --- ROTAS DE HIGIENIZAÇÃO DE LEADS ---
 
 @bp.route('/admin/hygiene/upload', methods=['GET', 'POST'])
@@ -1417,7 +1371,7 @@ def hygiene_upload_page():
             uploaded_file.save(temp_hygiene_filepath)
         except Exception as e:
             flash(f"Erro ao salvar arquivo temporário: {e}", 'danger')
-            log_system_action('HYGIENE_UPLOAD_FAILED', description=f"Erro ao salvar arquivo de higienização temporário.", details={'error': str(e)})
+            log_system_action(action_type='HYGIENE_UPLOAD_FAILED', description=f"Erro ao salvar arquivo de higienização temporário.", details={'error': str(e)})
             return redirect(url_for('main.hygiene_upload_page'))
 
         task_id = start_background_task(
@@ -1427,7 +1381,7 @@ def hygiene_upload_page():
             initial_message="Iniciando comparação de CPFs para higienização...",
             filepath=temp_hygiene_filepath
         )
-        log_system_action('HYGIENE_UPLOAD_INITIATED', description=f"Upload de arquivo para higienização iniciado. Task ID: {task_id}")
+        log_system_action(action_type='HYGIENE_UPLOAD_INITIATED', description=f"Upload de arquivo para higienização iniciado. Task ID: {task_id}")
         
         return redirect(url_for('main.hygiene_confirm_page', task_id=task_id))
 
@@ -1542,7 +1496,7 @@ def hygiene_confirm_page(task_id):
     
     if task.status == 'FAILED':
         flash(f"A tarefa de comparação de CPFs falhou: {task.message}", 'danger')
-        log_system_action('HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task.id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
+        log_system_action(action_type='HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task.id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
         return redirect(url_for('main.hygiene_upload_page'))
 
     leads_to_delete = task.details.get('leads_to_delete_preview', []) if task.details else []
@@ -1559,7 +1513,7 @@ def hygiene_confirm_page(task_id):
             initial_message=f"Iniciando exclusão de {len(leads_to_delete)} leads para higienização...",
             leads_to_delete_ids=[l['id'] for l in leads_to_delete]
         )
-        log_system_action('HYGIENE_DELETE_INITIATED', entity_type='BackgroundTask', entity_id=new_delete_task_id, 
+        log_system_action(action_type='HYGIENE_DELETE_INITIATED', entity_type='BackgroundTask', entity_id=new_delete_task_id, 
                           description=f"Higienização de {len(leads_to_delete)} leads confirmada. Task ID: {new_delete_task_id}",
                           details={'leads_count': len(leads_to_delete)})
         
@@ -1699,7 +1653,6 @@ def admin_export_filtered_leads():
     elif tabulation_status == 'new':
         leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.is_(None))
     elif tabulation_status == 'recycled':
-        # CORREÇÃO: Usar datetime.utcnow() para consistência
         leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.isnot(None), Lead.available_after > datetime.utcnow())
     
     if product_ids_str:
@@ -1810,19 +1763,16 @@ def parceiro_monitor():
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
-        if agent.role == 'consultor' and agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
+        if agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
-                # CORREÇÃO: Usar datetime.utcnow() para consistência
                 agent.status_timestamp = datetime.utcnow()
                 db.session.add(agent)
                 db.session.commit()
         else:
             real_status = agent.current_status
 
-        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
         time_in_status = datetime.utcnow() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1942,7 +1892,6 @@ def consultor_dashboard():
     vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
     mailings_disponiveis = []
     if vagas_na_carteira > 0 and vagas_na_puxada_diaria > 0:
-        # CORREÇÃO: Usar datetime.utcnow() para consistência
         mailings_disponiveis = db.session.query(Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado, func.count(Lead.id).label('leads_disponiveis')).join(Produto, Lead.produto_id == Produto.id).filter(Lead.status == 'Novo', Lead.consultor_id == None, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
     search_history = request.args.get('search_history', '')
     history_query = ActivityLog.query.options(joinedload(ActivityLog.lead), joinedload(ActivityLog.tabulation)).filter(ActivityLog.user_id == current_user.id)
@@ -1975,7 +1924,6 @@ def pegar_leads_selecionados():
                 produto_id = int(produto_id)
             except (ValueError, IndexError):
                 continue
-            # CORREÇÃO: Usar datetime.utcnow() para consistência
             leads_disponiveis = Lead.query.filter(Lead.status == 'Novo', Lead.consultor_id == None, Lead.produto_id == produto_id, Lead.estado == estado, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).limit(quantidade_a_pegar).all()
             if leads_disponiveis:
                 try:
@@ -2052,7 +2000,6 @@ def atender_lead(lead_id):
         return redirect(url_for('main.atendimento'))
     action_type = ''
     if tabulation.is_recyclable and tabulation.recycle_in_days is not None:
-        # CORREÇÃO: Usar datetime.utcnow() para consistência
         recycle_date = datetime.utcnow() + timedelta(days=tabulation.recycle_in_days)
         lead.status = 'Novo'
         lead.consultor_id = None
@@ -2064,7 +2011,6 @@ def atender_lead(lead_id):
     else:
         lead.tabulation_id = tabulation.id
         lead.status = 'Tabulado'
-        # CORREÇÃO: Usar datetime.utcnow() para consistência
         lead.data_tabulacao = datetime.utcnow()
         action_type = 'Tabulação'
         flash(f'Lead de {lead.nome} tabulado com sucesso!', 'success')
@@ -2099,7 +2045,6 @@ def retabulate_lead(lead_id):
         return redirect(request.referrer or url_for('main.index'))
     lead.tabulation_id = new_tabulation.id
     lead.status = 'Tabulado'
-    # CORREÇÃO: Usar datetime.utcnow() para consistência
     lead.data_tabulacao = datetime.utcnow()
     if original_consultor:
         lead.consultor_id = original_consultor.id
