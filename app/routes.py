@@ -236,9 +236,7 @@ def admin_monitor():
         real_status = agent.current_status
         if is_inactive and agent.current_status != 'Offline':
             real_status = 'Offline'
-            agent.current_status = 'Offline'
-            agent.status_timestamp = datetime.utcnow()
-            db.session.add(agent)
+            update_user_status(agent, 'Offline')
 
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(
@@ -267,7 +265,6 @@ def admin_system_logs_page():
     filter_type = request.args.get('filter_type', 'all').strip()
     filter_user_id = request.args.get('filter_user', 'all').strip()
 
-    # CORREÇÃO: O nome da relação é 'user', e não 'user_performer'.
     logs_query = SystemLog.query.options(joinedload(SystemLog.user)).order_by(SystemLog.timestamp.desc())
 
     if search_query:
@@ -391,7 +388,6 @@ def upload_step2_process():
         df = pd.read_excel(temp_filepath, dtype=str) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str)
         original_headers = df.columns.copy()
         df.columns = [str(col).lower().strip() for col in df.columns]
-        inversed_mapping = {v: k for k, v in mapping.items()}
         existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
         leads_para_adicionar = []
         leads_ignorados = 0
@@ -411,8 +407,8 @@ def upload_step2_process():
                     elif system_field == 'nascimento': 
                         if pd.notna(valor):
                             try:
-                                row_data[system_field] = pd.to_datetime(valor).strftime('%Y-%m-%d')
-                            except ValueError:
+                                row_data[system_field] = pd.to_datetime(valor, dayfirst=True).strftime('%Y-%m-%d')
+                            except (ValueError, TypeError):
                                 row_data[system_field] = str(valor).strip()
                         else:
                             row_data[system_field] = None
@@ -427,7 +423,7 @@ def upload_step2_process():
                     valor = row.get(original_header_lower)
                     if pd.notna(valor):
                         if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
-                           original_header_lower not in [mapping['cpf'].lower(), mapping['nome'].lower()]:
+                           original_header_lower not in [mapping.get('cpf', '').lower(), mapping.get('nome', '').lower()]:
                             additional_data[original_header.title()] = str(valor).strip()
 
             cpf_digits = re.sub(r'\D', '', str(row_data.get('cpf', '')))
@@ -446,7 +442,6 @@ def upload_step2_process():
             
             if 'nome' not in final_lead_data:
                 final_lead_data['nome'] = str(row_data.get('nome', 'Sem Nome')).strip()
-
 
             novo_lead = Lead(**final_lead_data)
             leads_para_adicionar.append(novo_lead)
