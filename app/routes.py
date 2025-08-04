@@ -12,7 +12,6 @@ from flask import render_template, flash, redirect, url_for, request, Blueprint,
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
-# A linha com o "import Log" foi REMOVIDA daqui. Esta é a correção.
 from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
 from datetime import datetime, date, time, timedelta, timezone
 from sqlalchemy import func, cast, Date, or_, case, and_
@@ -132,9 +131,10 @@ def require_role(*roles):
     return decorator
 
 def update_user_status(user, new_status):
+    # CORREÇÃO: Usar datetime.utcnow() para consistência
     user.current_status = new_status
-    user.status_timestamp = datetime.now(timezone.utc)
-    user.last_activity_at = datetime.now(timezone.utc)
+    user.status_timestamp = datetime.utcnow()
+    user.last_activity_at = datetime.utcnow()
     db.session.add(user)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
@@ -146,7 +146,8 @@ def login():
         if user is None or not user.check_password(request.form.get('password')):
             flash('Email ou senha inválidos', 'danger')
             return redirect(url_for('main.login'))
-        user.last_login = datetime.now(timezone.utc)
+        # CORREÇÃO: Usar datetime.utcnow() para consistência
+        user.last_login = datetime.utcnow()
         db.session.add(user)
         login_user(user, remember=request.form.get('remember_me') is not None)
         if user.role == 'consultor':
@@ -233,26 +234,32 @@ def admin_monitor():
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        if agent.role == 'consultor' and datetime.now(timezone.utc) - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
+        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
+        if agent.role == 'consultor' and agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
-                agent.status_timestamp = datetime.now(timezone.utc)
+                # CORREÇÃO: Usar datetime.utcnow() para consistência
+                agent.status_timestamp = datetime.utcnow()
                 db.session.add(agent)
                 db.session.commit()
         else:
             real_status = agent.current_status
 
-        time_in_status = datetime.now(timezone.utc) - agent.status_timestamp
+        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
+        time_in_status = datetime.utcnow() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
         timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'last_login': agent.last_login, 'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 'calls_today': calls_today, 'conversions_today': conversions_today})
+    
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
+
 
 @bp.route('/admin/system-logs')
 @login_required
@@ -434,7 +441,8 @@ def upload_step2_process():
                 'produto_id': produto_id,
                 'cpf': cpf_digits,
                 'status': 'Novo',
-                'data_criacao': datetime.now(timezone.utc),
+                # CORREÇÃO: Usar datetime.utcnow() para consistência
+                'data_criacao': datetime.utcnow(),
                 'additional_data': additional_data 
             }
             final_lead_data.update(row_data) 
@@ -553,7 +561,7 @@ def edit_group_name_color(group_id):
     changes = {}
 
     if new_name and new_name != grupo.nome:
-        if Grupo.query.filter_by(nome=new_name).first():
+        if Grupo.query.filter(Grupo.nome == new_name, Grupo.id != group_id).first():
             flash(f'Erro: Já existe uma equipe com o nome "{new_name}".', 'danger')
             log_system_action('GROUP_UPDATE_FAILED', entity_type='Group', entity_id=grupo.id, 
                               description=f"Tentativa de renomear grupo '{old_name}' para nome duplicado: '{new_name}'.")
@@ -1031,7 +1039,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
         user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
-        task.start_time = datetime.now(timezone.utc)
+        task.start_time = datetime.utcnow()
         task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
         db.session.add(task)
         db.session.commit()
@@ -1055,7 +1063,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Nenhum lead encontrado para o mailing de Produto {produto_id}, Estado {estado}. Concluído."
-                task.end_time = datetime.now(timezone.utc)
+                task.end_time = datetime.utcnow()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1095,7 +1103,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do mailing de Produto {produto_id}, Estado {estado} concluída. Total de {processed_count} leads excluídos."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1107,7 +1115,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do mailing: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1125,7 +1133,7 @@ def delete_product_in_background(app, task_id, product_id):
         user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
-        task.start_time = datetime.now(timezone.utc)
+        task.start_time = datetime.utcnow()
         task.message = f"Iniciando exclusão do produto e seus leads associados..."
         db.session.add(task)
         db.session.commit()
@@ -1149,7 +1157,7 @@ def delete_product_in_background(app, task_id, product_id):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
-                task.end_time = datetime.now(timezone.utc)
+                task.end_time = datetime.utcnow()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1196,7 +1204,7 @@ def delete_product_in_background(app, task_id, product_id):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do produto '{product_name}' e seus {processed_count} leads associados concluída com sucesso."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1208,7 +1216,7 @@ def delete_product_in_background(app, task_id, product_id):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do produto: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1380,7 +1388,7 @@ def get_task_status(task_id):
         'details': task.details
     })
 
-# ADICIONADO: Nova rota para servir as imagens do volume persistente
+# Rota para servir as imagens do volume persistente
 @bp.route('/partner_logos/<filename>')
 def serve_partner_logo(filename):
     return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
@@ -1401,7 +1409,6 @@ def hygiene_upload_page():
             flash('Formato de arquivo inválido. Apenas .csv ou .xlsx são permitidos.', 'danger')
             return redirect(url_for('main.hygiene_upload_page'))
         
-        # Salva o arquivo temporariamente para processamento em segundo plano
         temp_hygiene_filename = f"hygiene_{uuid.uuid4()}{os.path.splitext(uploaded_file.filename)[1]}"
         temp_hygiene_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_hygiene_filename)
         
@@ -1413,7 +1420,6 @@ def hygiene_upload_page():
             log_system_action('HYGIENE_UPLOAD_FAILED', description=f"Erro ao salvar arquivo de higienização temporário.", details={'error': str(e)})
             return redirect(url_for('main.hygiene_upload_page'))
 
-        # Inicia a tarefa em segundo plano para comparar CPFs
         task_id = start_background_task(
             hygiene_compare_cpfs_background,
             'hygiene_compare',
@@ -1427,7 +1433,6 @@ def hygiene_upload_page():
 
     return render_template('admin/hygiene_upload.html', title='Higienizar Leads')
 
-# Função em segundo plano para comparar CPFs
 def hygiene_compare_cpfs_background(app, task_id, filepath):
     with app.app_context():
         task = BackgroundTask.query.get(task_id)
@@ -1441,7 +1446,6 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
         db.session.commit()
         db.session.refresh(task)
 
-        cpfs_from_file = set()
         leads_found = []
 
         try:
@@ -1465,9 +1469,8 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             
             existing_lead_cpfs_map = {lead.cpf: {'id': lead.id, 'nome': lead.nome} for lead in db.session.query(Lead.id, Lead.cpf, Lead.nome).all()}
 
-
             for i in range(0, total_cpfs_in_file, batch_size):
-                batch_df = df[i:i+batch_size]
+                batch_df = df.iloc[i:i+batch_size]
                 for cpf_val in batch_df[cpf_column].dropna():
                     clean_cpf = re.sub(r'\D', '', str(cpf_val))
                     if len(clean_cpf) == 11 and clean_cpf in existing_lead_cpfs_map:
@@ -1484,7 +1487,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Comparação concluída. {len(leads_found)} leads encontrados para higienização."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             task.details = {'leads_to_delete_preview': leads_found}
             db.session.add(task)
             db.session.commit()
@@ -1497,7 +1500,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na planilha: {ve}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1508,7 +1511,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Ocorreu um erro inesperado: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1517,7 +1520,10 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
                               details={'error': str(e), 'task_id': task_id})
         finally:
             if os.path.exists(filepath):
-                os.remove(filepath)
+                try:
+                    os.remove(filepath)
+                except OSError as e:
+                    print(f"ERRO: Falha ao remover arquivo de higienização temporário {filepath}: {e}")
             db.session.remove()
 
 @bp.route('/admin/hygiene/confirm/<string:task_id>', methods=['GET', 'POST'])
@@ -1529,19 +1535,16 @@ def hygiene_confirm_page(task_id):
         flash('Tarefa de higienização não encontrada ou inválida.', 'danger')
         return redirect(url_for('main.hygiene_upload_page'))
     
-    # Se a tarefa ainda estiver a correr, renderiza a página de espera
-    if task.status == 'PENDING' or task.status == 'RUNNING':
+    if task.status in ['PENDING', 'RUNNING']:
         return render_template('admin/hygiene_confirm.html', 
                                title='Higienização - A Processar', 
                                task_id=task.id)
     
-    # Se a tarefa falhou, mostra uma mensagem de erro
     if task.status == 'FAILED':
         flash(f"A tarefa de comparação de CPFs falhou: {task.message}", 'danger')
         log_system_action('HYGIENE_CONFIRM_FAILED', entity_type='BackgroundTask', entity_id=task.id, description="Acesso à confirmação de higienização falhou: tarefa com status FAILED.")
         return redirect(url_for('main.hygiene_upload_page'))
 
-    # Se a tarefa estiver concluída, obtém os detalhes
     leads_to_delete = task.details.get('leads_to_delete_preview', []) if task.details else []
     
     if request.method == 'POST':
@@ -1563,12 +1566,10 @@ def hygiene_confirm_page(task_id):
         flash('A higienização dos leads foi iniciada em segundo plano. Você será notificado sobre o progresso.', 'info')
         return redirect(url_for('main.hygiene_confirm_page', task_id=new_delete_task_id))
 
-    # Renderiza a página de confirmação com os resultados
     return render_template('admin/hygiene_confirm.html', 
                            title='Higienização - Confirmar', 
                            task_id=task.id)
 
-# Função em segundo plano para deletar os leads confirmados
 def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
     with app.app_context():
         task = BackgroundTask.query.get(task_id)
@@ -1594,7 +1595,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = "Nenhum lead para higienizar. Concluído."
-                task.end_time = datetime.now(timezone.utc)
+                task.end_time = datetime.utcnow()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1624,7 +1625,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Higienização concluída. Total de {processed_count} leads removidos do sistema."
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1634,7 +1635,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na higienização: {str(e)}"
-            task.end_time = datetime.now(timezone.utc)
+            task.end_time = datetime.utcnow()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1642,7 +1643,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
         finally:
             db.session.remove()
 
-# --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS (MANTIDAS) ---
+# --- ROTAS DE EXPORTAÇÃO FILTRADA DE LEADS ---
 @bp.route('/admin/reports')
 @login_required
 @require_role('super_admin')
@@ -1698,7 +1699,8 @@ def admin_export_filtered_leads():
     elif tabulation_status == 'new':
         leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.is_(None))
     elif tabulation_status == 'recycled':
-        leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.isnot(None), Lead.available_after > datetime.now(timezone.utc))
+        # CORREÇÃO: Usar datetime.utcnow() para consistência
+        leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.isnot(None), Lead.available_after > datetime.utcnow())
     
     if product_ids_str:
         try:
@@ -1808,24 +1810,29 @@ def parceiro_monitor():
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        if agent.role == 'consultor' and datetime.now(timezone.utc) - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes):
+        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
+        if agent.role == 'consultor' and agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
-                agent.status_timestamp = datetime.now(timezone.utc)
+                # CORREÇÃO: Usar datetime.utcnow() para consistência
+                agent.status_timestamp = datetime.utcnow()
                 db.session.add(agent)
                 db.session.commit()
         else:
             real_status = agent.current_status
 
-        time_in_status = datetime.now(timezone.utc) - agent.status_timestamp
+        # CORREÇÃO: Usar datetime.utcnow() para comparar com o dado "naive" do banco
+        time_in_status = datetime.utcnow() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
         timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
+    
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
 
@@ -1851,7 +1858,6 @@ def parceiro_performance_dashboard():
     total_conversions_team = 0
     if user_ids_in_group:
         total_calls_team = ActivityLog.query.filter(ActivityLog.user_id.in_(user_ids_in_group), ActivityLog.timestamp.between(start_date, end_date)).count()
-        # [CORRIGIDO] Filtra as conversões de todos os usuários no grupo, não apenas do admin
         total_conversions_team = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id.in_(user_ids_in_group), ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
 
     team_conversion_rate = (total_conversions_team / total_calls_team * 100) if total_calls_team > 0 else 0
@@ -1875,7 +1881,6 @@ def parceiro_performance_dashboard():
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
         performance_data.append({'name': consultant.username, 'status': consultant.current_status, 'total_calls': total_calls, 'total_conversions': total_conversions, 'conversion_rate': conversion_rate})
     
-    # [CORRIGIDO] Usa as chaves corretas ('total_conversions', 'total_calls') para ordenação
     performance_data.sort(key=lambda x: (x['total_conversions'], x['total_calls']), reverse=True)
     
     kpis = {"total_calls": total_calls_team, "total_conversions": total_conversions_team, "conversion_rate": team_conversion_rate}
@@ -1937,7 +1942,8 @@ def consultor_dashboard():
     vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
     mailings_disponiveis = []
     if vagas_na_carteira > 0 and vagas_na_puxada_diaria > 0:
-        mailings_disponiveis = db.session.query(Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado, func.count(Lead.id).label('leads_disponiveis')).join(Produto, Lead.produto_id == Produto.id).filter(Lead.status == 'Novo', Lead.consultor_id == None, or_(Lead.available_after == None, Lead.available_after <= datetime.now(timezone.utc))).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
+        # CORREÇÃO: Usar datetime.utcnow() para consistência
+        mailings_disponiveis = db.session.query(Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado, func.count(Lead.id).label('leads_disponiveis')).join(Produto, Lead.produto_id == Produto.id).filter(Lead.status == 'Novo', Lead.consultor_id == None, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
     search_history = request.args.get('search_history', '')
     history_query = ActivityLog.query.options(joinedload(ActivityLog.lead), joinedload(ActivityLog.tabulation)).filter(ActivityLog.user_id == current_user.id)
     if search_history:
@@ -1969,7 +1975,8 @@ def pegar_leads_selecionados():
                 produto_id = int(produto_id)
             except (ValueError, IndexError):
                 continue
-            leads_disponiveis = Lead.query.filter(Lead.status == 'Novo', Lead.consultor_id == None, Lead.produto_id == produto_id, Lead.estado == estado, or_(Lead.available_after == None, Lead.available_after <= datetime.now(timezone.utc))).limit(quantidade_a_pegar).all()
+            # CORREÇÃO: Usar datetime.utcnow() para consistência
+            leads_disponiveis = Lead.query.filter(Lead.status == 'Novo', Lead.consultor_id == None, Lead.produto_id == produto_id, Lead.estado == estado, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).limit(quantidade_a_pegar).all()
             if leads_disponiveis:
                 try:
                     for lead in leads_disponiveis:
@@ -2045,7 +2052,8 @@ def atender_lead(lead_id):
         return redirect(url_for('main.atendimento'))
     action_type = ''
     if tabulation.is_recyclable and tabulation.recycle_in_days is not None:
-        recycle_date = datetime.now(timezone.utc) + timedelta(days=tabulation.recycle_in_days)
+        # CORREÇÃO: Usar datetime.utcnow() para consistência
+        recycle_date = datetime.utcnow() + timedelta(days=tabulation.recycle_in_days)
         lead.status = 'Novo'
         lead.consultor_id = None
         lead.tabulation_id = None 
@@ -2056,7 +2064,8 @@ def atender_lead(lead_id):
     else:
         lead.tabulation_id = tabulation.id
         lead.status = 'Tabulado'
-        lead.data_tabulacao = datetime.now(timezone.utc)
+        # CORREÇÃO: Usar datetime.utcnow() para consistência
+        lead.data_tabulacao = datetime.utcnow()
         action_type = 'Tabulação'
         flash(f'Lead de {lead.nome} tabulado com sucesso!', 'success')
     activity_log_entry = ActivityLog(lead_id=lead.id, user_id=current_user.id, tabulation_id=tabulation.id, action_type=action_type)
@@ -2090,7 +2099,8 @@ def retabulate_lead(lead_id):
         return redirect(request.referrer or url_for('main.index'))
     lead.tabulation_id = new_tabulation.id
     lead.status = 'Tabulado'
-    lead.data_tabulacao = datetime.now(timezone.utc)
+    # CORREÇÃO: Usar datetime.utcnow() para consistência
+    lead.data_tabulacao = datetime.utcnow()
     if original_consultor:
         lead.consultor_id = original_consultor.id
     retab_log = ActivityLog(lead_id=lead.id, user_id=current_user.id, tabulation_id=new_tabulation.id, action_type='Retabulação')
