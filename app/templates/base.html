@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-    <meta charset="utf-g">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or 'Sistema' }} - FS PROMOTORA</title>
 
@@ -37,14 +37,14 @@
             display: block;
         }
         
+        /* Oculta o logo escuro por padrão */
         .logo-dark {
             display: none;
         }
 
-        body[data-theme="dark"] .logo-light { display: none; }
-        body[data-theme="dark"] .logo-dark { display: block; }
-        body[data-theme="ocean"] .logo-dark { display: none; }
-        body[data-theme="ocean"] .logo-light { display: block; }
+        /* Regras de Tema para os Logos e Body */
+        [data-theme="dark"] .logo-light { display: none; }
+        [data-theme="dark"] .logo-dark { display: block; }
 
         .navbar-collapse { padding-top: 10px; }
         
@@ -53,66 +53,75 @@
         }
 
         /* ===== CSS DOS TEMAS ===== */
-        body[data-theme="default"] { background-color: #f8f9fa !important; color: #212529; }
-        body[data-theme="default"] .card, 
-        body[data-theme="default"] .list-group-item,
-        body[data-theme="default"] .modal-content { background-color: #fff; color: #212529; }
-        body[data-theme="default"] .navbar-dark.bg-dark { background: #d2d2d2 !important; }
-        body[data-theme="default"] h1, body[data-theme="default"] h2, body[data-theme="default"] h3,
-        body[data-theme="default"] h4, body[data-theme="default"] h5, body[data-theme="default"] h6 { color: #212529; }
-        body[data-theme="default"] .table-secondary th { color: #212529; }
+        [data-theme="default"] { background-color: #f8f9fa !important; color: #212529; }
+        [data-theme="default"] .card, 
+        [data-theme="default"] .list-group-item,
+        [data-theme="default"] .modal-content { background-color: #fff; color: #212529; }
+        [data-theme="default"] .navbar-dark.bg-dark { background: #d2d2d2 !important; }
+        [data-theme="default"] h1, [data-theme="default"] h2, [data-theme="default"] h3,
+        [data-theme="default"] h4, [data-theme="default"] h5, [data-theme="default"] h6 { color: #212529; }
+        [data-theme="default"] .table-secondary th { color: #212529; }
 
-        body[data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
-        body[data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #191919 0%, #1c1c1c 100%) !important; }
-        body[data-theme="dark"] .card, 
-        body[data-theme="dark"] .list-group-item,
-        body[data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
+        [data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
+        [data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #191919 0%, #1c1c1c 100%) !important; }
+        [data-theme="dark"] .card, 
+        [data-theme="dark"] .list-group-item,
+        [data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
         
-        body[data-theme="dark"] .table {
+        [data-theme="dark"] .table {
             --bs-table-color: #dee2e6; --bs-table-bg: #343a40; --bs-table-border-color: #495057;
             --bs-table-striped-color: #dee2e6; --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
             --bs-table-hover-color: #fff; --bs-table-hover-bg: rgba(255, 255, 255, 0.05);
         }
-        body[data-theme="dark"] .table-secondary {
+        [data-theme="dark"] .table-secondary {
             --bs-table-bg: #495057; --bs-table-color: #fff; --bs-table-border-color: #6c757d;
         }
         
-        body[data-theme="dark"] h1, body[data-theme="dark"] h2, body[data-theme="dark"] h3,
-        body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] h6 { color: #fff; }
-        body[data-theme="dark"] .text-muted { color: #adb5bd !important; }
+        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+        [data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 { color: #fff; }
+        [data-theme="dark"] .text-muted { color: #adb5bd !important; }
 
-        body[data-theme="dark"] .modal-header, body[data-theme="dark"] .modal-footer { border-color: #495057; }
-        body[data-theme="dark"] .btn-close { filter: invert(1) grayscale(100) brightness(200%); }
-        body[data-theme="dark"] .accordion-item { background-color: #343a40; border-color: #495057; }
-        body[data-theme="dark"] .accordion-button { background-color: #495057; color: #fff; }
-        body[data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; }
-        body[data-theme="dark"] .accordion-button::after { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e"); }
+        [data-theme="dark"] .modal-header, [data-theme="dark"] .modal-footer { border-color: #495057; }
+        [data-theme="dark"] .btn-close { filter: invert(1) grayscale(100) brightness(200%); }
+        [data-theme="dark"] .accordion-item { background-color: #343a40; border-color: #495057; }
+        [data-theme="dark"] .accordion-button { background-color: #495057; color: #fff; }
+        [data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; }
+        [data-theme="dark"] .accordion-button::after { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e"); }
 
-        body[data-theme="dark"] .form-control,
-        body[data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
-        body[data-theme="dark"] .form-control:focus,
-        body[data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
+        [data-theme="dark"] .form-control,
+        [data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
+        [data-theme="dark"] .form-control:focus,
+        [data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
         
-        body[data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
-        body[data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
-        body[data-theme="ocean"] .card, 
-        body[data-theme="ocean"] .list-group-item,
-        body[data-theme="ocean"] .modal-content { background-color: #fff; color: #003d5b; }
-        body[data-theme="ocean"] h1, body[data-theme="ocean"] h2, body[data-theme="ocean"] h3,
-        body[data-theme="ocean"] h4, body[data-theme="ocean"] h5, body[data-theme="ocean"] h6 { color: #003d5b; }
+        [data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
+        [data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
+        [data-theme="ocean"] .card, 
+        [data-theme="ocean"] .list-group-item,
+        [data-theme="ocean"] .modal-content { background-color: #fff; color: #003d5b; }
+        [data-theme="ocean"] h1, [data-theme="ocean"] h2, [data-theme="ocean"] h3,
+        [data-theme="ocean"] h4, [data-theme="ocean"] h5, [data-theme="ocean"] h6 { color: #003d5b; }
     </style>
-</head>
-<body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 
-    <!-- CORREÇÃO: Script movido para o início do body para aplicar o tema local imediatamente -->
+    <!-- ===== CORREÇÃO DEFINITIVA DO TEMA ===== -->
     <script>
         (function() {
-            var theme = localStorage.getItem('userTheme');
-            if (theme) {
-                document.body.setAttribute('data-theme', theme);
+            // Pega o tema do localStorage para evitar o "flash" da página
+            let theme = localStorage.getItem('userTheme');
+            
+            // Se não houver tema no localStorage, usa o tema vindo do servidor
+            if (!theme) {
+                theme = "{{ current_user.theme if current_user.is_authenticated else 'default' }}";
             }
+            
+            // Aplica o atributo ao elemento raiz (html) para carregar o estilo imediatamente
+            document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
+    <!-- FIM DA CORREÇÃO -->
+</head>
+
+<!-- O atributo `data-theme` agora é definido pelo script acima, no `html`, mas mantemos no body por compatibilidade com seu CSS original -->
+<body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 
     <div id="loader-overlay">
         <div class="spinner"></div>
@@ -136,7 +145,7 @@
                             {% elif current_user.role == 'admin_parceiro' %}
                                 <li class="nav-item"><a class="nav-link" href="{{ url_for('main.parceiro_dashboard') }}">Meu Painel</a></li>
                             {% else %}
-                                <li class="nav-item"><a class="nav_link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
                             {% endif %}
                         {% endif %}
                     </ul>
@@ -219,12 +228,21 @@
         </div>
     </div>
 
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.33.0.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Sincroniza o tema vindo do servidor com o localStorage, garantindo que a escolha seja "lembrada"
+            // Esta é a parte que garante que, após o redirect, o localStorage esteja correto.
+            const serverTheme = document.body.getAttribute('data-theme');
+            if (serverTheme) {
+                localStorage.setItem('userTheme', serverTheme);
+                // Atualiza também o atributo do HTML para consistência
+                document.documentElement.setAttribute('data-theme', serverTheme);
+            }
+
+            // Script do loader
             document.querySelectorAll('form').forEach(form => {
                 form.addEventListener('submit', function() {
                     if (!form.classList.contains('no-loader') && form.checkValidity()) {
@@ -319,17 +337,6 @@
             };
         });
     </script>
-
-    {% block scripts %}
-    <!-- CORREÇÃO: Este script agora apenas sincroniza o tema do servidor para o localStorage -->
-    <script>
-        (function() {
-            var serverTheme = document.body.getAttribute('data-theme');
-            if (serverTheme) {
-                localStorage.setItem('userTheme', serverTheme);
-            }
-        })();
-    </script>
-    {% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>
