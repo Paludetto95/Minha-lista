@@ -1,15 +1,12 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-    <meta charset="utf-8">
+    <meta charset="utf-g">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or 'Sistema' }} - FS PROMOTORA</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
-          xintegrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-          xintegrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
     {% block styles %}{% endblock %}
 
@@ -27,62 +24,35 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* =================================================================== */
-        /* == CSS ATUALIZADO PARA O CABEÇALHO (Centralização Definitiva)    == */
-        /* =================================================================== */
         .navbar-brand {
-            position: absolute; /* Tira o logo do fluxo normal para posicionamento exato */
-            left: 50%;          /* Move a borda esquerda do logo para o meio da tela */
-            transform: translateX(-50%); /* Puxa o logo 50% da sua própria largura para a esquerda, centralizando-o perfeitamente */
-            padding: 0 !important; /* Remove paddings que possam interferir */
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0 !important;
         }
 
-        /* Removido o .navbar-brand .logo geral */
-        /* ADICIONADO: Estilos para os dois logos */
         .logo-light, .logo-dark {
-            height: 55px; /* Altura do seu logo */
+            height: 55px;
             width: auto;
-            display: block; /* Garante que a imagem se comporte como um bloco */
-        }
-        
-        .logo-dark { /* Esconde o logo escuro por padrão */
-            display: none;
-        }
-
-        /* Regras para mostrar/esconder logos com base no tema */
-        body[data-theme="dark"] .logo-light {
-            display: none; /* Esconde o logo claro no tema escuro */
-        }
-        body[data-theme="dark"] .logo-dark {
-            display: block; /* Mostra o logo escuro no tema escuro */
-        }
-        /* Para o tema oceano, mantém o logo claro */
-        body[data-theme="ocean"] .logo-dark {
-            display: none;
-        }
-        body[data-theme="ocean"] .logo-light {
             display: block;
         }
-
-        /* Ajusta o conteúdo colapsável para não sobrepor o logo em telas pequenas */
-        .navbar-collapse {
-            padding-top: 10px; /* Adiciona um espaço no topo para os links */
+        
+        .logo-dark {
+            display: none;
         }
+
+        body[data-theme="dark"] .logo-light { display: none; }
+        body[data-theme="dark"] .logo-dark { display: block; }
+        body[data-theme="ocean"] .logo-dark { display: none; }
+        body[data-theme="ocean"] .logo-light { display: block; }
+
+        .navbar-collapse { padding-top: 10px; }
         
         @media (min-width: 992px) {
-            /* Em telas grandes, voltamos o conteúdo colapsável ao normal */
-            .navbar-collapse {
-                padding-top: 0;
-            }
+            .navbar-collapse { padding-top: 0; }
         }
-        /* =================================================================== */
-        /* == FIM DO CSS DO CABEÇALHO                                       == */
-        /* =================================================================== */
 
-
-        /* ===== CSS DOS TEMAS (VERSÃO FINAL E COMPLETA) ===== */
-
-        /* TEMA PADRÃO (CLARO) */
+        /* ===== CSS DOS TEMAS ===== */
         body[data-theme="default"] { background-color: #f8f9fa !important; color: #212529; }
         body[data-theme="default"] .card, 
         body[data-theme="default"] .list-group-item,
@@ -90,77 +60,39 @@
         body[data-theme="default"] .navbar-dark.bg-dark { background: #d2d2d2 !important; }
         body[data-theme="default"] h1, body[data-theme="default"] h2, body[data-theme="default"] h3,
         body[data-theme="default"] h4, body[data-theme="default"] h5, body[data-theme="default"] h6 { color: #212529; }
-        body[data-theme="default"] .table-secondary th { color: #212529; } /* Texto escuro no cabeçalho cinza */
+        body[data-theme="default"] .table-secondary th { color: #212529; }
 
-        /* TEMA ESCURO (DARK) */
         body[data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
         body[data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #191919 0%, #1c1c1c 100%) !important; }
         body[data-theme="dark"] .card, 
         body[data-theme="dark"] .list-group-item,
         body[data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
         
-        /* REGRAS DE TABELA PARA TEMA ESCURO */
         body[data-theme="dark"] .table {
-            --bs-table-color: #dee2e6;
-            --bs-table-bg: #343a40;
-            --bs-table-border-color: #495057;
-            --bs-table-striped-color: #dee2e6;
-            --bs-table-striped-bg: rgba(255, 255, 255, 0.03); /* Linhas zebradas sutis */
-            --bs-table-hover-color: #fff;
-            --bs-table-hover-bg: rgba(255, 255, 255, 0.05);
+            --bs-table-color: #dee2e6; --bs-table-bg: #343a40; --bs-table-border-color: #495057;
+            --bs-table-striped-color: #dee2e6; --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+            --bs-table-hover-color: #fff; --bs-table-hover-bg: rgba(255, 255, 255, 0.05);
         }
-        body[data-theme="dark"] .table-secondary { /* Cabeçalhos de tabela */
-            --bs-table-bg: #495057;
-            --bs-table-color: #fff;
-            --bs-table-border-color: #6c757d;
+        body[data-theme="dark"] .table-secondary {
+            --bs-table-bg: #495057; --bs-table-color: #fff; --bs-table-border-color: #6c757d;
         }
         
-        /* REGRAS DE TEXTO PARA TEMA ESCURO */
         body[data-theme="dark"] h1, body[data-theme="dark"] h2, body[data-theme="dark"] h3,
         body[data-theme="dark"] h4, body[data-theme="dark"] h5, body[data-theme="dark"] h6 { color: #fff; }
         body[data-theme="dark"] .text-muted { color: #adb5bd !important; }
 
-        /* REGRAS DE COMPONENTES PARA TEMA ESCURO */
         body[data-theme="dark"] .modal-header, body[data-theme="dark"] .modal-footer { border-color: #495057; }
         body[data-theme="dark"] .btn-close { filter: invert(1) grayscale(100) brightness(200%); }
         body[data-theme="dark"] .accordion-item { background-color: #343a40; border-color: #495057; }
         body[data-theme="dark"] .accordion-button { background-color: #495057; color: #fff; }
-        body[data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15); }
+        body[data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; }
         body[data-theme="dark"] .accordion-button::after { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e"); }
 
-        /* REGRAS DE FORMULÁRIO PARA TEMA ESCURO */
         body[data-theme="dark"] .form-control,
         body[data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
-        body[data-theme="dark"] .form-control::placeholder { color: #adb5bd; }
         body[data-theme="dark"] .form-control:focus,
         body[data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
-        body[data-theme="dark"] .form-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23dee2e6'%3e%3cpath fill='none' stroke='%23dee2e6' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); }
-        body[data-theme="dark"] .form-control[type="file"]::file-selector-button { background-color: #6c757d; color: #fff; border-color: #6c757d; }
-        body[data-theme="dark"] .form-control[type="file"]:hover::file-selector-button { background-color: #5c636a; border-color: #565e64; }
-        body[data-theme="dark"] .form-check-input { background-color: #495057; border-color: #6c757d; }
-        body[data-theme="dark"] .form-check-input:checked { background-color: #0d6efd; border-color: #0d6efd; }
-
-        /* REGRAS DE BOTÕES OUTLINE */
-        body[data-theme="dark"] .btn-outline-success { background-color: #198754; color: #fff; border-color: #198754; }
-        body[data-theme="dark"] .btn-outline-success:hover { background-color: #157347; color: #fff; border-color: #146c43; }
-        body[data-theme="dark"] .btn-outline-danger { background-color: #dc3545; color: #fff; border-color: #dc3545; }
-        body[data-theme="dark"] .btn-outline-danger:hover { background-color: #bb2d3b; color: #fff; border-color: #b02a37; }
-        body[data-theme="dark"] .btn-outline-primary { background-color: #0d6efd; color: #fff; border-color: #0d6efd; }
-        body[data-theme="dark"] .btn-outline-primary:hover { background-color: #0b5ed7; color: #fff; border-color: #0a58ca; }
-
-        /* REGRAS DE BARRA DE PROGRESSO */
-        body[data-theme="dark"] .progress { background-color: #495057; }
-        /* ADICIONADO: Estilo para o texto da mensagem de progresso */
-        #progressMessage {
-            font-size: 0.9rem;
-            color: #6c757d; /* Ou uma cor que se destaque no tema atual */
-            margin-top: 10px;
-        }
-        body[data-theme="dark"] #progressMessage {
-             color: #adb5bd;
-        }
-
-        /* TEMA OCEANO (AZUL) */
+        
         body[data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
         body[data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
         body[data-theme="ocean"] .card, 
@@ -172,10 +104,13 @@
 </head>
 <body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 
+    <!-- CORREÇÃO: Script movido para o início do body para aplicar o tema local imediatamente -->
     <script>
         (function() {
-            var theme = localStorage.getItem('userTheme') || document.body.getAttribute('data-theme');
-            document.body.setAttribute('data-theme', theme);
+            var theme = localStorage.getItem('userTheme');
+            if (theme) {
+                document.body.setAttribute('data-theme', theme);
+            }
         })();
     </script>
 
@@ -186,20 +121,14 @@
     <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
             <div class="container-fluid">
-
                 <a class="navbar-brand" href="{{ url_for('main.index') }}" aria-label="Início">
-                    <!-- ADICIONADO: Dois elementos de imagem para o logo -->
                     <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo-light" alt="Logo FS Promotora">
                     <img src="{{ url_for('static', filename='images/logo1.png') }}" class="logo-dark" alt="Logo FS Promotora Dark">
                 </a>
-
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                        aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-
                 <div class="collapse navbar-collapse" id="navbarNav">
-                    
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         {% if current_user.is_authenticated %}
                             {% if current_user.role == 'super_admin' %}
@@ -211,7 +140,6 @@
                             {% endif %}
                         {% endif %}
                     </ul>
-
                     <ul class="navbar-nav">
                         {% if current_user.is_authenticated %}
                             {% if current_user.role == 'super_admin' %}
@@ -272,13 +200,11 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- ADICIONADO: Modal de Barra de Progresso (Genérico) -->
     <div class="modal fade" id="progressBarModal" tabindex="-1" aria-labelledby="progressBarModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="progressBarModalLabel">Processando Operação...</h5>
-                    <!-- O botão de fechar será removido ou desabilitado durante o processo e habilitado no final -->
                 </div>
                 <div class="modal-body">
                     <div class="progress mb-3">
@@ -288,21 +214,17 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProgressBarModalButton" style="display: none;">Fechar</button>
-                    <!-- O botão de fechar aparece apenas quando a tarefa é concluída ou falha -->
                 </div>
             </div>
         </div>
     </div>
 
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
-            xintegrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
-            crossorigin="anonymous"></script>
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     
     <script src="https://cdn.plot.ly/plotly-2.33.0.min.js"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Script do Loader de Tela Cheia para submissões de formulário
             document.querySelectorAll('form').forEach(form => {
                 form.addEventListener('submit', function() {
                     if (!form.classList.contains('no-loader') && form.checkValidity()) {
@@ -316,28 +238,23 @@
                 }
             });
 
-            // Lógica do Modal de Barra de Progresso
             const progressBarModal = new bootstrap.Modal(document.getElementById('progressBarModal'));
             const progressBar = document.getElementById('progressBar');
             const progressMessage = document.getElementById('progressMessage');
             const closeProgressBarModalButton = document.getElementById('closeProgressBarModalButton');
 
-            // ADICIONADO: Event listener para o botão de fechar do modal
             closeProgressBarModalButton.addEventListener('click', function() {
-                // Apenas recarrega a página se a tarefa já estiver COMPLETA ou FALHA
                 const progressBarElement = document.getElementById('progressBar');
                 if (progressBarElement.classList.contains('bg-success') || progressBarElement.classList.contains('bg-danger')) {
                     window.location.reload();
                 }
             });
 
-            let pollingInterval; // Variável para armazenar o ID do intervalo de polling
+            let pollingInterval;
 
-            // Função para exibir flash messages via JS (AGORA GLOBAL)
             window.flashMessage = function(category, message) {
                 const alertContainer = document.querySelector('main .container-fluid .row .col-md-10');
                 if (alertContainer) {
-                    // Remove alertas existentes para não acumular
                     const existingAlerts = alertContainer.querySelectorAll('.alert');
                     existingAlerts.forEach(alert => alert.remove());
 
@@ -348,45 +265,26 @@
                         </div>
                     `;
                     alertContainer.insertAdjacentHTML('afterbegin', alertHtml);
-                    // Adiciona um pequeno delay para remover o alerta, se for um sucesso temporário
-                    if (category === 'success' || category === 'info') {
-                        setTimeout(() => {
-                            const newAlert = alertContainer.querySelector('.alert');
-                            if (newAlert) {
-                                new bootstrap.Alert(newAlert).close();
-                            }
-                        }, 5000); // 5 segundos
-                    }
                 }
             };
 
-            // Função para iniciar o polling
             window.startPollingProgress = function(taskId) {
-                // Resetar o modal
                 progressBar.style.width = '0%';
                 progressBar.setAttribute('aria-valuenow', 0);
                 progressBar.textContent = '0%';
                 progressBar.classList.remove('bg-success', 'bg-danger');
                 progressBar.classList.add('bg-primary', 'progress-bar-animated', 'progress-bar-striped');
                 progressMessage.textContent = 'Iniciando operação...';
-                closeProgressBarModalButton.style.display = 'none'; // Esconde o botão de fechar
+                closeProgressBarModalButton.style.display = 'none';
+                progressBarModal.show();
 
-                progressBarModal.show(); // Mostra o modal
-
-                // Limpa qualquer intervalo anterior para evitar múltiplos pollings
                 if (pollingInterval) {
                     clearInterval(pollingInterval);
                 }
 
                 pollingInterval = setInterval(function() {
                     fetch(`/task_status/${taskId}`)
-                        .then(response => {
-                            if (!response.ok) {
-                                // Se a resposta não for 200 OK (ex: 403, 404, 500)
-                                return response.json().then(errData => { throw new Error(errData.message || `Erro HTTP: ${response.status}`); });
-                            }
-                            return response.json();
-                        })
+                        .then(response => response.json())
                         .then(data => {
                             progressBar.style.width = data.progress + '%';
                             progressBar.setAttribute('aria-valuenow', data.progress);
@@ -394,24 +292,18 @@
                             progressMessage.textContent = data.message;
 
                             if (data.status === 'COMPLETED' || data.status === 'FAILED') {
-                                clearInterval(pollingInterval); // Para o polling
+                                clearInterval(pollingInterval);
                                 progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-                                closeProgressBarModalButton.style.display = 'block'; // Mostra o botão de fechar
+                                closeProgressBarModalButton.style.display = 'block';
 
                                 if (data.status === 'COMPLETED') {
                                     progressBar.classList.add('bg-success');
-                                    window.flashMessage('success', data.message); // Usa a função global
                                     setTimeout(() => {
                                         progressBarModal.hide();
                                         window.location.reload(); 
-                                    }, 1500); // Dá um pequeno tempo para o usuário ver 100%
+                                    }, 1500);
                                 } else if (data.status === 'FAILED') {
                                     progressBar.classList.add('bg-danger');
-                                    window.flashMessage('danger', data.message); // Usa a função global
-                                    setTimeout(() => {
-                                        progressBarModal.hide();
-                                        window.location.reload(); 
-                                    }, 3000); // Mostra por mais tempo em caso de erro
                                 }
                             }
                         })
@@ -420,25 +312,20 @@
                             clearInterval(pollingInterval);
                             progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
                             progressBar.classList.add('bg-danger');
-                            progressMessage.textContent = `Erro ao carregar o progresso da tarefa: ${error.message}`;
+                            progressMessage.textContent = 'Erro ao carregar o progresso da tarefa.';
                             closeProgressBarModalButton.style.display = 'block';
-                            window.flashMessage('danger', 'Ocorreu um erro ao monitorar a tarefa em segundo plano. Verifique o console do navegador para detalhes.');
-                            setTimeout(() => {
-                                progressBarModal.hide();
-                                window.location.reload(); 
-                            }, 3000);
                         });
-                }, 1000); // Polling a cada 1 segundo
+                }, 1000);
             };
         });
     </script>
 
     {% block scripts %}
+    <!-- CORREÇÃO: Este script agora apenas sincroniza o tema do servidor para o localStorage -->
     <script>
         (function() {
             var serverTheme = document.body.getAttribute('data-theme');
-            var localTheme = localStorage.getItem('userTheme');
-            if (serverTheme !== localTheme) {
+            if (serverTheme) {
                 localStorage.setItem('userTheme', serverTheme);
             }
         })();

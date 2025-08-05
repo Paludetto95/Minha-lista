@@ -23,7 +23,7 @@ class User(UserMixin, db.Model):
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
 
-    # CORREÇÃO: Usar back_populates para resolver o conflito de relacionamento
+    # Relacionamentos com outras tabelas
     system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
     activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
     tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic', foreign_keys='BackgroundTask.user_id')
@@ -43,7 +43,10 @@ class Lead(db.Model):
     telefone = db.Column(db.String(20))
     telefone_2 = db.Column(db.String(20))
     cidade = db.Column(db.String(100))
-    rg = db.Column(db.String(20))
+    # --- CORREÇÃO APLICADA AQUI ---
+    # O tamanho da coluna 'rg' foi aumentado de 20 para 100 caracteres.
+    rg = db.Column(db.String(100))
+    # --- FIM DA CORREÇÃO ---
     estado = db.Column(db.String(2), index=True)
     bairro = db.Column(db.String(100))
     cep = db.Column(db.String(10))

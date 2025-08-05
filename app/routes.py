@@ -8,11 +8,18 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from collections import defaultdict
 from functools import wraps
-from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
+from flask import (
+    render_template, flash, redirect, url_for, request, Blueprint, 
+    jsonify, Response, current_app, abort, send_from_directory
+)
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
-from app.models import User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, Grupo, BackgroundTask, SystemLog
+from app.models import (
+    User, Lead, Proposta, Banco, Convenio, Situacao, TipoDeOperacao, 
+    LeadConsumption, Tabulation, Produto, LayoutMailing, ActivityLog, 
+    Grupo, BackgroundTask, SystemLog
+)
 from datetime import datetime, date, time, timedelta
 from sqlalchemy import func, cast, Date, or_, case, and_
 from sqlalchemy.exc import IntegrityError
@@ -63,13 +70,8 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     
     with app_context.app_context():
         task = BackgroundTask(
-            user_id=user_id,
-            task_type=task_type,
-            status='PENDING',
-            message=initial_message,
-            progress=0,
-            items_processed=0,
-            total_items=0
+            user_id=user_id, task_type=task_type, status='PENDING',
+            message=initial_message
         )
         db.session.add(task)
         db.session.commit()
@@ -79,22 +81,22 @@ def start_background_task(task_func, task_type, user_id, initial_message="", *ar
     thread.start()
     return task_id
 
-def log_system_action(action_type, entity_type=None, entity_id=None, description=None, details=None, user_id=None):
+def log_system_action(action_type, **kwargs):
     """Centraliza o registro de logs do sistema."""
+    user_id = kwargs.get('user_id')
     if user_id is None:
         try:
-            if current_user and current_user.is_authenticated:
-                user_id = current_user.id
+            user_id = current_user.id if current_user.is_authenticated else None
         except RuntimeError:
             user_id = None
-    
+
     log_entry = SystemLog(
         user_id=user_id,
         action_type=action_type,
-        entity_type=entity_type,
-        entity_id=str(entity_id) if entity_id is not None else None,
-        description=description,
-        details=details
+        entity_type=kwargs.get('entity_type'),
+        entity_id=str(kwargs.get('entity_id', '')),
+        description=kwargs.get('description'),
+        details=kwargs.get('details')
     )
     db.session.add(log_entry)
     try:
@@ -112,9 +114,7 @@ def require_role(*roles):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 return redirect(url_for('main.login'))
-            if current_user.role == 'super_admin':
-                return f(*args, **kwargs)
-            if current_user.role not in roles:
+            if current_user.role != 'super_admin' and current_user.role not in roles:
                 flash('Acesso negado. Você não tem permissão para ver esta página.', 'danger')
                 return redirect(url_for('main.index'))
             return f(*args, **kwargs)
@@ -170,7 +170,7 @@ def register():
 @login_required
 def logout():
     log_system_action('LOGOUT', entity_type='User', entity_id=current_user.id, description=f"Usuário '{current_user.username}' deslogou.")
-    if current_user.is_authenticated and current_user.role == 'consultor':
+    if current_user.role == 'consultor':
         update_user_status(current_user, 'Offline')
         db.session.commit()
     logout_user()
@@ -198,7 +198,15 @@ def profile():
                               details={'old': current_user.theme, 'new': theme})
             current_user.theme = theme
             db.session.commit()
-            flash(f"""Tema atualizado com sucesso!<script>localStorage.setItem('userTheme', '{theme}');window.location.reload();</script>""", 'success')
+            
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Removemos o script de recarregamento da mensagem flash.
+            # O redirect abaixo já cuida de recarregar a página com o novo tema.
+            # O script no template base.html irá sincronizar o localStorage.
+            flash('Tema atualizado com sucesso!', 'success')
+            return redirect(url_for('main.profile'))
+            # --- FIM DA CORREÇÃO ---
+            
     return render_template('profile.html', title="Minhas Configurações")
     
 # --- ROTAS DE ADMIN ---
@@ -905,9 +913,10 @@ def delete_user(id):
     
     return redirect(redirect_url)
 
-@bp.route('/partner_logos/<filename>')
+@bp.route('/partner_logos/<path:filename>')
 def serve_partner_logo(filename):
-    return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename)
+    """Serve as imagens de logo do diretório persistente de forma segura."""
+    return send_from_directory(current_app.config['PARTNER_LOGOS_FULL_PATH'], filename, as_attachment=False)
 
 # --- ROTAS DE GESTÃO (ADMIN) ---
 
