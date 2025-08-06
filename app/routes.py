@@ -877,20 +877,26 @@ def delete_user(id):
 
     if id == current_user.id:
         flash('Não pode eliminar a sua própria conta.', 'danger')
-        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id, 
+        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id,
                           description=f"Tentativa de auto-excluir a conta '{user_to_delete.username}'.")
         return redirect(redirect_url)
 
     delete_permitted = False
     if current_user.role == 'super_admin':
+        # O Super Admin não pode ser excluído por esta rota.
+        if user_to_delete.role == 'super_admin':
+             flash('A conta do Super Administrador não pode ser excluída.', 'danger')
+             log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id,
+                               description=f"Tentativa de excluir a conta do Super Admin '{user_to_delete.username}'.")
+             return redirect(redirect_url)
         delete_permitted = True
     elif current_user.role == 'admin_parceiro':
         if user_to_delete.role == 'consultor' and user_to_delete.grupo_id == current_user.grupo_id:
             delete_permitted = True
-    
+
     if not delete_permitted:
         flash('Você não tem permissão para apagar este usuário ou ele não pertence ao seu grupo.', 'danger')
-        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id, 
+        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id,
                           description=f"Tentativa não autorizada de apagar usuário '{user_to_delete.username}' por '{current_user.username}'.",
                           details={'reason': 'Permissão negada ou fora do grupo.'})
         return redirect(redirect_url)
@@ -900,14 +906,51 @@ def delete_user(id):
     user_role_deleted = user_to_delete.role
     user_group_deleted = user_to_delete.grupo.nome if user_to_delete.grupo else 'N/A'
 
-    db.session.delete(user_to_delete)
-    db.session.commit()
-    flash('Utilizador eliminado com sucesso!', 'success')
-    log_system_action(action_type='USER_DELETED', entity_type='User', entity_id=id, 
-                      description=f"Usuário '{username_deleted}' (Email: {user_email_deleted}, Perfil: {user_role_deleted}, Equipe: {user_group_deleted}) excluído.",
-                      details={'deleted_username': username_deleted, 'deleted_email': user_email_deleted, 
-                               'deleted_role': user_role_deleted, 'deleted_group': user_group_deleted})
-    
+    try:
+        # --- INÍCIO DA CORREÇÃO ---
+        # Limpar TODAS as dependências antes de apagar o utilizador.
+
+        # 1. Desassociar Leads onde o utilizador é o consultor responsável
+        Lead.query.filter_by(consultor_id=id).update({'consultor_id': None})
+
+        # 2. Apagar registos de consumo de leads (ESTA ERA A CAUSA PROVÁVEL DO ERRO)
+        LeadConsumption.query.filter_by(user_id=id).delete(synchronize_session=False)
+
+        # 3. Apagar registos de atividade
+        ActivityLog.query.filter_by(user_id=id).delete(synchronize_session=False)
+
+        # 4. Apagar tarefas em segundo plano associadas
+        BackgroundTask.query.filter_by(user_id=id).delete(synchronize_session=False)
+
+        # 5. Anular a referência do utilizador nos logs do sistema (para manter o histórico)
+        SystemLog.query.filter_by(user_id=id).update({'user_id': None})
+        
+        # Opcional, mas recomendado: Lidar com a tabela 'Proposta'
+        # Se a tabela 'Proposta' tem um 'user_id' e as propostas devem ser apagadas com o utilizador:
+        # Proposta.query.filter_by(user_id=id).delete(synchronize_session=False)
+        # Se as propostas devem ser mantidas, mas desassociadas:
+        # Proposta.query.filter_by(user_id=id).update({'user_id': None})
+
+        # --- FIM DA CORREÇÃO ---
+
+        # 6. Agora, com todas as dependências resolvidas, apagar o utilizador
+        db.session.delete(user_to_delete)
+        
+        # 7. Efetivar todas as alterações na base de dados
+        db.session.commit()
+        
+        flash('Utilizador eliminado com sucesso!', 'success')
+        log_system_action(action_type='USER_DELETED', entity_type='User', entity_id=id,
+                          description=f"Usuário '{username_deleted}' (Email: {user_email_deleted}, Perfil: {user_role_deleted}, Equipe: {user_group_deleted}) excluído.",
+                          details={'deleted_username': username_deleted, 'deleted_email': user_email_deleted,
+                                   'deleted_role': user_role_deleted, 'deleted_group': user_group_deleted})
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ocorreu um erro ao eliminar o utilizador: {e}', 'danger')
+        log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id,
+                          description=f"Erro ao excluir usuário '{username_deleted}': {e}",
+                          details={'error': str(e)})
+
     return redirect(redirect_url)
 
 @bp.route('/partner_logos/<filename>')
