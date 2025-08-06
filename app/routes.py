@@ -1957,10 +1957,31 @@ def atendimento():
     update_user_status(current_user, 'Falando')
     db.session.commit()
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
-    campos_principais_ordenados = [('Nome', lead_para_atender.nome), ('CPF', lead_para_atender.cpf), ('Estado', lead_para_atender.estado), ('Telefone', lead_para_atender.telefone), ('Telefone 2', lead_para_atender.telefone_2)]
-    lead_details = {chave.replace('_', ' ').title(): valor for chave, valor in campos_principais_ordenados if valor}
+    lead_details = {}
+    
+    # --- CORREÇÃO APLICADA AQUI ---
+    # 1. Define a ordem de exibição desejada para os campos principais.
+    ordem_dos_campos = [
+        'nome', 'cpf', 'telefone', 'telefone_2', 'cidade', 'rg', 'estado', 'bairro', 
+        'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 
+        'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 
+        'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 
+        'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10'
+    ]
+    
+    # 2. Itera sobre a ordem definida para construir o dicionário de detalhes.
+    for campo in ordem_dos_campos:
+        valor = getattr(lead_para_atender, campo, None)
+        if valor:  # Adiciona ao dicionário apenas se o campo tiver valor
+            # Formata o nome do campo para exibição (ex: 'nome_mae' -> 'Nome Mae')
+            nome_exibicao = campo.replace('_', ' ').title()
+            lead_details[nome_exibicao] = valor
+
+    # 3. Adiciona os dados do campo `additional_data` (dados não estruturados).
+    #    Isso garante que campos que não são colunas padrão do Lead também sejam exibidos.
     if lead_para_atender.additional_data:
         for key, value in lead_para_atender.additional_data.items():
+            # Adiciona apenas se a chave ainda não existir para não sobrescrever os campos padrão
             if key.title() not in lead_details:
                 lead_details[key.title()] = value
     phone_numbers = []
