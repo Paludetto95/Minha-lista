@@ -81,7 +81,10 @@
         </div>
         <div class="col-md-4">
             <div class="card shadow-sm text-center h-100">
-                <div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Total de Logins (Contabilizados)</h6><p class="card-text display-4 fw-bold">{{ total_logins_group }}</p></div>
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Consumo Mensal de Leads</h6>
+                    <p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-muted">{{ grupo.monthly_pull_limit or '∞' }}</span></p>
+                </div>
             </div>
         </div>
         <div class="col-md-4">
@@ -164,8 +167,12 @@
                 <input type="text" name="name" id="edit_name" class="form-control" value="{{ grupo.nome }}" required>
             </div>
             <div class="mb-3">
-                <label for="edit_color" class="form-label">Cor da Equipe</label>
-                <input type="color" name="color" id="edit_color" class="form-control form-control-color" value="{{ grupo.color }}">
+                <label for="color" class="form-label">Cor do Grupo</label>
+                <input type="color" class="form-control form-control-color" id="color" name="color" value="{{ grupo.color }}" title="Escolha uma cor para o grupo">
+            </div>
+            <div class="mb-3">
+                <label for="edit_monthly_limit" class="form-label">Limite Mensal de Puxadas (0 para ilimitado)</label>
+                <input type="number" name="monthly_pull_limit" id="edit_monthly_limit" class="form-control" value="{{ grupo.monthly_pull_limit or 0 }}" required>
             </div>
             {# ADICIONADO: Seção para gerenciar o logo #}
             <div class="mb-3">

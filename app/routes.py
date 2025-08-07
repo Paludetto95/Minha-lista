@@ -186,6 +186,7 @@ def index():
         'consultor': 'main.consultor_dashboard'
     }
     return redirect(url_for(role_dashboard_map.get(current_user.role, 'main.login')))
+
 @bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -198,14 +199,11 @@ def profile():
             current_user.theme = theme
             db.session.commit()
             
-            # CORREÇÃO DEFINITIVA:
-            # 1. Usa uma mensagem flash simples, sem JavaScript.
             flash('Tema atualizado com sucesso!', 'success')
-            # 2. Redireciona para a página usando o padrão Post/Redirect/Get.
             return redirect(url_for('main.profile'))
             
-    # A rota GET simplesmente renderiza o template. O script no HTML fará a mágica.
     return render_template('profile.html', title="Minhas Configurações")    
+
 # --- ROTAS DE ADMIN ---
 
 @bp.route('/admin/dashboard')
@@ -367,7 +365,7 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
-        included_headers = set() # Rastreia cabeçalhos marcados para inclusão
+        included_headers = set() 
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
         
         for i in range(len(df_headers.columns)):
@@ -375,7 +373,6 @@ def upload_step2_process():
             if not original_header_name: continue
 
             if f'include_column_{i}' in form_data:
-                # Adiciona ao conjunto de cabeçalhos incluídos, mesmo que seja para ignorar no mapeamento
                 included_headers.add(original_header_name.lower().strip())
                 
                 selected_system_field = form_data.get(f'mapping_{i}')
@@ -431,13 +428,9 @@ def upload_step2_process():
             
             for original_header in original_headers:
                 original_header_lower = original_header.lower().strip()
-                # CONDIÇÃO CORRIGIDA:
-                # 1. A coluna DEVE estar na lista de `included_headers` (ou seja, o checkbox estava marcado).
-                # 2. A coluna NÃO PODE ter sido mapeada para um campo do sistema (`mapping.values()`).
                 if original_header_lower in included_headers and original_header_lower not in mapping.values():
                     valor = row.get(original_header_lower)
                     if pd.notna(valor):
-                        # A verificação adicional para não duplicar campos do sistema é mantida por segurança.
                         if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
                            original_header_lower not in [mapping.get('cpf', '').lower(), mapping.get('nome', '').lower()]:
                             additional_data[original_header.title()] = str(valor).strip()
@@ -488,7 +481,27 @@ def upload_step2_process():
 @login_required
 @require_role('super_admin')
 def manage_teams():
-    teams_with_counts = db.session.query(Grupo, func.count(User.id)).outerjoin(User, Grupo.id == User.grupo_id).group_by(Grupo.id).order_by(Grupo.nome).all()
+    today = date.today()
+    start_of_month = datetime(today.year, today.month, 1)
+
+    monthly_consumption_subquery = db.session.query(
+        User.grupo_id.label('grupo_id'),
+        func.count(LeadConsumption.id).label('monthly_consumption')
+    ).join(LeadConsumption, LeadConsumption.user_id == User.id)\
+     .filter(LeadConsumption.timestamp >= start_of_month)\
+     .group_by(User.grupo_id)\
+     .subquery()
+
+    teams_with_counts = db.session.query(
+        Grupo,
+        func.count(User.id),
+        func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
+    ).outerjoin(User, Grupo.id == User.grupo_id)\
+    .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
+    .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
+    .order_by(Grupo.nome)\
+    .all()
+
     return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts)
 
 @bp.route('/admin/teams/<int:group_id>')
@@ -526,6 +539,13 @@ def add_group():
     nome = request.form.get('name')
     color = request.form.get('color', '#6c757d')
     logo_file = request.files.get('logo_file')
+    # --- ATUALIZAÇÃO INSERIDA AQUI ---
+    monthly_pull_limit_str = request.form.get('monthly_pull_limit')
+    monthly_pull_limit = None
+    if monthly_pull_limit_str == '':
+        monthly_pull_limit = None
+    elif monthly_pull_limit_str is not None and monthly_pull_limit_str.isdigit():
+        monthly_pull_limit = int(monthly_pull_limit_str)
     
     logo_filename = None
     if logo_file and logo_file.filename:
@@ -543,13 +563,27 @@ def add_group():
             if logo_filename:
                 delete_partner_logo(logo_filename)
         else:
-            new_group = Grupo(nome=nome, color=color, logo_filename=logo_filename)
+            # --- ATUALIZAÇÃO INSERIDA AQUI ---
+            new_group = Grupo(
+                nome=nome, 
+                color=color, 
+                logo_filename=logo_filename,
+                monthly_pull_limit=monthly_pull_limit
+            )
             db.session.add(new_group)
             db.session.commit()
             flash('Equipe adicionada com sucesso!', 'success')
-            log_system_action(action_type='GROUP_CREATED', entity_type='Group', entity_id=new_group.id, 
-                              description=f"Grupo '{new_group.nome}' criado.",
-                              details={'color': new_group.color, 'logo_filename': new_group.logo_filename})
+            log_system_action(
+                action_type='GROUP_CREATED', 
+                entity_type='Group', 
+                entity_id=new_group.id, 
+                description=f"Grupo '{new_group.nome}' criado.",
+                details={
+                    'color': new_group.color, 
+                    'logo_filename': new_group.logo_filename,
+                    'monthly_pull_limit': new_group.monthly_pull_limit
+                }
+            )
     return redirect(url_for('main.manage_teams'))
 
 @bp.route('/admin/groups/edit/<int:group_id>', methods=['POST'])
@@ -560,28 +594,57 @@ def edit_group_name_color(group_id):
     old_name = grupo.nome
     old_color = grupo.color
     old_logo_filename = grupo.logo_filename
+    # --- ATUALIZAÇÃO INSERIDA AQUI ---
+    old_monthly_pull_limit = grupo.monthly_pull_limit
 
     new_name = request.form.get('name')
     new_color = request.form.get('color')
     new_logo_file = request.files.get('logo_file')
     remove_logo = request.form.get('remove_logo') == 'on'
+    # --- ATUALIZAÇÃO INSERIDA AQUI ---
+    new_monthly_pull_limit_str = request.form.get('monthly_pull_limit')
 
     changes = {}
+    relevant_field_submitted = False
 
-    if new_name and new_name != grupo.nome:
-        if Grupo.query.filter(Grupo.nome == new_name, Grupo.id != group_id).first():
-            flash(f'Erro: Já existe uma equipe com o nome "{new_name}".', 'danger')
-            log_system_action(action_type='GROUP_UPDATE_FAILED', entity_type='Group', entity_id=grupo.id, 
-                              description=f"Tentativa de renomear grupo '{old_name}' para nome duplicado: '{new_name}'.")
-            return redirect(url_for('main.team_details', group_id=group_id))
-        grupo.nome = new_name
-        changes['name'] = {'old': old_name, 'new': new_name}
+    if new_name is not None:
+        relevant_field_submitted = True
+        if new_name and new_name != grupo.nome:
+            if Grupo.query.filter(Grupo.nome == new_name, Grupo.id != group_id).first():
+                flash(f'Erro: Já existe uma equipe com o nome "{new_name}".', 'danger')
+                log_system_action(action_type='GROUP_UPDATE_FAILED', entity_type='Group', entity_id=grupo.id, 
+                                  description=f"Tentativa de renomear grupo '{old_name}' para nome duplicado: '{new_name}'.")
+                return redirect(url_for('main.team_details', group_id=group_id))
+            grupo.nome = new_name
+            changes['name'] = {'old': old_name, 'new': new_name}
     
-    if new_color and new_color != grupo.color: 
-        grupo.color = new_color
-        changes['color'] = {'old': old_color, 'new': new_color}
+    if new_color is not None:
+        relevant_field_submitted = True
+        if new_color and new_color != grupo.color: 
+            grupo.color = new_color
+            changes['color'] = {'old': old_color, 'new': new_color}
     
+    if 'monthly_pull_limit' in request.form:
+        relevant_field_submitted = True
+        try:
+            if new_monthly_pull_limit_str == '':
+                new_monthly_pull_limit = None
+            else:
+                new_monthly_pull_limit = int(new_monthly_pull_limit_str)
+
+            print(f"DEBUG: old_monthly_pull_limit: {old_monthly_pull_limit}, type: {type(old_monthly_pull_limit)}")
+            print(f"DEBUG: new_monthly_pull_limit_str: {new_monthly_pull_limit_str}, type: {type(new_monthly_pull_limit_str)}")
+            print(f"DEBUG: new_monthly_pull_limit: {new_monthly_pull_limit}, type: {type(new_monthly_pull_limit)}")
+            if new_monthly_pull_limit != old_monthly_pull_limit:
+                grupo.monthly_pull_limit = new_monthly_pull_limit
+                changes['monthly_pull_limit'] = {'old': old_monthly_pull_limit, 'new': new_monthly_pull_limit}
+            else:
+                print("DEBUG: new_monthly_pull_limit is equal to old_monthly_pull_limit. No change detected by comparison.")
+        except (ValueError, TypeError):
+            flash('O limite mensal deve ser um número válido.', 'warning')
+
     if remove_logo:
+        relevant_field_submitted = True
         if grupo.logo_filename:
             if delete_partner_logo(grupo.logo_filename):
                 changes['logo'] = {'old': grupo.logo_filename, 'new': 'removido'}
@@ -591,6 +654,7 @@ def edit_group_name_color(group_id):
                 log_system_action(action_type='GROUP_LOGO_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
                                   description=f"Erro ao remover arquivo de logo '{grupo.logo_filename}' para o grupo '{grupo.nome}'.")
     elif new_logo_file and new_logo_file.filename:
+        relevant_field_submitted = True
         if allowed_file(new_logo_file.filename):
             saved_filename = save_partner_logo(new_logo_file)
             if saved_filename:
@@ -613,6 +677,8 @@ def edit_group_name_color(group_id):
         log_system_action(action_type='GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
                           description=f"Grupo '{grupo.nome}' atualizado.",
                           details=changes)
+    elif relevant_field_submitted:
+        flash('Os dados foram processados, mas nenhuma alteração significativa foi detectada.', 'info')
     else:
         flash('Nenhuma alteração detectada.', 'info')
 
@@ -746,16 +812,22 @@ def manage_users():
     elif sort_by == 'email':
         order_column = User.email.desc() if sort_order == 'desc' else User.email.asc()
     elif sort_by == 'group':
-        users_query = users_query.join(Grupo)
-        order_column = Grupo.nome.desc() if sort_order == 'desc' else Grupo.nome.asc()
+        users_query = users_query.outerjoin(Grupo)
+        if sort_order == 'desc':
+            order_column = case((Grupo.nome.is_(None), 1), else_=0).asc(), Grupo.nome.desc()
+        else:
+            order_column = case((Grupo.nome.is_(None), 1), else_=0).asc(), Grupo.nome.asc()
     elif sort_by == 'role':
         order_column = User.role.desc() if sort_order == 'desc' else User.role.asc()
     else:
         order_column = User.username.asc()
 
-    users = users_query.order_by(order_column).all()
-    
-    grupos = Grupo.query.order_by(Grupo.nome).all()
+    try:
+        users = users_query.order_by(order_column).all()
+        grupos = Grupo.query.order_by(Grupo.nome).all()
+    except Exception as e:
+        flash(f'Erro ao carregar utilizadores ou grupos: {e}', 'danger')
+        return redirect(url_for('main.admin_dashboard')) # Redirect to a safe page
 
     return render_template(
         'admin/manage_users.html', 
@@ -877,6 +949,7 @@ def update_user_limits(user_id):
         log_system_action(action_type='USER_LIMITS_UPDATE_FAILED', entity_type='User', entity_id=user.id, 
                           description=f"Tentativa de atualizar limites de '{user.username}' falhou: valores inválidos.",
                           details={'error': str(e), 'form_data': request.form.to_dict()})
+                          
     return redirect(url_for('main.manage_users'))
 
 @bp.route('/admin/users/delete/<int:id>', methods=['POST'])
@@ -894,7 +967,6 @@ def delete_user(id):
 
     delete_permitted = False
     if current_user.role == 'super_admin':
-        # O Super Admin não pode ser excluído por esta rota.
         if user_to_delete.role == 'super_admin':
              flash('A conta do Super Administrador não pode ser excluída.', 'danger')
              log_system_action(action_type='USER_DELETE_FAILED', entity_type='User', entity_id=id,
@@ -918,36 +990,13 @@ def delete_user(id):
     user_group_deleted = user_to_delete.grupo.nome if user_to_delete.grupo else 'N/A'
 
     try:
-        # --- INÍCIO DA CORREÇÃO ---
-        # Limpar TODAS as dependências antes de apagar o utilizador.
-
-        # 1. Desassociar Leads onde o utilizador é o consultor responsável
         Lead.query.filter_by(consultor_id=id).update({'consultor_id': None})
-
-        # 2. Apagar registos de consumo de leads (ESTA ERA A CAUSA PROVÁVEL DO ERRO)
         LeadConsumption.query.filter_by(user_id=id).delete(synchronize_session=False)
-
-        # 3. Apagar registos de atividade
         ActivityLog.query.filter_by(user_id=id).delete(synchronize_session=False)
-
-        # 4. Apagar tarefas em segundo plano associadas
         BackgroundTask.query.filter_by(user_id=id).delete(synchronize_session=False)
-
-        # 5. Anular a referência do utilizador nos logs do sistema (para manter o histórico)
         SystemLog.query.filter_by(user_id=id).update({'user_id': None})
         
-        # Opcional, mas recomendado: Lidar com a tabela 'Proposta'
-        # Se a tabela 'Proposta' tem um 'user_id' e as propostas devem ser apagadas com o utilizador:
-        # Proposta.query.filter_by(user_id=id).delete(synchronize_session=False)
-        # Se as propostas devem ser mantidas, mas desassociadas:
-        # Proposta.query.filter_by(user_id=id).update({'user_id': None})
-
-        # --- FIM DA CORREÇÃO ---
-
-        # 6. Agora, com todas as dependências resolvidas, apagar o utilizador
         db.session.delete(user_to_delete)
-        
-        # 7. Efetivar todas as alterações na base de dados
         db.session.commit()
         
         flash('Utilizador eliminado com sucesso!', 'success')
@@ -2013,8 +2062,6 @@ def atendimento():
     tabulations = Tabulation.query.order_by(Tabulation.name).all()
     lead_details = {}
     
-    # --- CORREÇÃO APLICADA AQUI ---
-    # 1. Define a ordem de exibição desejada para os campos principais.
     ordem_dos_campos = [
         'nome', 'cpf', 'telefone', 'telefone_2', 'cidade', 'rg', 'estado', 'bairro', 
         'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 
@@ -2023,21 +2070,17 @@ def atendimento():
         'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10'
     ]
     
-    # 2. Itera sobre a ordem definida para construir o dicionário de detalhes.
     for campo in ordem_dos_campos:
         valor = getattr(lead_para_atender, campo, None)
-        if valor:  # Adiciona ao dicionário apenas se o campo tiver valor
-            # Formata o nome do campo para exibição (ex: 'nome_mae' -> 'Nome Mae')
+        if valor:
             nome_exibicao = campo.replace('_', ' ').title()
             lead_details[nome_exibicao] = valor
 
-    # 3. Adiciona os dados do campo `additional_data` (dados não estruturados).
-    #    Isso garante que campos que não são colunas padrão do Lead também sejam exibidos.
     if lead_para_atender.additional_data:
         for key, value in lead_para_atender.additional_data.items():
-            # Adiciona apenas se a chave ainda não existir para não sobrescrever os campos padrão
             if key.title() not in lead_details:
                 lead_details[key.title()] = value
+                
     phone_numbers = []
     processed_numbers = set()
     for label, phone_number in [('Telefone Principal', lead_para_atender.telefone), ('Telefone 2', lead_para_atender.telefone_2)]:
@@ -2046,6 +2089,7 @@ def atendimento():
             if len(clean_phone) >= 8 and clean_phone not in processed_numbers:
                 phone_numbers.append({'label': label, 'number': clean_phone})
                 processed_numbers.add(clean_phone)
+                
     if lead_para_atender.additional_data:
         phone_key_fragments = ['tel', 'fone', 'cel', 'whatsapp']
         for key, value in lead_para_atender.additional_data.items():
@@ -2055,6 +2099,7 @@ def atendimento():
                     if len(clean_phone) >= 8 and clean_phone not in processed_numbers:
                         phone_numbers.append({'label': key.title(), 'number': clean_phone})
                         processed_numbers.add(clean_phone)
+                        
     return render_template('atendimento.html', title="Atendimento de Lead", lead=lead_para_atender, lead_details=lead_details, tabulations=tabulations, phone_numbers=phone_numbers)
 
 @bp.route('/atender/<int:lead_id>', methods=['POST'])

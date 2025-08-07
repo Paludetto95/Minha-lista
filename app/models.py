@@ -23,12 +23,11 @@ class User(UserMixin, db.Model):
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
 
-    # Relacionamentos com outras tabelas
-    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
-    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
-    tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic', foreign_keys='BackgroundTask.user_id')
+    # Relacionamentos
     leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
-
+    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
+    tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic')
+    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -43,10 +42,7 @@ class Lead(db.Model):
     telefone = db.Column(db.String(20))
     telefone_2 = db.Column(db.String(20))
     cidade = db.Column(db.String(100))
-    # --- CORREÇÃO APLICADA AQUI ---
-    # O tamanho da coluna 'rg' foi aumentado de 20 para 100 caracteres.
     rg = db.Column(db.String(100))
-    # --- FIM DA CORREÇÃO ---
     estado = db.Column(db.String(2), index=True)
     bairro = db.Column(db.String(100))
     cep = db.Column(db.String(10))
@@ -82,9 +78,13 @@ class Lead(db.Model):
     available_after = db.Column(db.DateTime, nullable=True, index=True)
     additional_data = db.Column(db.JSON)
 
-    produto = db.relationship('Produto', backref='leads')
+    # Relacionamentos
+    produto = db.relationship('Produto', backref=db.backref('leads', cascade="all, delete-orphan"))
     consultor = db.relationship('User', back_populates='leads')
     tabulation = db.relationship('Tabulation', backref='leads')
+    activity_logs = db.relationship('ActivityLog', backref='lead', cascade="all, delete-orphan")
+    consumptions = db.relationship('LeadConsumption', backref='lead', cascade="all, delete-orphan")
+
 
 class Proposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -147,15 +147,20 @@ class ActivityLog(db.Model):
     action_type = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
-    lead = db.relationship('Lead', backref='activity_logs')
+    # Relacionamentos
     user = db.relationship('User', back_populates='activity_logs')
-    tabulation = db.relationship('Tabulation', backref='activity_logs')
+    tabulation = db.relationship('Tabulation')
 
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
     color = db.Column(db.String(7), default='#6c757d')
     logo_filename = db.Column(db.String(255), nullable=True)
+    
+    # --- CAMPO ADICIONADO AQUI ---
+    monthly_pull_limit = db.Column(db.Integer, nullable=True)
+    
+    # Relacionamento
     users = db.relationship('User', backref='grupo', lazy='dynamic')
 
 class BackgroundTask(db.Model):
@@ -170,6 +175,8 @@ class BackgroundTask(db.Model):
     total_items = db.Column(db.Integer, default=0)
     items_processed = db.Column(db.Integer, default=0)
     details = db.Column(db.JSON, nullable=True)
+    
+    # Relacionamento
     user = db.relationship('User', back_populates='tasks')
 
 class SystemLog(db.Model):
@@ -182,4 +189,5 @@ class SystemLog(db.Model):
     description = db.Column(db.Text, nullable=True)
     details = db.Column(db.JSON, nullable=True)
 
+    # Relacionamento
     user = db.relationship('User', back_populates='system_logs')
