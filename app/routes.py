@@ -367,18 +367,25 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
+        included_headers = set() # Rastreia cabeçalhos marcados para inclusão
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
+        
         for i in range(len(df_headers.columns)):
+            original_header_name = form_data.get(f'header_name_{i}')
+            if not original_header_name: continue
+
             if f'include_column_{i}' in form_data:
+                # Adiciona ao conjunto de cabeçalhos incluídos, mesmo que seja para ignorar no mapeamento
+                included_headers.add(original_header_name.lower().strip())
+                
                 selected_system_field = form_data.get(f'mapping_{i}')
                 if selected_system_field and selected_system_field != 'Ignorar':
-                    original_header_name = form_data.get(f'header_name_{i}')
-                    if original_header_name:
-                        if selected_system_field in mapping:
-                            flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
-                            return redirect(url_for('main.admin_dashboard'))
-                        mapping[selected_system_field] = original_header_name.lower().strip()
-                        layout_mapping_to_save[selected_system_field] = original_header_name
+                    if selected_system_field in mapping:
+                        flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
+                        return redirect(url_for('main.admin_dashboard'))
+                    mapping[selected_system_field] = original_header_name.lower().strip()
+                    layout_mapping_to_save[selected_system_field] = original_header_name
+
         if 'cpf' not in mapping or 'nome' not in mapping:
             flash("Erro de mapeamento: As colunas 'CPF' e 'Nome' são obrigatórias.", 'danger')
             return redirect(url_for('main.admin_dashboard'))
@@ -424,9 +431,13 @@ def upload_step2_process():
             
             for original_header in original_headers:
                 original_header_lower = original_header.lower().strip()
-                if original_header_lower not in mapping.values():
+                # CONDIÇÃO CORRIGIDA:
+                # 1. A coluna DEVE estar na lista de `included_headers` (ou seja, o checkbox estava marcado).
+                # 2. A coluna NÃO PODE ter sido mapeada para um campo do sistema (`mapping.values()`).
+                if original_header_lower in included_headers and original_header_lower not in mapping.values():
                     valor = row.get(original_header_lower)
                     if pd.notna(valor):
+                        # A verificação adicional para não duplicar campos do sistema é mantida por segurança.
                         if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
                            original_header_lower not in [mapping.get('cpf', '').lower(), mapping.get('nome', '').lower()]:
                             additional_data[original_header.title()] = str(valor).strip()
