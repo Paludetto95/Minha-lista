@@ -1,3 +1,4 @@
+# app/models.py (VERSÃO ATUALIZADA E MELHORADA)
 from datetime import datetime
 from app import db, login_manager
 from flask_login import UserMixin
@@ -25,7 +26,8 @@ class User(UserMixin, db.Model):
 
     # Relacionamentos
     leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
-    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
+    consumptions = db.relationship('LeadConsumption', back_populates='user', lazy='dynamic')
+    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic')
     tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic')
     system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic')
 
@@ -79,11 +81,11 @@ class Lead(db.Model):
     additional_data = db.Column(db.JSON)
 
     # Relacionamentos
-    produto = db.relationship('Produto', backref=db.backref('leads', cascade="all, delete-orphan"))
+    produto = db.relationship('Produto', back_populates='leads')
     consultor = db.relationship('User', back_populates='leads')
-    tabulation = db.relationship('Tabulation', backref='leads')
-    activity_logs = db.relationship('ActivityLog', backref='lead', cascade="all, delete-orphan")
-    consumptions = db.relationship('LeadConsumption', backref='lead', cascade="all, delete-orphan")
+    tabulation = db.relationship('Tabulation', back_populates='leads')
+    activity_logs = db.relationship('ActivityLog', back_populates='lead', cascade="all, delete-orphan")
+    consumptions = db.relationship('LeadConsumption', back_populates='lead', cascade="all, delete-orphan")
 
 
 class Proposta(db.Model):
@@ -119,6 +121,10 @@ class LeadConsumption(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relacionamentos
+    user = db.relationship('User', back_populates='consumptions')
+    lead = db.relationship('Lead', back_populates='consumptions')
 
 class Tabulation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -127,17 +133,27 @@ class Tabulation(db.Model):
     is_recyclable = db.Column(db.Boolean, default=False)
     recycle_in_days = db.Column(db.Integer, nullable=True)
     is_positive_conversion = db.Column(db.Boolean, default=False)
+    
+    # Relacionamentos
+    leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')
+    activity_logs = db.relationship('ActivityLog', back_populates='tabulation', lazy='dynamic')
 
 class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    
+    # Relacionamentos
+    leads = db.relationship('Lead', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
+    layouts = db.relationship('LayoutMailing', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
 
 class LayoutMailing(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False)
     mapping = db.Column(db.JSON, nullable=False)
-    produto = db.relationship('Produto', backref='layouts')
+    
+    # Relacionamento
+    produto = db.relationship('Produto', back_populates='layouts')
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -149,15 +165,14 @@ class ActivityLog(db.Model):
     
     # Relacionamentos
     user = db.relationship('User', back_populates='activity_logs')
-    tabulation = db.relationship('Tabulation')
+    lead = db.relationship('Lead', back_populates='activity_logs')
+    tabulation = db.relationship('Tabulation', back_populates='activity_logs')
 
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
     color = db.Column(db.String(7), default='#6c757d')
     logo_filename = db.Column(db.String(255), nullable=True)
-    
-    # --- CAMPO ADICIONADO AQUI ---
     monthly_pull_limit = db.Column(db.Integer, nullable=True)
     
     # Relacionamento
