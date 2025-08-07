@@ -1,13 +1,42 @@
+<!-- app/templates/admin/team_details.html (VERSÃO FINAL E CORRIGIDA) -->
 {% extends "base.html" %}
 
 {% block styles %}
 {{ super() }}
 <style>
-    .team-details-logo { max-width: 200px; max-height: 120px; object-fit: contain; margin-right: 15px; }
-    .current-logo-container { display: flex; align-items: center; margin-top: 15px; margin-bottom: 15px; padding: 5px; border: 1px solid #ced4da; border-radius: 5px; }
-    .current-logo-container img { max-width: 100px; max-height: 60px; object-fit: contain; margin-right: 10px; border: 1px solid #adb5bd; background-color: #fff; padding: 2px; }
-    body[data-theme="dark"] .current-logo-container { background-color: transparent; border-color: #6c757d; color: #dee2e6; }
-    body[data-theme="dark"] .current-logo-container img { background-color: #343a40; border-color: #adb5bd; }
+    .team-details-logo {
+        max-width: 200px;
+        max-height: 120px;
+        object-fit: contain;
+        margin-right: 15px;
+    }
+    .current-logo-container {
+        display: flex;
+        align-items: center;
+        margin-top: 15px;
+        margin-bottom: 15px;
+        padding: 5px;
+        border: 1px solid #ced4da;
+        border-radius: 5px;
+    }
+    .current-logo-container img {
+        max-width: 100px;
+        max-height: 60px;
+        object-fit: contain;
+        margin-right: 10px;
+        border: 1px solid #adb5bd;
+        background-color: #fff;
+        padding: 2px;
+    }
+    body[data-theme="dark"] .current-logo-container {
+        background-color: transparent;
+        border-color: #6c757d;
+        color: #dee2e6;
+    }
+    body[data-theme="dark"] .current-logo-container img {
+        background-color: #343a40;
+        border-color: #adb5bd;
+    }
 </style>
 {% endblock %}
 
@@ -16,8 +45,14 @@
     <!-- CABEÇALHO DA PÁGINA -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="d-flex align-items-center">
-            <a href="{{ url_for('main.manage_teams') }}" class="btn btn-outline-secondary me-3" title="Voltar"><i class="fas fa-arrow-left"></i></a>
-            {% if grupo.logo_filename %}<img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" alt="Logo {{ grupo.nome }}" class="team-details-logo">{% endif %}
+            <a href="{{ url_for('main.manage_teams') }}" class="btn btn-outline-secondary me-3" title="Voltar para a lista de equipes">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            {% if grupo.logo_filename %}
+                <img src="{{ url_for('main.serve_partner_logo', filename=grupo.logo_filename) }}" 
+                     alt="Logo {{ grupo.nome }}" 
+                     class="team-details-logo">
+            {% endif %}
             <h2 class="mb-0">Gerenciar Equipe: <strong>{{ grupo.nome }}</strong></h2>
         </div>
         <div class="d-flex gap-2">
@@ -26,14 +61,14 @@
         </div>
     </div>
 
-    <!-- MÉTRICAS -->
+    <!-- MÉTRICAS DA EQUIPE -->
     <div class="row mb-4">
         <div class="col-md-4 mb-3"><div class="card shadow-sm text-center h-100"><div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Total de Membros</h6><p class="card-text display-4 fw-bold">{{ admins|length + consultores|length }}</p></div></div></div>
         <div class="col-md-4 mb-3"><div class="card shadow-sm text-center h-100"><div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Consumo Mensal</h6><p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-muted fs-3">{{ grupo.monthly_pull_limit or '∞' }}</span></p></div></div></div>
         <div class="col-md-4 mb-3"><div class="card shadow-sm text-center h-100"><div class="card-body"><h6 class="card-subtitle mb-2 text-muted">Total de Logins</h6><p class="card-text display-4 fw-bold">{{ total_logins_group }}</p></div></div></div>
     </div>
     
-    <!-- GERENCIAR MEMBROS -->
+    <!-- TABELA DE MEMBROS -->
     <div class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Membros da Equipe</h5>
@@ -47,13 +82,19 @@
                         {% for admin in admins %}
                         <tr>
                             <td>{{ admin.username }}</td><td>{{ admin.email }}</td><td><span class="badge bg-primary">Admin do Parceiro</span></td>
-                            <td class="text-end">{% if admin.role != 'super_admin' %}<form class="d-inline" action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=admin.id) }}" method="POST" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-sm btn-outline-warning">Remover</button></form>{% endif %}</td>
+                            <td class="text-end">
+                                {% if admin.role != 'super_admin' %}
+                                <form class="d-inline" action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=admin.id) }}" method="POST" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-sm btn-outline-warning">Remover</button></form>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                         {% for consultor in consultores %}
                         <tr>
                             <td>{{ consultor.username }}</td><td>{{ consultor.email }}</td><td><span class="badge bg-secondary">Consultor</span></td>
-                            <td class="text-end"><form class="d-inline" action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=consultor.id) }}" method="POST" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-sm btn-outline-warning">Remover</button></form></td>
+                            <td class="text-end">
+                                <form class="d-inline" action="{{ url_for('main.remove_member_from_team', group_id=grupo.id, user_id=consultor.id) }}" method="POST" onsubmit="return confirm('Tem certeza?');"><button type="submit" class="btn btn-sm btn-outline-warning">Remover</button></form>
+                            </td>
                         </tr>
                         {% endfor %}
                         {% if not admins and not consultores %}
@@ -76,10 +117,10 @@
             <div class="mb-3"><label for="name" class="form-label">Nome da Equipe</label><input type="text" name="name" class="form-control" value="{{ grupo.nome }}" required></div>
             <div class="mb-3"><label for="color" class="form-label">Cor do Grupo</label><input type="color" class="form-control form-control-color" name="color" value="{{ grupo.color }}" title="Escolha uma cor"></div>
             
-            <!-- CAMPO DE LIMITE MENSAL CORRIGIDO -->
+            <!-- CORREÇÃO APLICADA AQUI -->
             <div class="mb-3">
                 <label for="monthly_pull_limit" class="form-label">Limite Mensal de Puxada</label>
-                <input type="number" name="monthly_pull_limit" id="monthly_pull_limit" class="form-control" value="{{ grupo.monthly_pull_limit or '' }}" placeholder="Deixe em branco para ilimitado" min="0">
+                <input type="number" name="monthly_pull_limit" id="monthly_pull_limit" class="form-control" value="{{ grupo.monthly_pull_limit or '' }}" placeholder="Deixe em branco para ilimitado">
             </div>
 
             <div class="mb-3">
