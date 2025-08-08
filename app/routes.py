@@ -1965,9 +1965,23 @@ def parceiro_dashboard():
 @login_required
 @require_role('admin_parceiro')
 def parceiro_monitor():
+    """
+    Esta função agora serve apenas para carregar a página HTML.
+    Os dados serão preenchidos imediatamente pelo JavaScript que chama a API.
+    """
+    return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=[])
+
+
+@bp.route('/api/parceiro/monitor_data')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_monitor_data():
+    """
+    Esta é a API que fornece os dados atualizados para o monitor
+    no formato que o template espera.
+    """
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
     
-    # Define o fuso horário e o tempo atual uma única vez.
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     now_in_brasilia = get_brasilia_time()
     start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1975,119 +1989,56 @@ def parceiro_monitor():
     agents_data = []
     for agent in consultants:
         real_status = agent.current_status
-        time_in_status_str = "00:00:00"
 
-        # --- VERIFICAÇÃO DE INATIVIDADE CORRIGIDA ---
+        # Lógica de inatividade (sem alterações)
         inactivity_threshold = timedelta(minutes=2)
         is_inactive = False
         if agent.last_activity_at:
-            # ESSENCIAL: Torna o datetime do banco "aware" antes de comparar.
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
+            # Lidar com o caso de já ser aware (se salvo com timezone) ou naive
+            if agent.last_activity_at.tzinfo is None:
+                aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
+            else:
+                aware_last_activity = agent.last_activity_at.astimezone(brasilia_tz)
+            
             if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
                 is_inactive = True
         
         if is_inactive and agent.current_status != 'Offline':
             real_status = 'Offline'
-            agent.current_status = 'Offline'
-            agent.status_timestamp = now_in_brasilia # Usa o tempo 'aware' já capturado
-            db.session.add(agent)
-            db.session.commit() # Commit da atualização de status
+            update_user_status(agent, 'Offline')
+            db.session.commit()
 
-        # --- CORREÇÃO PRINCIPAL DO TYPEERROR ---
-        if agent.status_timestamp:
-            # ESSENCIAL: Torna o datetime do banco "aware" antes de subtrair.
-            aware_status_timestamp = brasilia_tz.localize(agent.status_timestamp)
-            time_in_status_delta = now_in_brasilia - aware_status_timestamp
-            
-            # Formata o tempo para exibição
-            hours, remainder = divmod(time_in_status_delta.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_in_status_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        # --- DADOS PARA O NOVO LAYOUT ---
+        
+        # 1. Obter "Equipe / Local"
+        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
+        local_str = f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}"
 
-        # --- QUERIES CORRIGIDAS (usando start_of_day) ---
-        calls_today = ActivityLog.query.filter(
-            ActivityLog.user_id == agent.id, 
-            ActivityLog.timestamp >= start_of_day
-        ).count()
+        # 2. Formatar "Último Login"
+        last_login_str = agent.last_login.astimezone(brasilia_tz).strftime('%d/%m/%Y às %H:%M') if agent.last_login else 'Nunca logou'
+
+        # 3. Obter estatísticas
+        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(
             ActivityLog.user_id == agent.id, 
             ActivityLog.timestamp >= start_of_day, 
             Tabulation.is_positive_conversion == True
         ).count()
         
-        current_work = Lead.query.join(Produto).filter(
-            Lead.consultor_id == agent.id, 
-            Lead.status == 'Em Atendimento'
-        ).with_entities(Produto.name).first()
-        
-        agents_data.append({
-            'id': agent.id, 
-            'name': agent.username, 
-            'status': real_status, 
-            'local': current_work[0] if current_work else "Nenhum", 
-            'calls_today': calls_today, 
-            'conversions_today': conversions_today,
-            'time_in_status': time_in_status_str # Passa o timer para o template
-        })
-    
-    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
-    return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
-
-# ADICIONE ESTA NOVA ROTA NO SEU ARQUIVO app/routes.py
-
-@bp.route('/api/parceiro/monitor_data')
-@login_required
-@require_role('admin_parceiro')
-def parceiro_monitor_data():
-    # A lógica aqui é exatamente a mesma da rota anterior
-    consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
-    
-    brasilia_tz = pytz.timezone('America/Sao_Paulo')
-    now_in_brasilia = get_brasilia_time()
-    start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    agents_data = []
-    for agent in consultants:
-        real_status = agent.current_status
-        time_in_status_str = "00:00:00"
-
-        inactivity_threshold = timedelta(minutes=2)
-        is_inactive = False
-        if agent.last_activity_at:
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
-            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
-                is_inactive = True
-        
-        if is_inactive and agent.current_status != 'Offline':
-            real_status = 'Offline'
-            agent.current_status = 'Offline'
-            agent.status_timestamp = now_in_brasilia
-            db.session.add(agent)
-            db.session.commit()
-
-        if agent.status_timestamp:
-            aware_status_timestamp = brasilia_tz.localize(agent.status_timestamp)
-            time_in_status_delta = now_in_brasilia - aware_status_timestamp
-            
-            hours, remainder = divmod(time_in_status_delta.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_in_status_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-
-        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
-        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
-        
+        # 4. Montar o dicionário com os dados corretos
         agents_data.append({
             'name': agent.username, 
-            'status': real_status, 
-            'time_in_status': time_in_status_str,
+            'status': real_status,
+            'local': local_str,             # <-- DADO CORRIGIDO
+            'last_login': last_login_str,   # <-- DADO CORRIGIDO
             'calls_today': calls_today, 
             'conversions_today': conversions_today
         })
     
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     
-    # A ÚNICA MUDANÇA É AQUI: EM VEZ DE RENDERIZAR UM TEMPLATE, RETORNAMOS JSON.
     return jsonify(agents_data=agents_data)
+
 
 @bp.route('/parceiro/performance_dashboard')
 @login_required

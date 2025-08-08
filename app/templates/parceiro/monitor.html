@@ -1,4 +1,3 @@
-<!-- app/templates/parceiro/monitor.html (VERSÃO FINAL COM ATUALIZAÇÃO DINÂMICA) -->
 {% extends "base.html" %}
 
 {% block styles %}
@@ -9,14 +8,14 @@
         padding: 0.4em 0.8em;
         border-radius: 20px;
         font-weight: 500;
-        min-width: 120px;
+        min-width: 100px; /* Ajuste de largura */
         text-align: center;
         display: inline-block;
     }
     .status-em-atendimento { background-color: #28a745; }
     .status-ocioso { background-color: #ffc107; color: #000 !important; }
     .status-offline { background-color: #dc3545; }
-    .status-tpa, .status-em-negociacao { background-color: #007bff; }
+    .status-tpa, .status-em-negociacao, .status-reciclado { background-color: #007bff; }
 
     .table th, .table td {
         vertical-align: middle;
@@ -28,10 +27,8 @@
     .rank-2 { color: #c0c0c0; }
     .rank-3 { color: #cd7f32; }
 
-    .timer {
-        font-size: 1.1rem;
-        font-weight: 500;
-        font-family: 'Courier New', Courier, monospace;
+    .last-login-text {
+        font-size: 0.8rem;
     }
 </style>
 {% endblock %}
@@ -54,39 +51,32 @@
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-secondary">
+                        <!-- CABEÇALHOS ATUALIZADOS -->
                         <tr>
                             <th style="width: 5%;" class="text-center">#</th>
-                            <th style="width: 25%;">Nome do Consultor</th>
-                            <th style="width: 15%;" class="text-center">Status</th>
-                            <th style="width: 15%;" class="text-center">Tempo no Status</th>
-                            <th style="width: 15%;" class="text-center">Acionamentos</th>
-                            <th style="width: 25%;" class="text-center">Conversões</th>
+                            <th style="width: 20%;">Nome</th>
+                            <th style="width: 20%;">Equipe / Local</th>
+                            <th style="width: 20%;">Status / Último Login</th>
+                            <th style="width: 15%;" class="text-center">Acionamentos Hoje</th>
+                            <th style="width: 20%;" class="text-center">Conversões Hoje</th>
                         </tr>
                     </thead>
-                    <!-- PASSO 2.1: Adicionamos um ID aqui para o JavaScript encontrar o corpo da tabela -->
                     <tbody id="monitor-table-body">
+                        <!-- O CONTEÚDO SERÁ GERADO PELO JAVASCRIPT -->
                         {% for agent in agents_data %}
+                        <!-- Este bloco é apenas para a carga inicial da página -->
                         <tr>
-                            <td class="text-center fw-bold">
-                                {% if loop.index <= 3 %}
-                                    <i class="fas fa-medal rank-medal rank-{{ loop.index }}"></i>
-                                {% else %}
-                                    {{ loop.index }}º
-                                {% endif %}
-                            </td>
-                            <td><strong>{{ agent.name }}</strong></td>
-                            <td class="text-center">
-                                <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="timer text-dark">{{ agent.time_in_status }}</span>
-                            </td>
-                            <td class="text-center fs-5">{{ agent.calls_today }}</td>
-                            <td class="text-center fs-5 fw-bold text-success">{{ agent.conversions_today }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado para esta equipe.</td>
+                             <td class="text-center fw-bold">{{ loop.index }}º</td>
+                             <td><strong>{{ agent.name }}</strong></td>
+                             <td>{{ agent.local }}</td>
+                             <td>
+                                 <div class="d-flex align-items-center">
+                                     <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
+                                     <div class="ms-2 text-muted last-login-text">{{ agent.last_login }}</div>
+                                 </div>
+                             </td>
+                             <td class="text-center fs-5">{{ agent.calls_today }}</td>
+                             <td class="text-center fs-5 fw-bold text-success">{{ agent.conversions_today }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -99,61 +89,4 @@
 
 {% block scripts %}
 {{ super() }}
-<!-- PASSO 2.2: SUBSTITUÍMOS O SCRIPT ANTIGO POR ESTE NOVO -->
 <script>
-    // Executa o código quando a página estiver totalmente carregada
-    document.addEventListener('DOMContentLoaded', function() {
-
-        const tableBody = document.getElementById('monitor-table-body');
-
-        // Função para buscar os dados e atualizar a tabela
-        async function updateMonitorData() {
-            try {
-                // Faz a requisição para a nossa nova API
-                const response = await fetch("{{ url_for('main.parceiro_monitor_data') }}");
-                const data = await response.json();
-
-                // Limpa o conteúdo atual da tabela
-                tableBody.innerHTML = '';
-
-                if (data.agents_data && data.agents_data.length > 0) {
-                    // Itera sobre os dados recebidos e cria as novas linhas da tabela
-                    data.agents_data.forEach((agent, index) => {
-                        const rankHtml = index < 3
-                            ? `<i class="fas fa-medal rank-medal rank-${index + 1}"></i>`
-                            : `${index + 1}º`;
-
-                        const statusClass = agent.status.toLowerCase().replace(/ /g, '-');
-                        
-                        // Cria o HTML para uma linha (tr)
-                        const rowHtml = `
-                            <tr>
-                                <td class="text-center fw-bold">${rankHtml}</td>
-                                <td><strong>${agent.name}</strong></td>
-                                <td class="text-center">
-                                    <span class="status-badge status-${statusClass}">${agent.status}</span>
-                                </td>
-                                <td class="text-center">
-                                    <span class="timer text-dark">${agent.time_in_status}</span>
-                                </td>
-                                <td class="text-center fs-5">${agent.calls_today}</td>
-                                <td class="text-center fs-5 fw-bold text-success">${agent.conversions_today}</td>
-                            </tr>
-                        `;
-                        // Adiciona a nova linha ao corpo da tabela
-                        tableBody.innerHTML += rowHtml;
-                    });
-                } else {
-                    // Caso não haja agentes, exibe a mensagem padrão
-                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado para esta equipe.</td></tr>';
-                }
-            } catch (error) {
-                console.error("Erro ao atualizar os dados do monitor:", error);
-            }
-        }
-
-        // Define o intervalo para chamar a função de atualização a cada 10 segundos
-        setInterval(updateMonitorData, 10000);
-    });
-</script>
-{% endblock %}
