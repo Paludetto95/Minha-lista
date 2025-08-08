@@ -1942,7 +1942,7 @@ def parceiro_monitor():
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        if agent.last_activity_at and (get_brasilia_time() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
+        if agent.last_activity_at and (get_brasilia_time().astimezone(pytz.utc).replace(tzinfo=None) - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
@@ -1958,7 +1958,7 @@ def parceiro_monitor():
         timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
         
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
-        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
     
@@ -2010,7 +2010,7 @@ def parceiro_performance_dashboard():
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
         performance_data.append({'name': consultant.username, 'status': consultant.current_status, 'total_calls': total_calls, 'total_conversions': total_conversions, 'conversion_rate': conversion_rate})
     
-    performance_data.sort(key=lambda x: (x['total_conversions'], x['total_calls']), reverse=True)
+    performance_data.sort(key=lambda x: (x['total_conversions'], x['calls_today']), reverse=True)
     
     kpis = {"total_calls": total_calls_team, "total_conversions": total_conversions_team, "conversion_rate": team_conversion_rate}
     context = {"title": "Desempenho da Equipe", "kpis": kpis, "pie_chart_html": pie_chart_html, "legend_data": legend_data, "performance_data": performance_data, "selected_period": period}
@@ -2053,12 +2053,54 @@ def parceiro_performance_dashboard_export():
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
     return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
 
-@bp.route('/parceiro/manage_users')
+@bp.route('/parceiro/manage_users', methods=['GET', 'POST'])
 @login_required
 @require_role('admin_parceiro')
 def parceiro_manage_users():
-    users = User.query.filter_by(grupo_id=current_user.grupo_id).order_by(User.username).all()
-    return render_template('parceiro/manage_users.html', title="Gerir Utilizadores da Equipe", users=users)
+    group_id = current_user.grupo_id
+    grupo = Grupo.query.get_or_404(group_id)
+    
+    if request.method == 'POST':
+        total_limit = grupo.monthly_pull_limit or 0
+        assigned_limits = 0
+        
+        limits_to_update = {}
+        
+        for user in grupo.users:
+            if user.role == 'consultor':
+                try:
+                    limit = int(request.form.get(f'limit_{user.id}', 0))
+                    if limit < 0:
+                        flash('O limite de puxadas não pode ser negativo.', 'danger')
+                        return redirect(url_for('main.parceiro_manage_users'))
+                    assigned_limits += limit
+                    limits_to_update[user.id] = limit
+                except (ValueError, TypeError):
+                    flash('Valor de limite inválido detectado.', 'danger')
+                    return redirect(url_for('main.parceiro_manage_users'))
+
+        if assigned_limits > total_limit:
+            flash(f'A soma dos limites ({assigned_limits}) excede o limite total da equipe ({total_limit}).', 'danger')
+            return redirect(url_for('main.parceiro_manage_users'))
+            
+        for user_id, limit in limits_to_update.items():
+            user = User.query.get(user_id)
+            if user:
+                user.daily_pull_limit = limit
+        
+        db.session.commit()
+        flash('Distribuição de leads atualizada com sucesso!', 'success')
+        return redirect(url_for('main.parceiro_manage_users'))
+
+    consultores = User.query.filter_by(grupo_id=group_id, role='consultor').order_by(User.username).all()
+    
+    total_assigned = sum(c.daily_pull_limit for c in consultores)
+
+    return render_template('parceiro/manage_users.html', 
+                           title="Gerir Consultores e Leads", 
+                           consultores=consultores, 
+                           grupo=grupo,
+                           total_assigned=total_assigned)
 
 # --- ROTAS DO CONSULTOR ---
 
