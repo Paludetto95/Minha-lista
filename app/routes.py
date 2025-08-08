@@ -2010,7 +2010,7 @@ def parceiro_performance_dashboard():
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
         performance_data.append({'name': consultant.username, 'status': consultant.current_status, 'total_calls': total_calls, 'total_conversions': total_conversions, 'conversion_rate': conversion_rate})
     
-    performance_data.sort(key=lambda x: (x['total_conversions'], x['calls_today']), reverse=True)
+    performance_data.sort(key=lambda x: (x['total_conversions'], x['total_calls']), reverse=True)
     
     kpis = {"total_calls": total_calls_team, "total_conversions": total_conversions_team, "conversion_rate": team_conversion_rate}
     context = {"title": "Desempenho da Equipe", "kpis": kpis, "pie_chart_html": pie_chart_html, "legend_data": legend_data, "performance_data": performance_data, "selected_period": period}
