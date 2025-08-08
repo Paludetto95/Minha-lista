@@ -6,6 +6,7 @@ import uuid
 import threading
 import plotly.graph_objects as go
 import plotly.io as pio
+import pytz
 from collections import defaultdict
 from functools import wraps
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
@@ -22,6 +23,12 @@ from sqlalchemy.sql import text
 bp = Blueprint('main', __name__)
 
 # --- FUNÇÕES HELPER ---
+
+def get_brasilia_time():
+    """Retorna o tempo atual no fuso horário de Brasília."""
+    utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    return utc_now.astimezone(brasilia_tz)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'csv', 'xlsx'}
 
@@ -94,7 +101,8 @@ def log_system_action(action_type, entity_type=None, entity_id=None, description
         entity_type=entity_type,
         entity_id=str(entity_id) if entity_id is not None else None,
         description=description,
-        details=details
+        details=details,
+        timestamp=get_brasilia_time()
     )
     db.session.add(log_entry)
     try:
@@ -124,8 +132,8 @@ def require_role(*roles):
 def update_user_status(user, new_status):
     """Atualiza o status e a última atividade de um usuário."""
     user.current_status = new_status
-    user.status_timestamp = datetime.utcnow()
-    user.last_activity_at = datetime.utcnow()
+    user.status_timestamp = get_brasilia_time()
+    user.last_activity_at = get_brasilia_time()
     db.session.add(user)
 
 # --- ROTAS DE AUTENTICAÇÃO E GERAIS ---
@@ -137,7 +145,7 @@ def login():
     if request.method == 'POST':
         user = User.query.filter_by(email=request.form.get('email')).first()
         if user and user.check_password(request.form.get('password')):
-            user.last_login = datetime.utcnow()
+            user.last_login = get_brasilia_time()
             if user.role == 'consultor':
                 update_user_status(user, 'Ocioso')
             db.session.commit()
@@ -230,11 +238,11 @@ def admin_dashboard():
 @require_role('super_admin')
 def admin_monitor():
     consultants = User.query.filter_by(role='consultor').all()
-    start_of_day = datetime.combine(date.today(), time.min)
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
     agents_data = []
     for agent in consultants:
         inactivity_threshold = timedelta(minutes=2)
-        is_inactive = (agent.last_activity_at is not None) and ((datetime.utcnow() - agent.last_activity_at) > inactivity_threshold)
+        is_inactive = (agent.last_activity_at is not None) and ((get_brasilia_time() - agent.last_activity_at) > inactivity_threshold)
         
         real_status = agent.current_status
         if is_inactive and agent.current_status != 'Offline':
@@ -444,7 +452,7 @@ def upload_step2_process():
                 'produto_id': produto_id,
                 'cpf': cpf_digits,
                 'status': 'Novo',
-                'data_criacao': datetime.utcnow(),
+                'data_criacao': get_brasilia_time(),
                 'additional_data': additional_data 
             }
             final_lead_data.update(row_data) 
@@ -481,7 +489,7 @@ def upload_step2_process():
 @login_required
 @require_role('super_admin')
 def manage_teams():
-    today = date.today()
+    today = get_brasilia_time().date()
     start_of_month = datetime(today.year, today.month, 1)
 
     monthly_consumption_subquery = db.session.query(
@@ -524,7 +532,7 @@ def team_details(group_id):
 
     # --- CÓDIGO ADICIONADO AQUI ---
     # Calcula o consumo mensal de leads para esta equipe específica.
-    today = date.today()
+    today = get_brasilia_time().date()
     start_of_month = datetime(today.year, today.month, 1)
     user_ids_in_group = [user.id for user in users_in_group]
     
@@ -1155,7 +1163,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
         user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
-        task.start_time = datetime.utcnow()
+        task.start_time = get_brasilia_time()
         task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
         db.session.add(task)
         db.session.commit()
@@ -1179,7 +1187,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Nenhum lead encontrado para o mailing de Produto {produto_id}, Estado {estado}. Concluído."
-                task.end_time = datetime.utcnow()
+                task.end_time = get_brasilia_time()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1219,7 +1227,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do mailing de Produto {produto_id}, Estado {estado} concluída. Total de {processed_count} leads excluídos."
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1231,7 +1239,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do mailing: {str(e)}"
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1249,7 +1257,7 @@ def delete_product_in_background(app, task_id, product_id):
         user_id_for_task = task.user_id
 
         task.status = 'RUNNING'
-        task.start_time = datetime.utcnow()
+        task.start_time = get_brasilia_time()
         task.message = f"Iniciando exclusão do produto e seus leads associados..."
         db.session.add(task)
         db.session.commit()
@@ -1273,7 +1281,7 @@ def delete_product_in_background(app, task_id, product_id):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
-                task.end_time = datetime.utcnow()
+                task.end_time = get_brasilia_time()
                 db.session.add(task)
                 
                 produto_final = Produto.query.get(product_id)
@@ -1321,7 +1329,7 @@ def delete_product_in_background(app, task_id, product_id):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do produto '{product_name}' e seus {processed_count} leads associados concluída com sucesso."
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1333,7 +1341,7 @@ def delete_product_in_background(app, task_id, product_id):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do produto: {str(e)}"
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1413,7 +1421,7 @@ def export_all_mailings():
     output = io.StringIO()
     df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
     csv_data = output.getvalue()
-    filename = f"relatorio_completo_mailings_{date.today().strftime('%Y-%m-%d')}.csv"
+    filename = f"relatorio_completo_mailings_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
 
 @bp.route('/admin/tabulations')
@@ -1599,7 +1607,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Comparação concluída. {len(leads_found)} leads encontrados para higienização."
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             task.details = {'leads_to_delete_preview': leads_found}
             db.session.add(task)
             db.session.commit()
@@ -1612,7 +1620,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na planilha: {ve}"
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1623,7 +1631,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Ocorreu um erro inesperado: {str(e)}"
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1707,7 +1715,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = "Nenhum lead para higienizar. Concluído."
-                task.end_time = datetime.utcnow()
+                task.end_time = get_brasilia_time()
                 db.session.add(task)
                 db.session.commit()
                 db.session.refresh(task)
@@ -1737,7 +1745,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Higienização concluída. Total de {processed_count} leads removidos do sistema."
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1747,7 +1755,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             db.session.rollback()
             task.status = 'FAILED'
             task.message = f"Erro na higienização: {str(e)}"
-            task.end_time = datetime.utcnow()
+            task.end_time = get_brasilia_time()
             db.session.add(task)
             db.session.commit()
             db.session.refresh(task)
@@ -1811,7 +1819,7 @@ def admin_export_filtered_leads():
     elif tabulation_status == 'new':
         leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.is_(None))
     elif tabulation_status == 'recycled':
-        leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.isnot(None), Lead.available_after > datetime.utcnow())
+        leads_query = leads_query.filter(Lead.status == 'Novo', Lead.available_after.isnot(None), Lead.available_after > get_brasilia_time())
     
     if product_ids_str:
         try:
@@ -1897,7 +1905,7 @@ def admin_export_filtered_leads():
         df.to_excel(writer, index=False, sheet_name='Relatorio_Leads_Filtrado')
     output.seek(0)
 
-    filename = f"relatorio_leads_filtrado_{date.today().strftime('%Y-%m-%d')}.xlsx"
+    filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.xlsx"
     log_system_action('LEAD_EXPORT_FILTERED', entity_type='Lead', 
                       description=f"Exportação de relatório de leads filtrado com {len(leads_to_export)} leads.",
                       details={'filters': request.args.to_dict(), 'total_exported': len(leads_to_export)})
@@ -1910,28 +1918,41 @@ def admin_export_filtered_leads():
 def parceiro_dashboard():
     user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id).with_entities(User.id)]
     recent_activity = ActivityLog.query.filter(ActivityLog.user_id.in_(user_ids_in_group)).options(joinedload(ActivityLog.lead), joinedload(ActivityLog.user), joinedload(ActivityLog.tabulation)).order_by(ActivityLog.timestamp.desc()).limit(15).all()
-    return render_template('parceiro/dashboard.html', title=f"Painel - {current_user.grupo.nome}", recent_activity=recent_activity)
+    
+    # Calcula o consumo mensal de leads para o grupo do parceiro
+    today = get_brasilia_time().date()
+    start_of_month = datetime(today.year, today.month, 1)
+    
+    monthly_consumption = 0
+    if user_ids_in_group:
+        monthly_consumption = db.session.query(func.count(LeadConsumption.id))            .filter(LeadConsumption.user_id.in_(user_ids_in_group))            .filter(LeadConsumption.timestamp >= start_of_month)            .scalar() or 0
+            
+    return render_template('parceiro/dashboard.html', 
+                           title=f"Painel - {current_user.grupo.nome}", 
+                           recent_activity=recent_activity,
+                           monthly_consumption=monthly_consumption,
+                           grupo=current_user.grupo)
 
 @bp.route('/parceiro/monitor')
 @login_required
 @require_role('admin_parceiro')
 def parceiro_monitor():
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
-    start_of_day = datetime.combine(date.today(), time.min)
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
     agents_data = []
     for agent in consultants:
         inactivity_threshold_minutes = 2 
-        if agent.last_activity_at and (datetime.utcnow() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
+        if agent.last_activity_at and (get_brasilia_time() - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
             real_status = 'Offline'
             if agent.current_status != 'Offline':
                 agent.current_status = 'Offline'
-                agent.status_timestamp = datetime.utcnow()
+                agent.status_timestamp = get_brasilia_time()
                 db.session.add(agent)
                 db.session.commit()
         else:
             real_status = agent.current_status
 
-        time_in_status = datetime.utcnow() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
+        time_in_status = get_brasilia_time() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
         hours, remainder = divmod(time_in_status.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
         timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
@@ -1949,7 +1970,7 @@ def parceiro_monitor():
 @require_role('admin_parceiro')
 def parceiro_performance_dashboard():
     period = request.args.get('periodo', 'hoje')
-    today = date.today()
+    today = get_brasilia_time().date()
     if period == 'ontem':
         start_date = datetime.combine(today - timedelta(days=1), time.min)
         end_date = datetime.combine(today - timedelta(days=1), time.max)
@@ -1999,232 +2020,191 @@ def parceiro_performance_dashboard():
 @bp.route('/parceiro/performance_dashboard/export')
 @login_required
 @require_role('admin_parceiro')
-def parceiro_export_performance():
+def parceiro_performance_dashboard_export():
     period = request.args.get('periodo', 'hoje')
-    today = date.today()
+    today = get_brasilia_time().date()
     if period == 'ontem':
         start_date = datetime.combine(today - timedelta(days=1), time.min)
         end_date = datetime.combine(today - timedelta(days=1), time.max)
     elif period == '7dias':
         start_date = datetime.combine(today - timedelta(days=6), time.min)
         end_date = datetime.combine(today, time.max)
-    else:
+    else: # 'hoje'
         start_date = datetime.combine(today, time.min)
         end_date = datetime.combine(today, time.max)
+    
     user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id, role='consultor').with_entities(User.id)]
+    
     consultants = User.query.filter(User.id.in_(user_ids_in_group)).all()
     performance_data = []
     for consultant in consultants:
         total_calls = ActivityLog.query.filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date)).count()
         total_conversions = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == consultant.id, ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
         conversion_rate = (total_conversions / total_calls * 100) if total_calls > 0 else 0
-        performance_data.append({'Consultor': consultant.username, 'Ligações': total_calls, 'Conversões': total_conversions, 'Taxa de Conversão (%)': round(conversion_rate, 2)})
-    performance_data.sort(key=lambda x: x['Conversões'], reverse=True)
-    if not performance_data:
-        flash('Nenhum dado de desempenho para exportar.', 'warning')
-        return redirect(url_for('main.parceiro_performance_dashboard', periodo=period))
+        performance_data.append({'Consultor': consultant.username, 'Status': consultant.current_status, 'Ligações': total_calls, 'Conversões': total_conversions, 'Taxa de Conversão (%)': f"{conversion_rate:.2f}"})
+    
     df = pd.DataFrame(performance_data)
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Desempenho_Equipe')
     output.seek(0)
-    filename = f"desempenho_{current_user.grupo.nome}_{period}_{date.today()}.xlsx"
+
+    filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
     return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
 
-@bp.route('/parceiro/users')
-@login_required
-@require_role('admin_parceiro')
-def parceiro_manage_users():
-    users = User.query.filter(User.grupo_id == current_user.grupo_id, User.role == 'consultor').order_by(User.username).all()
-    return render_template('parceiro/manage_users.html', title="Gerir Nomes da Equipe", users=users)
-
 # --- ROTAS DO CONSULTOR ---
+
 @bp.route('/consultor/dashboard')
 @login_required
 @require_role('consultor')
 def consultor_dashboard():
-    start_of_day = datetime.combine(date.today(), time.min)
-    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
-    leads_consumidos_hoje = LeadConsumption.query.filter(LeadConsumption.user_id == current_user.id, LeadConsumption.timestamp >= start_of_day).count()
-    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
-    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
-    mailings_disponiveis = []
-    if vagas_na_carteira > 0 and vagas_na_puxada_diaria > 0:
-        mailings_disponiveis = db.session.query(Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado, func.count(Lead.id).label('leads_disponiveis')).join(Produto, Lead.produto_id == Produto.id).filter(Lead.status == 'Novo', Lead.consultor_id == None, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
-    search_history = request.args.get('search_history', '')
-    history_query = ActivityLog.query.options(joinedload(ActivityLog.lead), joinedload(ActivityLog.tabulation)).filter(ActivityLog.user_id == current_user.id)
-    if search_history:
-        search_term = f"%{search_history}%"
-        history_query = history_query.join(Lead).filter(or_(Lead.nome.ilike(search_term), Lead.cpf.ilike(search_term)))
-    tabulated_history = history_query.order_by(ActivityLog.timestamp.desc()).all()
-    all_tabulations = Tabulation.query.order_by(Tabulation.name).all()
-    return render_template('consultor_dashboard.html', title='Meu Painel', vagas_na_carteira=vagas_na_carteira, leads_em_atendimento=leads_em_atendimento, leads_consumidos_hoje=leads_consumidos_hoje, vagas_na_puxada_diaria=vagas_na_puxada_diaria, current_user=current_user, mailings_disponiveis=mailings_disponiveis, tabulated_history=tabulated_history, search_history=search_history, all_tabulations=all_tabulations)
-
-@bp.route('/pegar_leads_selecionados', methods=['POST'])
-@login_required
-@require_role('consultor')
-def pegar_leads_selecionados():
-    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
-    start_of_day = datetime.combine(date.today(), time.min)
-    leads_consumidos_hoje = LeadConsumption.query.filter(LeadConsumption.user_id == current_user.id, LeadConsumption.timestamp >= start_of_day).count()
-    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
-    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
-    limite_total_a_pegar = min(vagas_na_carteira, vagas_na_puxada_diaria)
-    leads_pegos_total = 0
-    for key, value in request.form.items():
-        if key.startswith('leads_') and value.isdigit() and int(value) > 0:
-            quantidade_a_pegar = int(value)
-            if leads_pegos_total + quantidade_a_pegar > limite_total_a_pegar:
-                quantidade_a_pegar = limite_total_a_pegar - leads_pegos_total
-            if quantidade_a_pegar <= 0: continue
-            try:
-                produto_id, estado = key.replace('leads_', '').split('-')
-                produto_id = int(produto_id)
-            except (ValueError, IndexError):
-                continue
-            leads_disponiveis = Lead.query.filter(Lead.status == 'Novo', Lead.consultor_id == None, Lead.produto_id == produto_id, Lead.estado == estado, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).limit(quantidade_a_pegar).all()
-            if leads_disponiveis:
-                try:
-                    for lead in leads_disponiveis:
-                        lead.consultor_id = current_user.id
-                        lead.status = 'Em Atendimento'
-                        consumo = LeadConsumption(user_id=current_user.id, lead_id=lead.id)
-                        db.session.add(consumo)
-                    db.session.commit()
-                    leads_pegos_total += len(leads_disponiveis)
-                except Exception as e:
-                    db.session.rollback()
-                    flash(f'Ocorreu um erro ao atribuir leads: {e}', 'danger')
-                    return redirect(url_for('main.consultor_dashboard'))
-    if leads_pegos_total > 0:
-        flash(f'{leads_pegos_total} novos leads foram adicionados à sua carteira!', 'success')
-    else:
-        flash('Nenhum lead foi selecionado ou não havia leads disponíveis nos lotes escolhidos.', 'warning')
-    return redirect(url_for('main.consultor_dashboard'))
-
-@bp.route('/atendimento')
-@login_required
-@require_role('consultor')
-def atendimento():
-    lead_para_atender = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
-    if not lead_para_atender:
-        update_user_status(current_user, 'Ocioso')
-        db.session.commit()
-        flash('Parabéns, você não tem mais leads pendentes para atender!', 'success')
-        return redirect(url_for('main.consultor_dashboard'))
-    update_user_status(current_user, 'Falando')
+    update_user_status(current_user, 'Ocioso')
     db.session.commit()
-    tabulations = Tabulation.query.order_by(Tabulation.name).all()
-    lead_details = {}
     
-    ordem_dos_campos = [
-        'nome', 'cpf', 'telefone', 'telefone_2', 'cidade', 'rg', 'estado', 'bairro', 
-        'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 
-        'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 
-        'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 
-        'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10'
-    ]
+    total_leads_in_wallet = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     
-    for campo in ordem_dos_campos:
-        valor = getattr(lead_para_atender, campo, None)
-        if valor:
-            nome_exibicao = campo.replace('_', ' ').title()
-            lead_details[nome_exibicao] = valor
+    # Contagem de chamadas e conversões HOJE
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    calls_today = ActivityLog.query.filter(
+        ActivityLog.user_id == current_user.id,
+        ActivityLog.timestamp >= start_of_day
+    ).count()
+    conversions_today = ActivityLog.query.join(Tabulation).filter(
+        ActivityLog.user_id == current_user.id,
+        ActivityLog.timestamp >= start_of_day,
+        Tabulation.is_positive_conversion == True
+    ).count()
 
-    if lead_para_atender.additional_data:
-        for key, value in lead_para_atender.additional_data.items():
-            if key.title() not in lead_details:
-                lead_details[key.title()] = value
-                
-    phone_numbers = []
-    processed_numbers = set()
-    for label, phone_number in [('Telefone Principal', lead_para_atender.telefone), ('Telefone 2', lead_para_atender.telefone_2)]:
-        if phone_number and phone_number.strip():
-            clean_phone = re.sub(r'\D', '', phone_number)
-            if len(clean_phone) >= 8 and clean_phone not in processed_numbers:
-                phone_numbers.append({'label': label, 'number': clean_phone})
-                processed_numbers.add(clean_phone)
-                
-    if lead_para_atender.additional_data:
-        phone_key_fragments = ['tel', 'fone', 'cel', 'whatsapp']
-        for key, value in lead_para_atender.additional_data.items():
-            if any(fragment in str(key).lower() for fragment in phone_key_fragments):
-                if value and str(value).strip():
-                    clean_phone = re.sub(r'\D', '', str(value))
-                    if len(clean_phone) >= 8 and clean_phone not in processed_numbers:
-                        phone_numbers.append({'label': key.title(), 'number': clean_phone})
-                        processed_numbers.add(clean_phone)
-                        
-    return render_template('atendimento.html', title="Atendimento de Lead", lead=lead_para_atender, lead_details=lead_details, tabulations=tabulations, phone_numbers=phone_numbers)
+    # Contagem de chamadas e conversões no MÊS ATUAL
+    start_of_month = get_brasilia_time().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    calls_month = ActivityLog.query.filter(
+        ActivityLog.user_id == current_user.id,
+        ActivityLog.timestamp >= start_of_month
+    ).count()
+    conversions_month = ActivityLog.query.join(Tabulation).filter(
+        ActivityLog.user_id == current_user.id,
+        ActivityLog.timestamp >= start_of_month,
+        Tabulation.is_positive_conversion == True
+    ).count()
 
-@bp.route('/atender/<int:lead_id>', methods=['POST'])
+    # Produtos disponíveis para o consultor
+    available_products = Produto.query.all()
+
+    return render_template('consultor_dashboard.html', 
+                           title='Dashboard do Consultor',
+                           total_leads_in_wallet=total_leads_in_wallet,
+                           calls_today=calls_today,
+                           conversions_today=conversions_today,
+                           calls_month=calls_month,
+                           conversions_month=conversions_month,
+                           available_products=available_products)
+
+@bp.route('/consultor/get_lead', methods=['POST'])
 @login_required
 @require_role('consultor')
-def atender_lead(lead_id):
+def get_lead():
+    produto_id = request.form.get('produto_id')
+    if not produto_id:
+        flash('Selecione um produto para puxar o lead.', 'warning')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    # Verifica o limite da carteira
+    current_wallet_size = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    if current_wallet_size >= current_user.wallet_limit:
+        flash(f'Você atingiu o limite de {current_user.wallet_limit} leads na sua carteira.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    # Verifica o limite diário de puxadas
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    leads_pulled_today = LeadConsumption.query.filter(
+        LeadConsumption.user_id == current_user.id,
+        LeadConsumption.timestamp >= start_of_day
+    ).count()
+    if leads_pulled_today >= current_user.daily_pull_limit:
+        flash(f'Você atingiu seu limite diário de {current_user.daily_pull_limit} puxadas de lead.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    # Lógica para encontrar um lead
+    lead = Lead.query.filter(
+        Lead.produto_id == produto_id,
+        Lead.status == 'Novo',
+        or_(Lead.available_after.is_(None), Lead.available_after <= get_brasilia_time())
+    ).order_by(Lead.data_criacao).first()
+
+    if lead:
+        lead.consultor_id = current_user.id
+        lead.status = 'Em Atendimento'
+        lead.data_atendimento = get_brasilia_time()
+        
+        consumption = LeadConsumption(
+            lead_id=lead.id,
+            user_id=current_user.id,
+            timestamp=get_brasilia_time()
+        )
+        db.session.add(consumption)
+        
+        update_user_status(current_user, 'Em Atendimento')
+        db.session.commit()
+        
+        log_system_action('LEAD_PULLED', entity_type='Lead', entity_id=lead.id, 
+                          description=f"Lead '{lead.nome}' (ID: {lead.id}) puxado por '{current_user.username}'.")
+                          
+        return redirect(url_for('main.atendimento', lead_id=lead.id))
+    else:
+        flash('Nenhum lead novo disponível para este produto no momento.', 'warning')
+        return redirect(url_for('main.consultor_dashboard'))
+
+@bp.route('/atendimento/<int:lead_id>', methods=['GET', 'POST'])
+@login_required
+@require_role('consultor')
+def atendimento(lead_id):
     lead = Lead.query.get_or_404(lead_id)
     if lead.consultor_id != current_user.id:
-        flash('Este lead não pertence a você.', 'danger')
+        flash('Este lead não está atribuído a você.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
-    tabulation_id = request.form.get('tabulation_id')
-    if not tabulation_id:
-        flash('Selecione uma opção de tabulação.', 'warning')
-        return redirect(url_for('main.atendimento'))
-    tabulation = Tabulation.query.get(int(tabulation_id))
-    if not tabulation:
-        flash('Tabulação inválida.', 'danger')
-        return redirect(url_for('main.atendimento'))
-    action_type = ''
-    if tabulation.is_recyclable and tabulation.recycle_in_days is not None:
-        recycle_date = datetime.utcnow() + timedelta(days=tabulation.recycle_in_days)
-        lead.status = 'Novo'
-        lead.consultor_id = None
-        lead.tabulation_id = None 
-        lead.data_tabulacao = None 
-        lead.available_after = recycle_date
-        action_type = 'Reciclagem'
-        flash(f'Lead de {lead.nome} será reciclado em {tabulation.recycle_in_days} dias.', 'info')
-    else:
-        lead.tabulation_id = tabulation.id
-        lead.status = 'Tabulado'
-        lead.data_tabulacao = datetime.utcnow()
-        action_type = 'Tabulação'
-        flash(f'Lead de {lead.nome} tabulado com sucesso!', 'success')
-    activity_log_entry = ActivityLog(lead_id=lead.id, user_id=current_user.id, tabulation_id=tabulation.id, action_type=action_type)
-    db.session.add(activity_log_entry)
-    db.session.commit()
-    return redirect(url_for('main.atendimento'))
 
-@bp.route('/retabulate/<int:lead_id>', methods=['POST'])
-@login_required
-@require_role('consultor', 'admin_parceiro', 'super_admin')
-def retabulate_lead(lead_id):
-    lead = Lead.query.get_or_404(lead_id)
-    last_activity = ActivityLog.query.filter_by(lead_id=lead.id).order_by(ActivityLog.timestamp.desc()).first()
-    if not last_activity:
-        flash('Nenhuma atividade anterior encontrada para este lead.', 'danger')
-        return redirect(request.referrer or url_for('main.index'))
-    original_consultor = User.query.get(last_activity.user_id)
-    if current_user.role == 'consultor' and (not original_consultor or original_consultor.id != current_user.id):
-        flash('Não pode editar um lead que não é seu.', 'danger')
+    if request.method == 'POST':
+        tabulation_id = request.form.get('tabulation_id')
+        if not tabulation_id:
+            flash('Selecione uma tabulação.', 'danger')
+            return redirect(url_for('main.atendimento', lead_id=lead.id))
+
+        tabulation = Tabulation.query.get(tabulation_id)
+        if not tabulation:
+            flash('Tabulação inválida.', 'danger')
+            return redirect(url_for('main.atendimento', lead_id=lead.id))
+
+        lead.status = 'Tabulado'
+        lead.tabulation_id = tabulation.id
+        lead.data_tabulacao = get_brasilia_time()
+
+        if tabulation.is_recyclable and tabulation.recycle_in_days:
+            lead.status = 'Reciclado'
+            lead.available_after = get_brasilia_time() + timedelta(days=tabulation.recycle_in_days)
+            lead.consultor_id = None
+
+        activity = ActivityLog(
+            lead_id=lead.id,
+            user_id=current_user.id,
+            action_type='Tabulação',
+            tabulation_id=tabulation.id,
+            timestamp=get_brasilia_time()
+        )
+        db.session.add(activity)
+        
+        update_user_status(current_user, 'Ocioso')
+        db.session.commit()
+
+        log_system_action('LEAD_TABULATED', entity_type='Lead', entity_id=lead.id, 
+                          description=f"Lead '{lead.nome}' (ID: {lead.id}) tabulado como '{tabulation.name}' por '{current_user.username}'.",
+                          details={'tabulation_id': tabulation.id, 'tabulation_name': tabulation.name})
+
+        flash(f'Lead {lead.nome} tabulado com sucesso!', 'success')
         return redirect(url_for('main.consultor_dashboard'))
-    if current_user.role == 'admin_parceiro' and (not original_consultor or original_consultor.grupo_id != current_user.grupo_id):
-        flash('Não pode editar um lead de outra equipe.', 'danger')
-        return redirect(url_for('main.parceiro_dashboard'))
-    new_tabulation_id = request.form.get('new_tabulation_id')
-    if not new_tabulation_id:
-        flash('Nova tabulação não selecionada.', 'warning')
-        return redirect(request.referrer or url_for('main.index'))
-    new_tabulation = Tabulation.query.get(int(new_tabulation_id))
-    if not new_tabulation:
-        flash('Tabulação selecionada inválida.', 'danger')
-        return redirect(request.referrer or url_for('main.index'))
-    lead.tabulation_id = new_tabulation.id
-    lead.status = 'Tabulado'
-    lead.data_tabulacao = datetime.utcnow()
-    if original_consultor:
-        lead.consultor_id = original_consultor.id
-    retab_log = ActivityLog(lead_id=lead.id, user_id=current_user.id, tabulation_id=new_tabulation.id, action_type='Retabulação')
-    db.session.add(retab_log)
+
+    tabulations = Tabulation.query.order_by(Tabulation.name).all()
+    update_user_status(current_user, 'Em Atendimento')
     db.session.commit()
-    flash(f'Tabulação do lead {lead.nome} atualizada!', 'success')
-    return redirect(request.referrer or url_for('main.index'))
+    
+    return render_template('atendimento.html', title='Atendimento', lead=lead, tabulations=tabulations)
