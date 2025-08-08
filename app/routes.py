@@ -1938,29 +1938,69 @@ def parceiro_dashboard():
 @require_role('admin_parceiro')
 def parceiro_monitor():
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
-    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Define o fuso horário e o tempo atual uma única vez.
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    now_in_brasilia = get_brasilia_time()
+    start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
+    
     agents_data = []
     for agent in consultants:
-        inactivity_threshold_minutes = 2 
-        if agent.last_activity_at and (get_brasilia_time().astimezone(pytz.utc).replace(tzinfo=None) - agent.last_activity_at > timedelta(minutes=inactivity_threshold_minutes)):
-            real_status = 'Offline'
-            if agent.current_status != 'Offline':
-                agent.current_status = 'Offline'
-                agent.status_timestamp = get_brasilia_time()
-                db.session.add(agent)
-                db.session.commit()
-        else:
-            real_status = agent.current_status
+        real_status = agent.current_status
+        time_in_status_str = "00:00:00"
 
-        time_in_status = get_brasilia_time() - agent.status_timestamp if agent.status_timestamp else timedelta(0)
-        hours, remainder = divmod(time_in_status.total_seconds(), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        timer_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        # --- VERIFICAÇÃO DE INATIVIDADE CORRIGIDA ---
+        inactivity_threshold = timedelta(minutes=2)
+        is_inactive = False
+        if agent.last_activity_at:
+            # ESSENCIAL: Torna o datetime do banco "aware" antes de comparar.
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
+                is_inactive = True
         
-        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
-        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp.between(start_date, end_date), Tabulation.is_positive_conversion == True).count()
-        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
-        agents_data.append({'id': agent.id, 'name': agent.username, 'status': real_status, 'local': current_work[0] if current_work else "Nenhum", 'calls_today': calls_today, 'conversions_today': conversions_today})
+        if is_inactive and agent.current_status != 'Offline':
+            real_status = 'Offline'
+            agent.current_status = 'Offline'
+            agent.status_timestamp = now_in_brasilia # Usa o tempo 'aware' já capturado
+            db.session.add(agent)
+            db.session.commit() # Commit da atualização de status
+
+        # --- CORREÇÃO PRINCIPAL DO TYPEERROR ---
+        if agent.status_timestamp:
+            # ESSENCIAL: Torna o datetime do banco "aware" antes de subtrair.
+            aware_status_timestamp = brasilia_tz.localize(agent.status_timestamp)
+            time_in_status_delta = now_in_brasilia - aware_status_timestamp
+            
+            # Formata o tempo para exibição
+            hours, remainder = divmod(time_in_status_delta.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_in_status_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+        # --- QUERIES CORRIGIDAS (usando start_of_day) ---
+        calls_today = ActivityLog.query.filter(
+            ActivityLog.user_id == agent.id, 
+            ActivityLog.timestamp >= start_of_day
+        ).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(
+            ActivityLog.user_id == agent.id, 
+            ActivityLog.timestamp >= start_of_day, 
+            Tabulation.is_positive_conversion == True
+        ).count()
+        
+        current_work = Lead.query.join(Produto).filter(
+            Lead.consultor_id == agent.id, 
+            Lead.status == 'Em Atendimento'
+        ).with_entities(Produto.name).first()
+        
+        agents_data.append({
+            'id': agent.id, 
+            'name': agent.username, 
+            'status': real_status, 
+            'local': current_work[0] if current_work else "Nenhum", 
+            'calls_today': calls_today, 
+            'conversions_today': conversions_today,
+            'time_in_status': time_in_status_str # Passa o timer para o template
+        })
     
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
