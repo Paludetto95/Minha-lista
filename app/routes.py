@@ -233,37 +233,65 @@ def admin_dashboard():
                            all_layouts=all_layouts, 
                            recent_activity=recent_activity)
 
+# SUBSTITUA A FUNÇÃO admin_monitor INTEIRA POR ESTA VERSÃO CORRIGIDA
+
 @bp.route('/admin/monitor')
 @login_required
 @require_role('super_admin')
 def admin_monitor():
     consultants = User.query.filter_by(role='consultor').all()
-    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 1. Definir o fuso horário e o tempo atual UMA VEZ fora do loop
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    now_in_brasilia = get_brasilia_time()
+    start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
+
     agents_data = []
     for agent in consultants:
+        # --- LÓGICA DE INATIVIDADE CORRIGIDA ---
         inactivity_threshold = timedelta(minutes=2)
-        is_inactive = (agent.last_activity_at is not None) and ((get_brasilia_time() - agent.last_activity_at) > inactivity_threshold)
+        is_inactive = False
+        if agent.last_activity_at:
+            # 2. CORREÇÃO: Torna o datetime do banco "aware" antes de comparar
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
+                is_inactive = True
         
         real_status = agent.current_status
+        # Atualiza o status se o agente estiver inativo
         if is_inactive and agent.current_status != 'Offline':
             real_status = 'Offline'
+            # Usa a função helper para garantir a consistência
             update_user_status(agent, 'Offline')
+            db.session.commit() # Salva a atualização no banco
 
-        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
+        # --- QUERIES PARA DADOS DO AGENTE ---
+        calls_today = ActivityLog.query.filter(
+            ActivityLog.user_id == agent.id, 
+            ActivityLog.timestamp >= start_of_day
+        ).count()
+        
         conversions_today = ActivityLog.query.join(Tabulation).filter(
             ActivityLog.user_id == agent.id, 
             ActivityLog.timestamp >= start_of_day, 
             Tabulation.is_positive_conversion == True
         ).count()
-        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
+        
+        current_work = Lead.query.join(Produto).filter(
+            Lead.consultor_id == agent.id, 
+            Lead.status == 'Em Atendimento'
+        ).with_entities(Produto.name).first()
         
         agents_data.append({
-            'id': agent.id, 'name': agent.username, 'status': real_status, 
-            'last_login': agent.last_login, 
+            'id': agent.id, 
+            'name': agent.username, 
+            'status': real_status, 
+            'last_login': agent.last_login.astimezone(brasilia_tz) if agent.last_login else None, # Garante que o last_login também tenha timezone
             'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 
-            'calls_today': calls_today, 'conversions_today': conversions_today
+            'calls_today': calls_today, 
+            'conversions_today': conversions_today
         })
-    db.session.commit()
+
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
 
