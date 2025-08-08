@@ -1,4 +1,4 @@
-<!-- app/templates/parceiro/monitor.html (VERSÃO COM ÚLTIMO LOGIN) -->
+<!-- app/templates/parceiro/monitor.html (VERSÃO CORRIGIDA E OTIMIZADA) -->
 {% extends "base.html" %}
 
 {% block styles %}
@@ -11,12 +11,13 @@
         font-weight: 500;
         min-width: 120px;
         text-align: center;
+        display: inline-block; /* Garante que o span tenha largura */
     }
-    .status-falando { background-color: #28a745; }
-    .status-ocioso { background-color: #6c757d; }
-    .status-em-negociacao { background-color: #ffc107; color: #000 !important;}
-    .status-tpa { background-color: #007bff; }
-    .status-offline { background-color: #dc3545; }
+    /* Mapeamento de status para cores de fundo */
+    .status-em-atendimento { background-color: #28a745; } /* Verde para "Em Atendimento" */
+    .status-ocioso { background-color: #ffc107; color: #000 !important; } /* Amarelo para "Ocioso" */
+    .status-offline { background-color: #dc3545; } /* Vermelho para "Offline" */
+    .status-tpa, .status-em-negociacao { background-color: #007bff; } /* Azul para outros status de trabalho */
 
     .table th, .table td {
         vertical-align: middle;
@@ -27,6 +28,12 @@
     .rank-1 { color: #ffd700; } /* Gold */
     .rank-2 { color: #c0c0c0; } /* Silver */
     .rank-3 { color: #cd7f32; } /* Bronze */
+
+    .timer {
+        font-size: 1.1rem;
+        font-weight: 500;
+        font-family: 'Courier New', Courier, monospace;
+    }
 </style>
 {% endblock %}
 
@@ -46,15 +53,16 @@
     <div class="card shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
+                <!-- Havia uma tag <table> duplicada aqui, foi corrigida -->
                 <table class="table table-hover table-striped mb-0">
-                <table class="table table-hover mb-0">
                     <thead class="table-secondary">
                         <tr>
                             <th style="width: 5%;" class="text-center">#</th>
-                            <th style="width: 25%;">Nome</th>
-                            <th style="width: 30%;">Status / Último Login</th>
-                            <th style="width: 15%;" class="text-center">Acionamentos Hoje</th>
-                            <th style="width: 20%;" class="text-center">Conversões Hoje</th>
+                            <th style="width: 25%;">Nome do Consultor</th>
+                            <th style="width: 15%;" class="text-center">Status</th>
+                            <th style="width: 15%;" class="text-center">Tempo no Status</th>
+                            <th style="width: 15%;" class="text-center">Acionamentos</th>
+                            <th style="width: 25%;" class="text-center">Conversões</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -68,25 +76,20 @@
                                 {% endif %}
                             </td>
                             <td><strong>{{ agent.name }}</strong></td>
-                            <td>
-                                <div class="d-flex align-items-center">
-                                    <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
-                                    <div class="ms-2 text-muted" style="font-size: 0.8rem;">
-                                        {% if agent.last_login %}
-                                            <!-- Formata a data e hora para o padrão brasileiro -->
-                                            {{ agent.last_login.strftime('%d/%m/%Y às %H:%M') }}
-                                        {% else %}
-                                            Nunca logou
-                                        {% endif %}
-                                    </div>
-                                </div>
+                            <td class="text-center">
+                                <!-- O CSS agora usa as classes como 'status-em-atendimento' -->
+                                <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
+                            </td>
+                            <td class="text-center">
+                                <!-- Exibe o novo campo 'time_in_status' que calculamos -->
+                                <span class="timer text-dark">{{ agent.time_in_status }}</span>
                             </td>
                             <td class="text-center fs-5">{{ agent.calls_today }}</td>
                             <td class="text-center fs-5 fw-bold text-success">{{ agent.conversions_today }}</td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted p-5">Nenhum consultor encontrado nesta equipe.</td>
+                            <td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado para esta equipe.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -103,6 +106,6 @@
     // Recarrega a página a cada 10 segundos para atualizar os dados
     setTimeout(function() {
         window.location.reload();
-    }, 30000); // 10000 milissegundos = 10 segundos
+    }, 10000); // 10000 milissegundos = 10 segundos
 </script>
 {% endblock %}
