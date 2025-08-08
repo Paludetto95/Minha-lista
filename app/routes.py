@@ -2053,6 +2053,13 @@ def parceiro_performance_dashboard_export():
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
     return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
 
+@bp.route('/parceiro/manage_users')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_manage_users():
+    users = User.query.filter_by(grupo_id=current_user.grupo_id).order_by(User.username).all()
+    return render_template('parceiro/manage_users.html', title="Gerir Utilizadores da Equipe", users=users)
+
 # --- ROTAS DO CONSULTOR ---
 
 @bp.route('/consultor/dashboard')
