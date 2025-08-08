@@ -2033,6 +2033,62 @@ def parceiro_monitor():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=agents_data)
 
+# ADICIONE ESTA NOVA ROTA NO SEU ARQUIVO app/routes.py
+
+@bp.route('/api/parceiro/monitor_data')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_monitor_data():
+    # A lógica aqui é exatamente a mesma da rota anterior
+    consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
+    
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    now_in_brasilia = get_brasilia_time()
+    start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    agents_data = []
+    for agent in consultants:
+        real_status = agent.current_status
+        time_in_status_str = "00:00:00"
+
+        inactivity_threshold = timedelta(minutes=2)
+        is_inactive = False
+        if agent.last_activity_at:
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
+                is_inactive = True
+        
+        if is_inactive and agent.current_status != 'Offline':
+            real_status = 'Offline'
+            agent.current_status = 'Offline'
+            agent.status_timestamp = now_in_brasilia
+            db.session.add(agent)
+            db.session.commit()
+
+        if agent.status_timestamp:
+            aware_status_timestamp = brasilia_tz.localize(agent.status_timestamp)
+            time_in_status_delta = now_in_brasilia - aware_status_timestamp
+            
+            hours, remainder = divmod(time_in_status_delta.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_in_status_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+        calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
+        
+        agents_data.append({
+            'name': agent.username, 
+            'status': real_status, 
+            'time_in_status': time_in_status_str,
+            'calls_today': calls_today, 
+            'conversions_today': conversions_today
+        })
+    
+    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
+    
+    # A ÚNICA MUDANÇA É AQUI: EM VEZ DE RENDERIZAR UM TEMPLATE, RETORNAMOS JSON.
+    return jsonify(agents_data=agents_data)
+
 @bp.route('/parceiro/performance_dashboard')
 @login_required
 @require_role('admin_parceiro')
