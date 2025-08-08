@@ -1966,8 +1966,9 @@ def parceiro_dashboard():
 @require_role('admin_parceiro')
 def parceiro_monitor():
     """
-    Esta função agora serve apenas para carregar a página HTML.
-    Os dados serão preenchidos imediatamente pelo JavaScript que chama a API.
+    Esta função serve apenas para carregar a página HTML.
+    Os dados são preenchidos pelo JavaScript. Passamos uma lista vazia
+    para a carga inicial.
     """
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=[])
 
@@ -1977,8 +1978,7 @@ def parceiro_monitor():
 @require_role('admin_parceiro')
 def parceiro_monitor_data():
     """
-    Esta é a API que fornece os dados atualizados para o monitor
-    no formato que o template espera.
+    Esta é a API que fornece os dados para o layout no estilo do admin monitor.
     """
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
     
@@ -1990,26 +1990,16 @@ def parceiro_monitor_data():
     for agent in consultants:
         real_status = agent.current_status
 
-        # Lógica de inatividade (sem alterações)
+        # Lógica de inatividade
         inactivity_threshold = timedelta(minutes=2)
-        is_inactive = False
         if agent.last_activity_at:
-            # Lidar com o caso de já ser aware (se salvo com timezone) ou naive
-            if agent.last_activity_at.tzinfo is None:
-                aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
-            else:
-                aware_last_activity = agent.last_activity_at.astimezone(brasilia_tz)
-            
-            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
-                is_inactive = True
-        
-        if is_inactive and agent.current_status != 'Offline':
-            real_status = 'Offline'
-            update_user_status(agent, 'Offline')
-            db.session.commit()
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold and agent.current_status != 'Offline':
+                real_status = 'Offline'
+                update_user_status(agent, 'Offline')
+                db.session.commit()
 
-        # --- DADOS PARA O NOVO LAYOUT ---
-        
+        # DADOS PARA O LAYOUT NOVO
         # 1. Obter "Equipe / Local"
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         local_str = f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}"
@@ -2019,18 +2009,13 @@ def parceiro_monitor_data():
 
         # 3. Obter estatísticas
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
-        conversions_today = ActivityLog.query.join(Tabulation).filter(
-            ActivityLog.user_id == agent.id, 
-            ActivityLog.timestamp >= start_of_day, 
-            Tabulation.is_positive_conversion == True
-        ).count()
+        conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         
-        # 4. Montar o dicionário com os dados corretos
         agents_data.append({
             'name': agent.username, 
             'status': real_status,
-            'local': local_str,             # <-- DADO CORRIGIDO
-            'last_login': last_login_str,   # <-- DADO CORRIGIDO
+            'local': local_str,
+            'last_login': last_login_str,
             'calls_today': calls_today, 
             'conversions_today': conversions_today
         })

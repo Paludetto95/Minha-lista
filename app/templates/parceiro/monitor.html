@@ -8,7 +8,7 @@
         padding: 0.4em 0.8em;
         border-radius: 20px;
         font-weight: 500;
-        min-width: 100px; /* Ajuste de largura */
+        min-width: 100px;
         text-align: center;
         display: inline-block;
     }
@@ -51,7 +51,7 @@
             <div class="table-responsive">
                 <table class="table table-hover table-striped mb-0">
                     <thead class="table-secondary">
-                        <!-- CABEÇALHOS ATUALIZADOS -->
+                        <!-- CABEÇALHOS ATUALIZADOS PARA O NOVO LAYOUT -->
                         <tr>
                             <th style="width: 5%;" class="text-center">#</th>
                             <th style="width: 20%;">Nome</th>
@@ -62,23 +62,7 @@
                         </tr>
                     </thead>
                     <tbody id="monitor-table-body">
-                        <!-- O CONTEÚDO SERÁ GERADO PELO JAVASCRIPT -->
-                        {% for agent in agents_data %}
-                        <!-- Este bloco é apenas para a carga inicial da página -->
-                        <tr>
-                             <td class="text-center fw-bold">{{ loop.index }}º</td>
-                             <td><strong>{{ agent.name }}</strong></td>
-                             <td>{{ agent.local }}</td>
-                             <td>
-                                 <div class="d-flex align-items-center">
-                                     <span class="status-badge status-{{ agent.status.lower().replace(' ', '-') }}">{{ agent.status }}</span>
-                                     <div class="ms-2 text-muted last-login-text">{{ agent.last_login }}</div>
-                                 </div>
-                             </td>
-                             <td class="text-center fs-5">{{ agent.calls_today }}</td>
-                             <td class="text-center fs-5 fw-bold text-success">{{ agent.conversions_today }}</td>
-                        </tr>
-                        {% endfor %}
+                        <!-- O conteúdo será gerado pelo JavaScript. Esta parte fica vazia na carga. -->
                     </tbody>
                 </table>
             </div>
@@ -90,3 +74,53 @@
 {% block scripts %}
 {{ super() }}
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableBody = document.getElementById('monitor-table-body');
+
+        async function updateMonitorData() {
+            try {
+                const response = await fetch("{{ url_for('main.parceiro_monitor_data') }}");
+                const data = await response.json();
+
+                tableBody.innerHTML = ''; // Limpa a tabela
+
+                if (data.agents_data && data.agents_data.length > 0) {
+                    data.agents_data.forEach((agent, index) => {
+                        const rankHtml = index < 3
+                            ? `<i class="fas fa-medal rank-medal rank-${index + 1}"></i>`
+                            : `${index + 1}º`;
+
+                        const statusClass = agent.status.toLowerCase().replace(/ /g, '-');
+                        
+                        // TEMPLATE DE LINHA ATUALIZADO PARA O NOVO LAYOUT
+                        const rowHtml = `
+                            <tr>
+                                <td class="text-center fw-bold">${rankHtml}</td>
+                                <td><strong>${agent.name}</strong></td>
+                                <td>${agent.local}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <span class="status-badge status-${statusClass}">${agent.status}</span>
+                                        <div class="ms-3 text-muted last-login-text">${agent.last_login}</div>
+                                    </div>
+                                </td>
+                                <td class="text-center fs-5">${agent.calls_today}</td>
+                                <td class="text-center fs-5 fw-bold text-success">${agent.conversions_today}</td>
+                            </tr>
+                        `;
+                        tableBody.innerHTML += rowHtml;
+                    });
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado para esta equipe.</td></tr>';
+                }
+            } catch (error) {
+                console.error("Erro ao atualizar os dados do monitor:", error);
+                tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger p-5">Erro ao carregar dados. Verifique o console.</td></tr>`;
+            }
+        }
+
+        updateMonitorData(); // Carrega os dados imediatamente
+        setInterval(updateMonitorData, 10000); // Define o intervalo para atualizações
+    });
+</script>
+{% endblock %}
