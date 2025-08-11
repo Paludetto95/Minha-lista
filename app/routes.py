@@ -1767,7 +1767,7 @@ def admin_export_filtered_leads():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Relatorio_Leads_Filtrado')
-    output.seek(0)
+    output.seek(0);
 
     filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.xlsx"
     log_system_action('LEAD_EXPORT_FILTERED', entity_type='Lead', 
@@ -1933,7 +1933,7 @@ def parceiro_performance_dashboard_export():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Desempenho_Equipe')
-    output.seek(0)
+    output.seek(0);
 
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
     return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
@@ -1996,40 +1996,60 @@ def consultor_dashboard():
     update_user_status(current_user, 'Ocioso')
     db.session.commit()
     
-    total_leads_in_wallet = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
     
     start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
-    calls_today = ActivityLog.query.filter(
-        ActivityLog.user_id == current_user.id,
-        ActivityLog.timestamp >= start_of_day
+    
+    leads_consumidos_hoje = LeadConsumption.query.filter(
+        LeadConsumption.user_id == current_user.id,
+        LeadConsumption.timestamp >= start_of_day
     ).count()
-    conversions_today = ActivityLog.query.join(Tabulation).filter(
-        ActivityLog.user_id == current_user.id,
-        ActivityLog.timestamp >= start_of_day,
-        Tabulation.is_positive_conversion == True
-    ).count()
+    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
 
-    start_of_month = get_brasilia_time().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    calls_month = ActivityLog.query.filter(
-        ActivityLog.user_id == current_user.id,
-        ActivityLog.timestamp >= start_of_month
-    ).count()
-    conversions_month = ActivityLog.query.join(Tabulation).filter(
-        ActivityLog.user_id == current_user.id,
-        ActivityLog.timestamp >= start_of_month,
-        Tabulation.is_positive_conversion == True
-    ).count()
+    mailings_disponiveis = db.session.query(
+        Lead.produto_id,
+        Produto.name.label('produto_nome'),
+        Lead.estado,
+        func.count(Lead.id).label('leads_disponiveis')
+    ).join(Produto, Lead.produto_id == Produto.id).filter(
+        Lead.status == 'Novo',
+        or_(Lead.available_after.is_(None), Lead.available_after <= get_brasilia_time())
+    ).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
 
-    available_products = Produto.query.all()
+    search_history = request.args.get('search_history', '')
+    tabulated_history_query = ActivityLog.query.filter(
+        ActivityLog.user_id == current_user.id,
+        ActivityLog.tabulation_id.isnot(None)
+    ).options(
+        joinedload(ActivityLog.lead),
+        joinedload(ActivityLog.tabulation)
+    ).order_by(ActivityLog.timestamp.desc())
+
+    if search_history:
+        search_pattern = f"%{search_history}%"
+        tabulated_history_query = tabulated_history_query.join(Lead).filter(
+            or_(
+                Lead.nome.ilike(search_pattern),
+                Lead.cpf.ilike(search_pattern)
+            )
+        )
+    
+    tabulated_history = tabulated_history_query.limit(50).all()
+
+    all_tabulations = Tabulation.query.order_by(Tabulation.name).all()
 
     return render_template('consultor_dashboard.html', 
                            title='Dashboard do Consultor',
-                           total_leads_in_wallet=total_leads_in_wallet,
-                           calls_today=calls_today,
-                           conversions_today=conversions_today,
-                           calls_month=calls_month,
-                           conversions_month=conversions_month,
-                           available_products=available_products)
+                           leads_em_atendimento=leads_em_atendimento,
+                           vagas_na_carteira=vagas_na_carteira,
+                           leads_consumidos_hoje=leads_consumidos_hoje,
+                           vagas_na_puxada_diaria=vagas_na_puxada_diaria,
+                           mailings_disponiveis=mailings_disponiveis,
+                           tabulated_history=tabulated_history,
+                           search_history=search_history,
+                           all_tabulations=all_tabulations,
+                           available_products=Produto.query.all())
 
 @bp.route('/consultor/get_lead', methods=['POST'])
 @login_required
