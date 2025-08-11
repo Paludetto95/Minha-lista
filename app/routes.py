@@ -233,9 +233,6 @@ def admin_dashboard():
                            all_layouts=all_layouts, 
                            recent_activity=recent_activity)
 
-# ======================================================================
-# CORREÇÃO 1: Otimização da Rota de Monitoramento (N+1 para 1 consulta)
-# ======================================================================
 @bp.route('/api/admin/monitor_data')
 @login_required
 @require_role('super_admin')
@@ -372,9 +369,6 @@ def upload_step1():
         flash(f'Erro ao ler o arquivo: {e}', 'danger')
         return redirect(url_for('main.admin_dashboard'))
 
-# ======================================================================
-# CORREÇÃO 2: Processamento de Upload sem carregar todos os CPFs
-# ======================================================================
 @bp.route('/upload_step2_process', methods=['POST'])
 @login_required
 @require_role('super_admin')
@@ -420,7 +414,6 @@ def upload_step2_process():
             db.session.add(new_layout)
             flash('Novo layout de mapeamento salvo com sucesso!', 'info')
 
-        # Otimização: ler o arquivo em lotes (chunks)
         chunk_size = 2000
         df_iterator = pd.read_excel(temp_filepath, dtype=str, chunksize=chunk_size) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str, chunksize=chunk_size)
 
@@ -502,9 +495,6 @@ def upload_step2_process():
             os.remove(temp_filepath)
     return redirect(url_for('main.admin_dashboard'))
 
-# ======================================================================
-# CORREÇÃO 3: Paginação na Gestão de Utilizadores
-# ======================================================================
 @bp.route('/admin/users')
 @login_required
 @require_role('super_admin')
@@ -554,9 +544,6 @@ def manage_users():
         sort_order=sort_order
     )
 
-# ======================================================================
-# NOVA ROTA ADICIONADA: manage_teams
-# ======================================================================
 @bp.route('/admin/teams')
 @login_required
 @require_role('super_admin')
@@ -584,6 +571,176 @@ def manage_teams():
 
     return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts)
 
+@bp.route('/admin/teams/<int:group_id>')
+@login_required
+@require_role('super_admin')
+def team_details(group_id):
+    grupo = Grupo.query.get_or_404(group_id)
+    
+    users_in_group = User.query.filter_by(grupo_id=grupo.id).order_by(User.username).all()
+
+    admins = [user for user in users_in_group if user.role == 'admin_parceiro']
+    consultores = [user for user in users_in_group if user.role == 'consultor']
+
+    total_logins_group = sum(1 for user in users_in_group if user.last_login is not None)
+    
+    available_users = User.query.filter(
+        User.grupo_id != group_id, 
+        User.role != 'super_admin'
+    ).order_by(User.username).all()
+
+    today = get_brasilia_time().date()
+    start_of_month = datetime(today.year, today.month, 1)
+    user_ids_in_group = [user.id for user in users_in_group]
+    
+    monthly_consumption = 0
+    if user_ids_in_group:
+        monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
+            .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
+            .filter(LeadConsumption.timestamp >= start_of_month)\
+            .scalar() or 0
+
+    return render_template(
+        'admin/team_details.html', 
+        title=f"Detalhes - {grupo.nome}", 
+        grupo=grupo, 
+        admins=admins, 
+        consultores=consultores,
+        total_logins_group=total_logins_group,
+        available_users=available_users,
+        monthly_consumption=monthly_consumption 
+    )
+
+@bp.route('/admin/groups/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_group():
+    nome = request.form.get('name')
+    color = request.form.get('color', '#6c757d')
+    logo_file = request.files.get('logo_file')
+    
+    monthly_pull_limit_str = request.form.get('monthly_pull_limit')
+    monthly_pull_limit = int(monthly_pull_limit_str) if monthly_pull_limit_str and monthly_pull_limit_str.isdigit() and int(monthly_pull_limit_str) > 0 else None
+    
+    logo_filename = None
+    if logo_file and logo_file.filename:
+        logo_filename = save_partner_logo(logo_file)
+        if not logo_filename:
+            flash('Formato de arquivo de logo inválido ou erro ao salvar.', 'danger')
+            return redirect(url_for('main.manage_teams'))
+
+    if nome:
+        existing_group = Grupo.query.filter_by(nome=nome).first()
+        if existing_group:
+            flash('Uma equipe com este nome já existe.', 'danger')
+            if logo_filename:
+                delete_partner_logo(logo_filename)
+        else:
+            new_group = Grupo(
+                nome=nome, 
+                color=color, 
+                logo_filename=logo_filename,
+                monthly_pull_limit=monthly_pull_limit
+            )
+            db.session.add(new_group)
+            db.session.commit()
+            flash('Equipe adicionada com sucesso!', 'success')
+            log_system_action(
+                action_type='GROUP_CREATED', 
+                entity_type='Group', 
+                entity_id=new_group.id, 
+                description=f"Grupo '{new_group.nome}' criado.",
+                details={
+                    'color': new_group.color, 
+                    'logo_filename': new_group.logo_filename,
+                    'monthly_pull_limit': new_group.monthly_pull_limit
+                }
+            )
+    return redirect(url_for('main.manage_teams'))
+
+@bp.route('/admin/groups/edit/<int:group_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def edit_group_name_color(group_id):
+    grupo = Grupo.query.get_or_404(group_id)
+    old_details = {
+        'name': grupo.nome, 'color': grupo.color, 'logo': grupo.logo_filename,
+        'monthly_pull_limit': grupo.monthly_pull_limit
+    }
+
+    new_name = request.form.get('name')
+    new_color = request.form.get('color')
+    new_logo_file = request.files.get('logo_file')
+    remove_logo = request.form.get('remove_logo') == 'on'
+    new_monthly_pull_limit_str = request.form.get('monthly_pull_limit')
+    
+    changes = {}
+
+    if new_name and new_name != grupo.nome:
+        grupo.nome = new_name
+        changes['name'] = {'old': old_details['name'], 'new': new_name}
+    
+    if new_color and new_color != grupo.color:
+        grupo.color = new_color
+        changes['color'] = {'old': old_details['color'], 'new': new_color}
+
+    try:
+        new_monthly_pull_limit = int(new_monthly_pull_limit_str) if new_monthly_pull_limit_str and int(new_monthly_pull_limit_str) > 0 else None
+        if new_monthly_pull_limit != grupo.monthly_pull_limit:
+            grupo.monthly_pull_limit = new_monthly_pull_limit
+            changes['monthly_pull_limit'] = {'old': old_details['monthly_pull_limit'], 'new': new_monthly_pull_limit}
+    except (ValueError, TypeError):
+        flash('O limite mensal deve ser um número válido.', 'warning')
+    
+    if remove_logo:
+        if grupo.logo_filename:
+            if delete_partner_logo(grupo.logo_filename):
+                changes['logo'] = {'old': grupo.logo_filename, 'new': 'removido'}
+                grupo.logo_filename = None
+    elif new_logo_file and new_logo_file.filename:
+        saved_filename = save_partner_logo(new_logo_file)
+        if saved_filename:
+            if grupo.logo_filename:
+                delete_partner_logo(grupo.logo_filename)
+            changes['logo'] = {'old': old_details['logo'], 'new': saved_filename}
+            grupo.logo_filename = saved_filename
+
+    if changes:
+        db.session.commit()
+        flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
+        log_system_action('GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
+                          description=f"Grupo '{grupo.nome}' atualizado.",
+                          details=changes)
+    else:
+        flash('Nenhuma alteração detectada.', 'info')
+
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+@bp.route('/admin/groups/delete/<int:group_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_group(group_id):
+    grupo = Grupo.query.get_or_404(group_id)
+    group_name = grupo.nome
+    logo_to_delete = grupo.logo_filename
+
+    if grupo.users.count() > 0:
+        flash(f'Erro: Não é possível excluir a equipe "{grupo.nome}" porque ela ainda contém usuários.', 'danger')
+        log_system_action(action_type='GROUP_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
+                          description=f"Tentativa de excluir grupo '{group_name}' falhou: contém usuários.")
+        return redirect(url_for('main.manage_teams'))
+    
+    db.session.delete(grupo)
+    db.session.commit()
+    
+    if logo_to_delete:
+        delete_partner_logo(logo_to_delete)
+        log_system_action(action_type='GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
+                          description=f"Arquivo de logo '{logo_to_delete}' excluído do disco para o grupo '{group_name}'.")
+
+    flash(f'Equipe "{group_name}" excluída com sucesso!', 'success')
+    log_system_action(action_type='GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
+    return redirect(url_for('main.manage_teams'))
 
 @bp.route('/admin/users/add', methods=['POST'])
 @login_required
