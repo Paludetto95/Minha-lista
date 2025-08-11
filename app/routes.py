@@ -236,13 +236,10 @@ def admin_dashboard():
 # ======================================================================
 # CORREÇÃO 1: Otimização da Rota de Monitoramento (N+1 para 1 consulta)
 # ======================================================================
-# Adicione esta nova rota em app/routes.py
-
 @bp.route('/api/admin/monitor_data')
 @login_required
 @require_role('super_admin')
 def admin_monitor_data():
-    # A lógica já otimizada da sua rota admin_monitor será usada aqui
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     now_in_brasilia = get_brasilia_time()
     start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -280,62 +277,12 @@ def admin_monitor_data():
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return jsonify(agents_data=agents_data)
 
-# Substitua a sua função admin_monitor por esta
 @bp.route('/admin/monitor')
 @login_required
 @require_role('super_admin')
 def admin_monitor():
     """ Apenas carrega a página base. Os dados são preenchidos via API. """
     return render_template('admin/monitor.html', title="Monitor Global")
-
-    # Consulta única para buscar todas as estatísticas dos consultores
-    stats_query = db.session.query(
-        User.id,
-        User.username,
-        User.current_status,
-        User.last_login,
-        User.last_activity_at,
-        Grupo.nome.label('grupo_nome'),
-        func.count(ActivityLog.id).label('calls_today'),
-        func.sum(case((Tabulation.is_positive_conversion == True, 1), else_=0)).label('conversions_today')
-    ).join(Grupo, User.grupo_id == Grupo.id) \
-     .outerjoin(ActivityLog, and_(
-         User.id == ActivityLog.user_id,
-         ActivityLog.timestamp >= start_of_day
-     )) \
-     .outerjoin(Tabulation, ActivityLog.tabulation_id == Tabulation.id) \
-     .filter(User.role == 'consultor') \
-     .group_by(User.id, Grupo.nome) \
-     .all()
-
-    agents_data = []
-    for agent in stats_query:
-        # Lógica de inatividade
-        inactivity_threshold = timedelta(minutes=2)
-        real_status = agent.current_status
-        if agent.last_activity_at and agent.current_status != 'Offline':
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
-            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
-                real_status = 'Offline'
-                # Opcional: Atualizar no banco em background se necessário, mas para exibição isso é suficiente.
-        
-        # Obter o trabalho atual (pode ser otimizado se necessário, mas é menos crítico)
-        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
-        
-        agents_data.append({
-            'id': agent.id,
-            'name': agent.username,
-            'status': real_status,
-            'last_login': agent.last_login.astimezone(brasilia_tz) if agent.last_login else None,
-            'local': f"{agent.grupo_nome} / {current_work[0] if current_work else 'Nenhum'}",
-            'calls_today': agent.calls_today or 0,
-            'conversions_today': agent.conversions_today or 0
-        })
-    
-    # Ordena os dados em memória
-    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
-    return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
-
 
 @bp.route('/admin/system-logs')
 @login_required
@@ -607,6 +554,36 @@ def manage_users():
         sort_order=sort_order
     )
 
+# ======================================================================
+# NOVA ROTA ADICIONADA: manage_teams
+# ======================================================================
+@bp.route('/admin/teams')
+@login_required
+@require_role('super_admin')
+def manage_teams():
+    today = get_brasilia_time().date()
+    start_of_month = datetime(today.year, today.month, 1)
+
+    monthly_consumption_subquery = db.session.query(
+        User.grupo_id.label('grupo_id'),
+        func.count(LeadConsumption.id).label('monthly_consumption')
+    ).join(LeadConsumption, LeadConsumption.user_id == User.id)\
+     .filter(LeadConsumption.timestamp >= start_of_month)\
+     .group_by(User.grupo_id)\
+     .subquery()
+
+    teams_with_counts = db.session.query(
+        Grupo,
+        func.count(User.id),
+        func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
+    ).outerjoin(User, Grupo.id == User.grupo_id)\
+    .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
+    .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
+    .order_by(Grupo.nome)\
+    .all()
+
+    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts)
+
 
 @bp.route('/admin/users/add', methods=['POST'])
 @login_required
@@ -836,7 +813,6 @@ def delete_product(id):
 @login_required
 @require_role('super_admin')
 def manage_layouts():
-    # ADICIONADO: .options(joinedload(LayoutMailing.produto)) para carregar os produtos na mesma consulta
     layouts = LayoutMailing.query.options(joinedload(LayoutMailing.produto)).order_by(LayoutMailing.name).all()
     return render_template('admin/manage_layouts.html', title="Gerir Layouts", layouts=layouts)
 
@@ -1607,9 +1583,6 @@ def parceiro_monitor():
 @login_required
 @require_role('admin_parceiro')
 def parceiro_monitor_data():
-    """
-    Esta é a API que fornece os dados para o layout no estilo do admin monitor.
-    """
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
     
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
