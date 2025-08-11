@@ -79,7 +79,10 @@ class Lead(db.Model):
     data_tabulacao = db.Column(db.DateTime)
     available_after = db.Column(db.DateTime, nullable=True, index=True)
     additional_data = db.Column(db.JSON)
-
+    __table_args__ = (
+        db.Index('ix_lead_get_new_lead', 'produto_id', 'status', 'available_after', 'data_criacao'),
+    )
+    
     # Relacionamentos
     produto = db.relationship('Produto', back_populates='leads')
     consultor = db.relationship('User', back_populates='leads')

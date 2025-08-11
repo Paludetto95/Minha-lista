@@ -233,67 +233,109 @@ def admin_dashboard():
                            all_layouts=all_layouts, 
                            recent_activity=recent_activity)
 
-# SUBSTITUA A FUNÇÃO admin_monitor INTEIRA POR ESTA VERSÃO CORRIGIDA
+# ======================================================================
+# CORREÇÃO 1: Otimização da Rota de Monitoramento (N+1 para 1 consulta)
+# ======================================================================
+# Adicione esta nova rota em app/routes.py
 
-@bp.route('/admin/monitor')
+@bp.route('/api/admin/monitor_data')
 @login_required
 @require_role('super_admin')
-def admin_monitor():
-    consultants = User.query.filter_by(role='consultor').all()
-    
-    # 1. Definir o fuso horário e o tempo atual UMA VEZ fora do loop
+def admin_monitor_data():
+    # A lógica já otimizada da sua rota admin_monitor será usada aqui
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     now_in_brasilia = get_brasilia_time()
     start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    agents_data = []
-    for agent in consultants:
-        # --- LÓGICA DE INATIVIDADE CORRIGIDA ---
-        inactivity_threshold = timedelta(minutes=2)
-        is_inactive = False
-        if agent.last_activity_at:
-            # 2. CORREÇÃO: Torna o datetime do banco "aware" antes de comparar
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at)
-            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
-                is_inactive = True
-        
-        real_status = agent.current_status
-        # Atualiza o status se o agente estiver inativo
-        if is_inactive and agent.current_status != 'Offline':
-            real_status = 'Offline'
-            # Usa a função helper para garantir a consistência
-            update_user_status(agent, 'Offline')
-            db.session.commit() # Salva a atualização no banco
+    stats_query = db.session.query(
+        User.id, User.username, User.current_status, User.last_login,
+        User.last_activity_at, Grupo.nome.label('grupo_nome'),
+        func.count(ActivityLog.id).label('calls_today'),
+        func.sum(case((Tabulation.is_positive_conversion == True, 1), else_=0)).label('conversions_today')
+    ).join(Grupo, User.grupo_id == Grupo.id) \
+     .outerjoin(ActivityLog, and_(User.id == ActivityLog.user_id, ActivityLog.timestamp >= start_of_day)) \
+     .outerjoin(Tabulation, ActivityLog.tabulation_id == Tabulation.id) \
+     .filter(User.role == 'consultor').group_by(User.id, Grupo.nome).all()
 
-        # --- QUERIES PARA DADOS DO AGENTE ---
-        calls_today = ActivityLog.query.filter(
-            ActivityLog.user_id == agent.id, 
-            ActivityLog.timestamp >= start_of_day
-        ).count()
+    agents_data = []
+    for agent in stats_query:
+        real_status = agent.current_status
+        inactivity_threshold = timedelta(minutes=2)
+        if agent.last_activity_at and agent.current_status != 'Offline':
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
+                real_status = 'Offline'
         
-        conversions_today = ActivityLog.query.join(Tabulation).filter(
-            ActivityLog.user_id == agent.id, 
-            ActivityLog.timestamp >= start_of_day, 
-            Tabulation.is_positive_conversion == True
-        ).count()
-        
-        current_work = Lead.query.join(Produto).filter(
-            Lead.consultor_id == agent.id, 
-            Lead.status == 'Em Atendimento'
-        ).with_entities(Produto.name).first()
+        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         
         agents_data.append({
-            'id': agent.id, 
-            'name': agent.username, 
-            'status': real_status, 
-            'last_login': agent.last_login.astimezone(brasilia_tz) if agent.last_login else None, # Garante que o last_login também tenha timezone
-            'local': f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}", 
-            'calls_today': calls_today, 
-            'conversions_today': conversions_today
+            'name': agent.username,
+            'status': real_status,
+            'last_login': agent.last_login.astimezone(brasilia_tz).strftime('%d/%m/%Y às %H:%M') if agent.last_login else 'Nunca logou',
+            'local': f"{agent.grupo_nome} / {current_work[0] if current_work else 'Nenhum'}",
+            'calls_today': agent.calls_today or 0,
+            'conversions_today': agent.conversions_today or 0
         })
+    
+    agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
+    return jsonify(agents_data=agents_data)
 
+# Substitua a sua função admin_monitor por esta
+@bp.route('/admin/monitor')
+@login_required
+@require_role('super_admin')
+def admin_monitor():
+    """ Apenas carrega a página base. Os dados são preenchidos via API. """
+    return render_template('admin/monitor.html', title="Monitor Global")
+
+    # Consulta única para buscar todas as estatísticas dos consultores
+    stats_query = db.session.query(
+        User.id,
+        User.username,
+        User.current_status,
+        User.last_login,
+        User.last_activity_at,
+        Grupo.nome.label('grupo_nome'),
+        func.count(ActivityLog.id).label('calls_today'),
+        func.sum(case((Tabulation.is_positive_conversion == True, 1), else_=0)).label('conversions_today')
+    ).join(Grupo, User.grupo_id == Grupo.id) \
+     .outerjoin(ActivityLog, and_(
+         User.id == ActivityLog.user_id,
+         ActivityLog.timestamp >= start_of_day
+     )) \
+     .outerjoin(Tabulation, ActivityLog.tabulation_id == Tabulation.id) \
+     .filter(User.role == 'consultor') \
+     .group_by(User.id, Grupo.nome) \
+     .all()
+
+    agents_data = []
+    for agent in stats_query:
+        # Lógica de inatividade
+        inactivity_threshold = timedelta(minutes=2)
+        real_status = agent.current_status
+        if agent.last_activity_at and agent.current_status != 'Offline':
+            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
+            if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
+                real_status = 'Offline'
+                # Opcional: Atualizar no banco em background se necessário, mas para exibição isso é suficiente.
+        
+        # Obter o trabalho atual (pode ser otimizado se necessário, mas é menos crítico)
+        current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
+        
+        agents_data.append({
+            'id': agent.id,
+            'name': agent.username,
+            'status': real_status,
+            'last_login': agent.last_login.astimezone(brasilia_tz) if agent.last_login else None,
+            'local': f"{agent.grupo_nome} / {current_work[0] if current_work else 'Nenhum'}",
+            'calls_today': agent.calls_today or 0,
+            'conversions_today': agent.conversions_today or 0
+        })
+    
+    # Ordena os dados em memória
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
     return render_template('admin/monitor.html', title="Monitor Global", agents_data=agents_data)
+
 
 @bp.route('/admin/system-logs')
 @login_required
@@ -361,9 +403,10 @@ def upload_step1():
         return redirect(url_for('main.admin_dashboard'))
     try:
         if uploaded_file.filename.lower().endswith('.csv'):
-            df = pd.read_csv(uploaded_file.stream, sep=None, engine='python', encoding='latin1', dtype=str)
+            df = pd.read_csv(uploaded_file.stream, sep=None, engine='python', encoding='latin1', dtype=str, nrows=5)
         else:
-            df = pd.read_excel(uploaded_file.stream, dtype=str)
+            df = pd.read_excel(uploaded_file.stream, dtype=str, nrows=5)
+            
         temp_filename = f"{uuid.uuid4()}{os.path.splitext(uploaded_file.filename)[1]}"
         temp_filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], temp_filename)
         uploaded_file.stream.seek(0)
@@ -382,13 +425,16 @@ def upload_step1():
         flash(f'Erro ao ler o arquivo: {e}', 'danger')
         return redirect(url_for('main.admin_dashboard'))
 
+# ======================================================================
+# CORREÇÃO 2: Processamento de Upload sem carregar todos os CPFs
+# ======================================================================
 @bp.route('/upload_step2_process', methods=['POST'])
 @login_required
 @require_role('super_admin')
 def upload_step2_process():
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
-    produto_id = request.form.get('produto_id')
+    produto_id = form_data.get('produto_id')
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -398,482 +444,128 @@ def upload_step2_process():
         return redirect(url_for('main.admin_dashboard'))
     
     leads_importados = 0
+    leads_ignorados = 0
+    
     try:
         mapping = {}
         layout_mapping_to_save = {}
-        included_headers = set() 
+        
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
         
         for i in range(len(df_headers.columns)):
             original_header_name = form_data.get(f'header_name_{i}')
             if not original_header_name: continue
-
             if f'include_column_{i}' in form_data:
-                included_headers.add(original_header_name.lower().strip())
-                
                 selected_system_field = form_data.get(f'mapping_{i}')
                 if selected_system_field and selected_system_field != 'Ignorar':
                     if selected_system_field in mapping:
                         flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
                         return redirect(url_for('main.admin_dashboard'))
-                    mapping[selected_system_field] = original_header_name.lower().strip()
+                    mapping[selected_system_field] = original_header_name
                     layout_mapping_to_save[selected_system_field] = original_header_name
 
         if 'cpf' not in mapping or 'nome' not in mapping:
             flash("Erro de mapeamento: As colunas 'CPF' e 'Nome' são obrigatórias.", 'danger')
             return redirect(url_for('main.admin_dashboard'))
+
         if form_data.get('save_layout') and form_data.get('layout_name'):
-            existing_layout = LayoutMailing.query.filter_by(name=form_data.get('layout_name')).first()
-            if existing_layout:
-                flash(f'Erro: Já existe um layout salvo com o nome "{form_data.get("layout_name")}".', 'danger')
-            else:
-                new_layout = LayoutMailing(name=form_data.get('layout_name'), produto_id=int(produto_id), mapping=layout_mapping_to_save)
-                db.session.add(new_layout)
-                flash('Novo layout de mapeamento salvo com sucesso!', 'info')
-        df = pd.read_excel(temp_filepath, dtype=str) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str)
-        original_headers = df.columns.copy()
-        df.columns = [str(col).lower().strip() for col in df.columns]
-        existing_cpfs = {lead.cpf for lead in Lead.query.with_entities(Lead.cpf).all()}
-        leads_para_adicionar = []
-        leads_ignorados = 0
-        campos_do_modelo_lead = ['nome', 'cpf', 'telefone', 'telefone_2', 'cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
+            new_layout = LayoutMailing(name=form_data.get('layout_name'), produto_id=int(produto_id), mapping=layout_mapping_to_save)
+            db.session.add(new_layout)
+            flash('Novo layout de mapeamento salvo com sucesso!', 'info')
+
+        # Otimização: ler o arquivo em lotes (chunks)
+        chunk_size = 2000
+        df_iterator = pd.read_excel(temp_filepath, dtype=str, chunksize=chunk_size) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, sep=None, engine='python', encoding='latin1', dtype=str, chunksize=chunk_size)
+
+        campos_do_modelo_lead = [c.name for c in Lead.__table__.columns]
         
-        for index, row in df.iterrows():
-            row_data = {} 
-            additional_data = {}
-
-            for system_field, original_header_lower in mapping.items():
-                valor = row.get(original_header_lower)
-                if system_field in campos_do_modelo_lead: 
-                    if 'telefone' in system_field:
-                        row_data[system_field] = re.sub(r'\D', '', str(valor)) if pd.notna(valor) else None
-                    elif system_field == 'estado':
-                        row_data[system_field] = str(valor).strip().upper()[:2] if pd.notna(valor) else None
-                    elif system_field == 'nascimento': 
-                        if pd.notna(valor):
-                            try:
-                                row_data[system_field] = pd.to_datetime(valor, dayfirst=True).strftime('%Y-%m-%d')
-                            except (ValueError, TypeError):
-                                row_data[system_field] = str(valor).strip()
-                        else:
-                            row_data[system_field] = None
-                    elif system_field == 'idade': 
-                       row_data[system_field] = int(valor) if pd.notna(valor) and str(valor).isdigit() else None
-                    else:
-                        row_data[system_field] = str(valor).strip() if pd.notna(valor) else None
+        for df_chunk in df_iterator:
+            df_chunk.columns = [str(col) for col in df_chunk.columns]
             
-            for original_header in original_headers:
-                original_header_lower = original_header.lower().strip()
-                if original_header_lower in included_headers and original_header_lower not in mapping.values():
-                    valor = row.get(original_header_lower)
-                    if pd.notna(valor):
-                        if original_header_lower not in [f.lower() for f in campos_do_modelo_lead] and \
-                           original_header_lower not in [mapping.get('cpf', '').lower(), mapping.get('nome', '').lower()]:
-                            additional_data[original_header.title()] = str(valor).strip()
+            cpfs_no_lote_str = df_chunk[mapping['cpf']].dropna().astype(str)
+            cpfs_no_lote_limpos = [re.sub(r'\D', '', s) for s in cpfs_no_lote_str]
+            cpfs_validos_lote = {cpf for cpf in cpfs_no_lote_limpos if len(cpf) == 11}
 
-            cpf_digits = re.sub(r'\D', '', str(row_data.get('cpf', '')))
-            if not cpf_digits or len(cpf_digits) != 11 or cpf_digits in existing_cpfs:
-                leads_ignorados += 1
+            if not cpfs_validos_lote:
+                leads_ignorados += len(df_chunk)
                 continue
             
-            final_lead_data = {
-                'produto_id': produto_id,
-                'cpf': cpf_digits,
-                'status': 'Novo',
-                'data_criacao': get_brasilia_time(),
-                'additional_data': additional_data 
-            }
-            final_lead_data.update(row_data) 
+            cpfs_ja_existentes_db = {item[0] for item in db.session.query(Lead.cpf).filter(Lead.cpf.in_(cpfs_validos_lote)).all()}
             
-            if 'nome' not in final_lead_data:
-                final_lead_data['nome'] = str(row_data.get('nome', 'Sem Nome')).strip()
+            leads_para_adicionar = []
+            
+            for index, row in df_chunk.iterrows():
+                cpf_bruto = str(row.get(mapping['cpf'], ''))
+                cpf_limpo = re.sub(r'\D', '', cpf_bruto)
+                
+                if not cpf_limpo or len(cpf_limpo) != 11 or cpf_limpo in cpfs_ja_existentes_db:
+                    leads_ignorados += 1
+                    continue
+                
+                row_data = {}
+                additional_data = {}
 
-            novo_lead = Lead(**final_lead_data)
-            leads_para_adicionar.append(novo_lead)
-            existing_cpfs.add(cpf_digits)
+                for system_field, original_header in mapping.items():
+                    valor = row.get(original_header)
+                    if system_field in campos_do_modelo_lead and pd.notna(valor):
+                        row_data[system_field] = str(valor).strip()
 
-        if leads_para_adicionar:
-            db.session.bulk_save_objects(leads_para_adicionar)
-            leads_importados = len(leads_para_adicionar)
+                for col in df_chunk.columns:
+                    if col not in mapping.values():
+                        valor = row.get(col)
+                        if pd.notna(valor):
+                            additional_data[col.title()] = str(valor).strip()
+                
+                final_lead_data = {
+                    'produto_id': produto_id,
+                    'cpf': cpf_limpo,
+                    'status': 'Novo',
+                    'data_criacao': get_brasilia_time(),
+                    'additional_data': additional_data 
+                }
+                final_lead_data.update(row_data)
+
+                novo_lead = Lead(**final_lead_data)
+                leads_para_adicionar.append(novo_lead)
+                cpfs_ja_existentes_db.add(cpf_limpo)
+
+            if leads_para_adicionar:
+                db.session.bulk_save_objects(leads_para_adicionar)
+                leads_importados += len(leads_para_adicionar)
+        
+        db.session.commit()
+
+        if leads_importados > 0:
             flash(f'{leads_importados} leads importados com sucesso! {leads_ignorados} foram ignorados.', 'success')
         else:
             flash('Nenhum novo lead válido para importar foi encontrado na planilha.', 'warning')
-        db.session.commit()
+        
         log_system_action('LEAD_IMPORT', entity_type='Product', entity_id=int(produto_id), 
-                          description=f"Importação de {leads_importados} leads para o produto '{Produto.query.get(int(produto_id)).name}'. {leads_ignorados} ignorados.",
+                          description=f"Importação de {leads_importados} leads. {leads_ignorados} ignorados.",
                           details={'filename': temp_filename, 'total_imported': leads_importados, 'total_ignored': leads_ignorados})
+
     except Exception as e:
         db.session.rollback()
         flash(f'Ocorreu um erro crítico durante o processamento: {e}', 'danger')
-        log_system_action('LEAD_IMPORT_FAILED', entity_type='Product', entity_id=int(produto_id), 
-                          description=f"Erro crítico ao importar leads para o produto '{Produto.query.get(int(produto_id)).name}'.",
+        log_system_action('LEAD_IMPORT_FAILED', entity_type='Product', entity_id=int(produto_id),
+                          description=f"Erro crítico ao importar leads.",
                           details={'filename': temp_filename, 'error': str(e)})
     finally:
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
     return redirect(url_for('main.admin_dashboard'))
 
-@bp.route('/admin/teams')
-@login_required
-@require_role('super_admin')
-def manage_teams():
-    today = get_brasilia_time().date()
-    start_of_month = datetime(today.year, today.month, 1)
-
-    monthly_consumption_subquery = db.session.query(
-        User.grupo_id.label('grupo_id'),
-        func.count(LeadConsumption.id).label('monthly_consumption')
-    ).join(LeadConsumption, LeadConsumption.user_id == User.id)\
-     .filter(LeadConsumption.timestamp >= start_of_month)\
-     .group_by(User.grupo_id)\
-     .subquery()
-
-    teams_with_counts = db.session.query(
-        Grupo,
-        func.count(User.id),
-        func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
-    ).outerjoin(User, Grupo.id == User.grupo_id)\
-    .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
-    .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
-    .order_by(Grupo.nome)\
-    .all()
-
-    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts)
-
-@bp.route('/admin/teams/<int:group_id>')
-@login_required
-@require_role('super_admin')
-def team_details(group_id):
-    grupo = Grupo.query.get_or_404(group_id)
-    
-    users_in_group = User.query.filter_by(grupo_id=grupo.id).order_by(User.username).all()
-
-    admins = [user for user in users_in_group if user.role == 'admin_parceiro']
-    consultores = [user for user in users_in_group if user.role == 'consultor']
-
-    total_logins_group = sum(1 for user in users_in_group if user.last_login is not None)
-    
-    available_users = User.query.filter(
-        User.grupo_id != group_id, 
-        User.role != 'super_admin'
-    ).order_by(User.username).all()
-
-    # --- CÓDIGO ADICIONADO AQUI ---
-    # Calcula o consumo mensal de leads para esta equipe específica.
-    today = get_brasilia_time().date()
-    start_of_month = datetime(today.year, today.month, 1)
-    user_ids_in_group = [user.id for user in users_in_group]
-    
-    monthly_consumption = 0
-    if user_ids_in_group:
-        monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
-            .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
-            .filter(LeadConsumption.timestamp >= start_of_month)\
-            .scalar() or 0
-    # --- FIM DO CÓDIGO ADICIONADO ---
-
-    return render_template(
-        'admin/team_details.html', 
-        title=f"Detalhes - {grupo.nome}", 
-        grupo=grupo, 
-        admins=admins, 
-        consultores=consultores,
-        total_logins_group=total_logins_group,
-        available_users=available_users,
-        # --- VARIÁVEL ADICIONADA AQUI ---
-        monthly_consumption=monthly_consumption 
-    )
-
-@bp.route('/admin/groups/add', methods=['POST'])
-@login_required
-@require_role('super_admin')
-def add_group():
-    nome = request.form.get('name')
-    color = request.form.get('color', '#6c757d')
-    logo_file = request.files.get('logo_file')
-    
-    # --- ATUALIZAÇÃO APLICADA AQUI ---
-    # Captura e converte o limite mensal do formulário.
-    monthly_pull_limit_str = request.form.get('monthly_pull_limit')
-    monthly_pull_limit = int(monthly_pull_limit_str) if monthly_pull_limit_str and monthly_pull_limit_str.isdigit() and int(monthly_pull_limit_str) > 0 else None
-    
-    logo_filename = None
-    if logo_file and logo_file.filename:
-        logo_filename = save_partner_logo(logo_file)
-        if not logo_filename:
-            flash('Formato de arquivo de logo inválido ou erro ao salvar.', 'danger')
-            return redirect(url_for('main.manage_teams'))
-
-    if nome:
-        existing_group = Grupo.query.filter_by(nome=nome).first()
-        if existing_group:
-            flash('Uma equipe com este nome já existe.', 'danger')
-            if logo_filename:
-                delete_partner_logo(logo_filename)
-        else:
-            # Passa o novo limite ao criar o objeto Grupo
-            new_group = Grupo(
-                nome=nome, 
-                color=color, 
-                logo_filename=logo_filename,
-                monthly_pull_limit=monthly_pull_limit
-            )
-            db.session.add(new_group)
-            db.session.commit()
-            flash('Equipe adicionada com sucesso!', 'success')
-            log_system_action(
-                action_type='GROUP_CREATED', 
-                entity_type='Group', 
-                entity_id=new_group.id, 
-                description=f"Grupo '{new_group.nome}' criado.",
-                details={
-                    'color': new_group.color, 
-                    'logo_filename': new_group.logo_filename,
-                    'monthly_pull_limit': new_group.monthly_pull_limit
-                }
-            )
-    return redirect(url_for('main.manage_teams'))
-
-    if nome:
-        existing_group = Grupo.query.filter_by(nome=nome).first()
-        if existing_group:
-            flash('Uma equipe com este nome já existe.', 'danger')
-            log_system_action(action_type='GROUP_CREATE_FAILED', entity_type='Group', description=f"Tentativa de criar grupo com nome duplicado: '{nome}'.")
-            if logo_filename:
-                delete_partner_logo(logo_filename)
-        else:
-            # --- ATUALIZAÇÃO INSERIDA AQUI ---
-            new_group = Grupo(
-                nome=nome, 
-                color=color, 
-                logo_filename=logo_filename,
-                monthly_pull_limit=monthly_pull_limit
-            )
-            db.session.add(new_group)
-            db.session.commit()
-            flash('Equipe adicionada com sucesso!', 'success')
-            log_system_action(
-                action_type='GROUP_CREATED', 
-                entity_type='Group', 
-                entity_id=new_group.id, 
-                description=f"Grupo '{new_group.nome}' criado.",
-                details={
-                    'color': new_group.color, 
-                    'logo_filename': new_group.logo_filename,
-                    'monthly_pull_limit': new_group.monthly_pull_limit
-                }
-            )
-    return redirect(url_for('main.manage_teams'))
-
-@bp.route('/admin/groups/edit/<int:group_id>', methods=['POST'])
-@login_required
-@require_role('super_admin')
-def edit_group_name_color(group_id):
-    print(f"DADOS RECEBIDOS: {request.form}")  # <--- ADICIONE ESTA LINHA EXATAMENTE AQUI
-    grupo = Grupo.query.get_or_404(group_id)
-    old_name = grupo.nome
-    old_color = grupo.color
-    old_logo_filename = grupo.logo_filename
-    # --- ATUALIZAÇÃO: Pega o valor antigo do limite ---
-    old_monthly_pull_limit = grupo.monthly_pull_limit
-
-    new_name = request.form.get('name')
-    new_color = request.form.get('color')
-    new_logo_file = request.files.get('logo_file')
-    remove_logo = request.form.get('remove_logo') == 'on'
-    # --- ATUALIZAÇÃO: Pega o novo valor do limite do formulário ---
-    new_monthly_pull_limit_str = request.form.get('monthly_pull_limit')
-
-    changes = {}
-
-    if new_name and new_name != grupo.nome:
-        # ... (lógica do nome, sem alterações)
-        grupo.nome = new_name
-        changes['name'] = {'old': old_name, 'new': new_name}
-    
-    if new_color and new_color != grupo.color: 
-        # ... (lógica da cor, sem alterações)
-        grupo.color = new_color
-        changes['color'] = {'old': old_color, 'new': new_color}
-    
-    # --- ATUALIZAÇÃO CRÍTICA ADICIONADA AQUI ---
-    # Verifica se o limite mensal foi alterado e registra no dicionário 'changes'.
-    if new_monthly_pull_limit_str is not None:
-        try:
-            # Converte o valor do formulário para int ou None (se vazio ou 0)
-            new_monthly_pull_limit = int(new_monthly_pull_limit_str) if new_monthly_pull_limit_str and int(new_monthly_pull_limit_str) > 0 else None
-            if new_monthly_pull_limit != old_monthly_pull_limit:
-                grupo.monthly_pull_limit = new_monthly_pull_limit
-                changes['monthly_pull_limit'] = {'old': old_monthly_pull_limit, 'new': new_monthly_pull_limit}
-        except (ValueError, TypeError):
-            flash('O limite mensal deve ser um número válido.', 'warning')
-
-    # ... (lógica do logo, sem alterações)
-    if remove_logo:
-        if grupo.logo_filename:
-            if delete_partner_logo(grupo.logo_filename):
-                changes['logo'] = {'old': grupo.logo_filename, 'new': 'removido'}
-                grupo.logo_filename = None
-    elif new_logo_file and new_logo_file.filename:
-        if allowed_file(new_logo_file.filename):
-            saved_filename = save_partner_logo(new_logo_file)
-            if saved_filename:
-                if grupo.logo_filename:
-                    delete_partner_logo(grupo.logo_filename)
-                changes['logo'] = {'old': old_logo_filename, 'new': saved_filename}
-                grupo.logo_filename = saved_filename
-
-    # Agora, se 'changes' contiver a alteração do limite, mostrará a mensagem de sucesso.
-    if changes:
-        db.session.commit()
-        flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
-        log_system_action(action_type='GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
-                          description=f"Grupo '{grupo.nome}' atualizado.",
-                          details=changes)
-    else:
-        flash('Nenhuma alteração detectada.', 'info')
-
-    return redirect(url_for('main.team_details', group_id=group_id))
-    if remove_logo:
-        relevant_field_submitted = True
-        if grupo.logo_filename:
-            if delete_partner_logo(grupo.logo_filename):
-                changes['logo'] = {'old': grupo.logo_filename, 'new': 'removido'}
-                grupo.logo_filename = None
-            else:
-                flash('Erro ao remover arquivo de logo existente.', 'warning')
-                log_system_action(action_type='GROUP_LOGO_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
-                                  description=f"Erro ao remover arquivo de logo '{grupo.logo_filename}' para o grupo '{grupo.nome}'.")
-    elif new_logo_file and new_logo_file.filename:
-        relevant_field_submitted = True
-        if allowed_file(new_logo_file.filename):
-            saved_filename = save_partner_logo(new_logo_file)
-            if saved_filename:
-                if grupo.logo_filename:
-                    delete_partner_logo(grupo.logo_filename)
-                changes['logo'] = {'old': old_logo_filename, 'new': saved_filename}
-                grupo.logo_filename = saved_filename
-            else:
-                flash('Erro ao salvar o novo arquivo de logo.', 'danger')
-                log_system_action(action_type='GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
-                                  description=f"Erro ao salvar novo logo para o grupo '{grupo.nome}'.")
-        else:
-            flash('Formato de arquivo de logo inválido. Use PNG, JPG, JPEG ou GIF.', 'danger')
-            log_system_action(action_type='GROUP_LOGO_UPLOAD_FAILED', entity_type='Group', entity_id=grupo.id, 
-                              description=f"Tentativa de upload de logo com formato inválido para o grupo '{grupo.nome}'.")
-
-    if changes:
-        db.session.commit()
-        flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
-        log_system_action(action_type='GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
-                          description=f"Grupo '{grupo.nome}' atualizado.",
-                          details=changes)
-    elif relevant_field_submitted:
-        flash('Os dados foram processados, mas nenhuma alteração significativa foi detectada.', 'info')
-    else:
-        flash('Nenhuma alteração detectada.', 'info')
-
-    return redirect(url_for('main.team_details', group_id=group_id))
-
-@bp.route('/admin/groups/delete/<int:group_id>', methods=['POST'])
-@login_required
-@require_role('super_admin')
-def delete_group(group_id):
-    grupo = Grupo.query.get_or_404(group_id)
-    group_name = grupo.nome
-    logo_to_delete = grupo.logo_filename
-
-    if grupo.users.count() > 0:
-        flash(f'Erro: Não é possível excluir a equipe "{grupo.nome}" porque ela ainda contém usuários.', 'danger')
-        log_system_action(action_type='GROUP_DELETE_FAILED', entity_type='Group', entity_id=grupo.id, 
-                          description=f"Tentativa de excluir grupo '{group_name}' falhou: contém usuários.")
-        return redirect(url_for('main.manage_teams'))
-    
-    db.session.delete(grupo)
-    db.session.commit()
-    
-    if logo_to_delete:
-        delete_partner_logo(logo_to_delete)
-        log_system_action(action_type='GROUP_LOGO_DELETED_FILE', entity_type='Group', entity_id=group_id, 
-                          description=f"Arquivo de logo '{logo_to_delete}' excluído do disco para o grupo '{group_name}'.")
-
-    flash(f'Equipe "{group_name}" excluída com sucesso!', 'success')
-    log_system_action(action_type='GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
-    return redirect(url_for('main.manage_teams'))
-
-@bp.route('/admin/teams/add_member/<int:group_id>', methods=['POST'])
-@login_required
-@require_role('super_admin')
-def add_member_to_team(group_id):
-    grupo = Grupo.query.get_or_404(group_id)
-    user_id = request.form.get('user_id')
-    new_role = request.form.get('role')
-    user = User.query.get_or_404(user_id)
-    
-    old_group_id = user.grupo_id
-    old_role = user.role
-
-    if user.grupo_id == group_id and user.role == new_role:
-        flash(f'Erro: {user.username} já é {new_role} nesta equipe.', 'warning')
-        log_system_action(action_type='TEAM_MEMBER_ADD_FAILED', entity_type='User', entity_id=user.id, 
-                          description=f"Tentativa de adicionar '{user.username}' ao grupo '{grupo.nome}' falhou: já pertence com o mesmo papel.")
-        return redirect(url_for('main.team_details', group_id=group_id))
-    
-    user.grupo_id = group_id
-    user.role = new_role
-    db.session.commit()
-    flash(f'{user.username} adicionado(a) como {new_role} à equipe {grupo.nome}!', 'success')
-    log_system_action(action_type='TEAM_MEMBER_UPDATED', entity_type='User', entity_id=user.id, 
-                      description=f"Usuário '{user.username}' movido/atualizado para equipe '{grupo.nome}' como '{new_role}'.",
-                      details={'old_group_id': old_group_id, 'old_role': old_role, 
-                               'new_group_id': group_id, 'new_role': new_role})
-    return redirect(url_for('main.team_details', group_id=group_id))
-
-@bp.route('/admin/teams/remove_member/<int:group_id>/<int:user_id>', methods=['POST'])
-@login_required
-@require_role('super_admin')
-def remove_member_from_team(group_id, user_id):
-    grupo = Grupo.query.get_or_404(group_id)
-    user_to_remove = User.query.get_or_404(user_id)
-    
-    old_group_id = user_to_remove.grupo_id
-    old_role = user_to_remove.role
-
-    if user_to_remove.role == 'super_admin':
-        flash('Não é possível remover um Super Administrador de uma equipe.', 'danger')
-        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Tentativa de remover Super Admin '{user_to_remove.username}' da equipe '{grupo.nome}'.")
-        return redirect(url_for('main.team_details', group_id=group_id))
-    if user_to_remove.grupo_id != group_id:
-        flash(f'Erro: {user_to_remove.username} não pertence à equipe {grupo.nome}.', 'danger')
-        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: não é membro.")
-        return redirect(url_for('main.team_details', group_id=group_id))
-    
-    equipe_principal = Grupo.query.filter_by(nome="Equipe Principal").first()
-    if equipe_principal:
-        user_to_remove.grupo_id = equipe_principal.id
-        user_to_remove.role = 'consultor'
-        db.session.commit()
-        flash(f'{user_to_remove.username} removido(a) da equipe {grupo.nome} e movido(a) para Equipe Principal.', 'info')
-        log_system_action(action_type='TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Usuário '{user_to_remove.username}' removido da equipe '{grupo.nome}' e movido para '{equipe_principal.nome}'.",
-                          details={'old_group_id': old_group_id, 'old_role': old_role, 
-                                   'new_group_id': equipe_principal.id, 'new_role': 'consultor'})
-    else:
-        flash('Erro: Não foi possível mover o usuário para uma equipe padrão. Crie uma "Equipe Principal".', 'danger')
-        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: Equipe Principal não encontrada.")
-    return redirect(url_for('main.team_details', group_id=group_id))
-
+# ======================================================================
+# CORREÇÃO 3: Paginação na Gestão de Utilizadores
+# ======================================================================
 @bp.route('/admin/users')
 @login_required
 @require_role('super_admin')
 def manage_users():
+    page = request.args.get('page', 1, type=int)
     search_query = request.args.get('search_query', '').strip()
     filter_role = request.args.get('filter_role', '').strip()
     filter_group = request.args.get('filter_group', '').strip()
-    
     sort_by = request.args.get('sort_by', 'username').strip()
     sort_order = request.args.get('sort_order', 'asc').strip()
 
@@ -881,56 +573,40 @@ def manage_users():
 
     if search_query:
         search_pattern = f"%{search_query}%"
-        users_query = users_query.filter(
-            or_(
-                User.username.ilike(search_pattern),
-                User.email.ilike(search_pattern)
-            )
-        )
+        users_query = users_query.filter(or_(User.username.ilike(search_pattern), User.email.ilike(search_pattern)))
 
     if filter_role and filter_role != 'all':
         users_query = users_query.filter_by(role=filter_role)
 
     if filter_group and filter_group != 'all':
         try:
-            filter_group_id = int(filter_group)
-            users_query = users_query.filter_by(grupo_id=filter_group_id)
+            users_query = users_query.filter_by(grupo_id=int(filter_group))
         except ValueError:
             flash("ID de grupo inválido para filtro.", "warning")
 
-    if sort_by == 'username':
-        order_column = User.username.desc() if sort_order == 'desc' else User.username.asc()
-    elif sort_by == 'email':
-        order_column = User.email.desc() if sort_order == 'desc' else User.email.asc()
-    elif sort_by == 'group':
+    order_expression = text(f'{sort_by} {sort_order}')
+    if sort_by == 'group':
         users_query = users_query.outerjoin(Grupo)
-        if sort_order == 'desc':
-            order_column = case((Grupo.nome.is_(None), 1), else_=0).asc(), Grupo.nome.desc()
-        else:
-            order_column = case((Grupo.nome.is_(None), 1), else_=0).asc(), Grupo.nome.asc()
-    elif sort_by == 'role':
-        order_column = User.role.desc() if sort_order == 'desc' else User.role.asc()
-    else:
-        order_column = User.username.asc()
+        order_expression = text(f'grupo.nome {sort_order}')
 
-    try:
-        users = users_query.order_by(order_column).all()
-        grupos = Grupo.query.order_by(Grupo.nome).all()
-    except Exception as e:
-        flash(f'Erro ao carregar utilizadores ou grupos: {e}', 'danger')
-        return redirect(url_for('main.admin_dashboard')) # Redirect to a safe page
+    pagination = users_query.order_by(order_expression).paginate(page=page, per_page=25, error_out=False)
+    users = pagination.items
+    
+    grupos = Grupo.query.order_by(Grupo.nome).all()
 
     return render_template(
         'admin/manage_users.html', 
         title="Gerir Utilizadores", 
         users=users, 
         grupos=grupos,
+        pagination=pagination,
         search_query=search_query,
         filter_role=filter_role,
         filter_group=filter_group,
         sort_by=sort_by,
         sort_order=sort_order
     )
+
 
 @bp.route('/admin/users/add', methods=['POST'])
 @login_required
@@ -1160,6 +836,7 @@ def delete_product(id):
 @login_required
 @require_role('super_admin')
 def manage_layouts():
+    # ADICIONADO: .options(joinedload(LayoutMailing.produto)) para carregar os produtos na mesma consulta
     layouts = LayoutMailing.query.options(joinedload(LayoutMailing.produto)).order_by(LayoutMailing.name).all()
     return render_template('admin/manage_layouts.html', title="Gerir Layouts", layouts=layouts)
 
@@ -1195,7 +872,6 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
         task.message = f"Iniciando exclusão de leads para Produto {produto_id} e Estado {estado}..."
         db.session.add(task)
         db.session.commit()
-        db.session.refresh(task) 
         
         try:
             estado_para_query = None if str(estado).lower() == 'none' else estado
@@ -1207,18 +883,14 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             
             task.total_items = total_leads_to_delete
             task.items_processed = 0
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
 
             if total_leads_to_delete == 0:
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Nenhum lead encontrado para o mailing de Produto {produto_id}, Estado {estado}. Concluído."
                 task.end_time = get_brasilia_time()
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
                 log_system_action('MAILING_DELETE_COMPLETED', entity_type='Mailing', entity_id=produto_id, 
                                   description=f"Exclusão do mailing de produto {produto_id}, estado {estado} concluída (0 leads).",
                                   details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': 0}, user_id=user_id_for_task)
@@ -1248,17 +920,13 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
                 task.items_processed = processed_count
                 task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
                 task.message = f"Processando... {processed_count}/{total_leads_to_delete} leads excluídos."
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
 
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Exclusão do mailing de Produto {produto_id}, Estado {estado} concluída. Total de {processed_count} leads excluídos."
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('MAILING_DELETE_COMPLETED', entity_type='Mailing', entity_id=produto_id, 
                               description=f"Exclusão do mailing de produto {produto_id}, estado {estado} concluída. {processed_count} leads excluídos.",
                               details={'estado': estado, 'produto_id': produto_id, 'total_leads_deleted': processed_count}, user_id=user_id_for_task)
@@ -1268,9 +936,7 @@ def delete_leads_in_background(app, task_id, produto_id, estado):
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do mailing: {str(e)}"
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('MAILING_DELETE_FAILED', entity_type='Mailing', entity_id=produto_id, 
                               description=f"Erro ao excluir mailing de produto {produto_id}, estado {estado}.",
                               details={'estado': estado, 'produto_id': produto_id, 'error': str(e)}, user_id=user_id_for_task)
@@ -1289,7 +955,6 @@ def delete_product_in_background(app, task_id, product_id):
         task.message = f"Iniciando exclusão do produto e seus leads associados..."
         db.session.add(task)
         db.session.commit()
-        db.session.refresh(task)
 
         try:
             produto = Produto.query.get(product_id)
@@ -1301,23 +966,19 @@ def delete_product_in_background(app, task_id, product_id):
             total_leads_to_delete = Lead.query.filter_by(produto_id=product_id).count()
             task.total_items = total_leads_to_delete
             task.items_processed = 0
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
 
             if total_leads_to_delete == 0:
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = f"Produto '{product_name}' excluído. Nenhum lead associado."
                 task.end_time = get_brasilia_time()
-                db.session.add(task)
                 
                 produto_final = Produto.query.get(product_id)
                 if produto_final:
                     db.session.delete(produto_final)
                 
                 db.session.commit()
-                db.session.refresh(task)
                 
                 log_system_action('PRODUCT_DELETE_COMPLETED', entity_type='Product', entity_id=product_id, 
                                   description=f"Produto '{product_name}' excluído (0 leads associados).",
@@ -1347,9 +1008,7 @@ def delete_product_in_background(app, task_id, product_id):
                 task.items_processed = processed_count
                 task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
                 task.message = f"Processando leads do produto '{product_name}': {processed_count}/{total_leads_to_delete} excluídos."
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
 
             db.session.delete(produto)
             db.session.commit()
@@ -1358,9 +1017,7 @@ def delete_product_in_background(app, task_id, product_id):
             task.progress = 100
             task.message = f"Exclusão do produto '{product_name}' e seus {processed_count} leads associados concluída com sucesso."
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('PRODUCT_DELETE_COMPLETED', entity_type='Product', entity_id=product_id, 
                               description=f"Produto '{product_name}' e seus {processed_count} leads associados excluídos.",
                               details={'product_name': product_name, 'total_leads_deleted': processed_count}, user_id=user_id_for_task)
@@ -1370,9 +1027,7 @@ def delete_product_in_background(app, task_id, product_id):
             task.status = 'FAILED'
             task.message = f"Erro na exclusão do produto: {str(e)}"
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('PRODUCT_DELETE_FAILED', entity_type='Product', entity_id=product_id, 
                               description=f"Erro ao excluir produto '{product_name}'.",
                               details={'product_name': product_name, 'error': str(e)}, user_id=user_id_for_task)
@@ -1409,7 +1064,7 @@ def delete_mailing():
         produto_id=int(produto_id),
         estado=estado
     )
-    log_system_action(action_type='MAILING_DELETE_BACKGROUND_INITIATED', entity_type='Mailing', entity_id=int(produto_id), 
+    log_system_action('MAILING_DELETE_BACKGROUND_INITIATED', entity_type='Mailing', entity_id=int(produto_id), 
                       description=f"Exclusão do mailing de produto {produto_nome}, estado {estado} iniciada em segundo plano.",
                       details={'estado': estado, 'produto_id': produto_id, 'task_id': task_id})
 
@@ -1592,7 +1247,6 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
         task.message = "Lendo CPFs da planilha e comparando com leads existentes..."
         db.session.add(task)
         db.session.commit()
-        db.session.refresh(task)
 
         leads_found = []
 
@@ -1609,9 +1263,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
 
             total_cpfs_in_file = len(df)
             task.total_items = total_cpfs_in_file
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
 
             batch_size = 5000
             
@@ -1628,18 +1280,14 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
                 task.items_processed = min(i + batch_size, total_cpfs_in_file)
                 task.progress = min(99, int((task.items_processed / total_cpfs_in_file) * 100))
                 task.message = f"Comparando CPFs: {task.progress}% concluído. Encontrados {len(leads_found)} leads para remoção."
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
             
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Comparação concluída. {len(leads_found)} leads encontrados para higienização."
             task.end_time = get_brasilia_time()
             task.details = {'leads_to_delete_preview': leads_found}
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('HYGIENE_COMPARE_COMPLETED', user_id=user_id_for_task, 
                               description=f"Comparação de higienização de CPFs concluída. {len(leads_found)} leads encontrados.",
                               details={'total_cpfs_in_file': total_cpfs_in_file, 'leads_found_count': len(leads_found), 'task_id': task_id})
@@ -1649,9 +1297,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             task.status = 'FAILED'
             task.message = f"Erro na planilha: {ve}"
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('HYGIENE_COMPARE_FAILED', user_id=user_id_for_task, 
                               description=f"Comparação de higienização falhou: {ve}.",
                               details={'error': str(ve), 'task_id': task_id})
@@ -1660,9 +1306,7 @@ def hygiene_compare_cpfs_background(app, task_id, filepath):
             task.status = 'FAILED'
             task.message = f"Ocorreu um erro inesperado: {str(e)}"
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('HYGIENE_COMPARE_FAILED', user_id=user_id_for_task, 
                               description=f"Comparação de higienização falhou: {e}.",
                               details={'error': str(e), 'task_id': task_id})
@@ -1729,24 +1373,19 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
         task.message = "Iniciando exclusão dos leads..."
         db.session.add(task)
         db.session.commit()
-        db.session.refresh(task)
 
         try:
             total_leads_to_delete = len(leads_to_delete_ids)
             task.total_items = total_leads_to_delete
             task.items_processed = 0
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
 
             if total_leads_to_delete == 0:
                 task.status = 'COMPLETED'
                 task.progress = 100
                 task.message = "Nenhum lead para higienizar. Concluído."
                 task.end_time = get_brasilia_time()
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
                 log_system_action('HYGIENE_DELETE_COMPLETED', description="Higienização concluída (0 leads).", user_id=user_id_for_task)
                 return
 
@@ -1766,17 +1405,13 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
                 task.items_processed = processed_count
                 task.progress = min(100, int((processed_count / total_leads_to_delete) * 100))
                 task.message = f"Higienizando... {processed_count}/{total_leads_to_delete} leads removidos."
-                db.session.add(task)
                 db.session.commit()
-                db.session.refresh(task)
 
             task.status = 'COMPLETED'
             task.progress = 100
             task.message = f"Higienização concluída. Total de {processed_count} leads removidos do sistema."
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('HYGIENE_DELETE_COMPLETED', description=f"Higienização concluída. {processed_count} leads removidos.", details={'total_removed': processed_count}, user_id=user_id_for_task)
 
         except Exception as e:
@@ -1784,9 +1419,7 @@ def hygiene_delete_leads_in_background(app, task_id, leads_to_delete_ids):
             task.status = 'FAILED'
             task.message = f"Erro na higienização: {str(e)}"
             task.end_time = get_brasilia_time()
-            db.session.add(task)
             db.session.commit()
-            db.session.refresh(task)
             log_system_action('HYGIENE_DELETE_FAILED', description=f"Higienização falhou: {e}.", details={'error': str(e)}, user_id=user_id_for_task)
         finally:
             db.session.remove()
@@ -1947,13 +1580,15 @@ def parceiro_dashboard():
     user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id).with_entities(User.id)]
     recent_activity = ActivityLog.query.filter(ActivityLog.user_id.in_(user_ids_in_group)).options(joinedload(ActivityLog.lead), joinedload(ActivityLog.user), joinedload(ActivityLog.tabulation)).order_by(ActivityLog.timestamp.desc()).limit(15).all()
     
-    # Calcula o consumo mensal de leads para o grupo do parceiro
     today = get_brasilia_time().date()
     start_of_month = datetime(today.year, today.month, 1)
     
     monthly_consumption = 0
     if user_ids_in_group:
-        monthly_consumption = db.session.query(func.count(LeadConsumption.id))            .filter(LeadConsumption.user_id.in_(user_ids_in_group))            .filter(LeadConsumption.timestamp >= start_of_month)            .scalar() or 0
+        monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
+            .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
+            .filter(LeadConsumption.timestamp >= start_of_month)\
+            .scalar() or 0
             
     return render_template('parceiro/dashboard.html', 
                            title=f"Painel - {current_user.grupo.nome}", 
@@ -1965,11 +1600,6 @@ def parceiro_dashboard():
 @login_required
 @require_role('admin_parceiro')
 def parceiro_monitor():
-    """
-    Esta função serve apenas para carregar a página HTML.
-    Os dados são preenchidos pelo JavaScript. Passamos uma lista vazia
-    para a carga inicial.
-    """
     return render_template('parceiro/monitor.html', title="Monitor da Equipe", agents_data=[])
 
 
@@ -1990,7 +1620,6 @@ def parceiro_monitor_data():
     for agent in consultants:
         real_status = agent.current_status
 
-        # Lógica de inatividade
         inactivity_threshold = timedelta(minutes=2)
         if agent.last_activity_at:
             aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
@@ -1999,15 +1628,11 @@ def parceiro_monitor_data():
                 update_user_status(agent, 'Offline')
                 db.session.commit()
 
-        # DADOS PARA O LAYOUT NOVO
-        # 1. Obter "Equipe / Local"
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         local_str = f"{agent.grupo.nome} / {current_work[0] if current_work else 'Nenhum'}"
 
-        # 2. Formatar "Último Login"
         last_login_str = agent.last_login.astimezone(brasilia_tz).strftime('%d/%m/%Y às %H:%M') if agent.last_login else 'Nunca logou'
 
-        # 3. Obter estatísticas
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         
@@ -2173,7 +1798,6 @@ def consultor_dashboard():
     
     total_leads_in_wallet = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     
-    # Contagem de chamadas e conversões HOJE
     start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
     calls_today = ActivityLog.query.filter(
         ActivityLog.user_id == current_user.id,
@@ -2185,7 +1809,6 @@ def consultor_dashboard():
         Tabulation.is_positive_conversion == True
     ).count()
 
-    # Contagem de chamadas e conversões no MÊS ATUAL
     start_of_month = get_brasilia_time().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     calls_month = ActivityLog.query.filter(
         ActivityLog.user_id == current_user.id,
@@ -2197,7 +1820,6 @@ def consultor_dashboard():
         Tabulation.is_positive_conversion == True
     ).count()
 
-    # Produtos disponíveis para o consultor
     available_products = Produto.query.all()
 
     return render_template('consultor_dashboard.html', 
@@ -2218,13 +1840,11 @@ def get_lead():
         flash('Selecione um produto para puxar o lead.', 'warning')
         return redirect(url_for('main.consultor_dashboard'))
 
-    # Verifica o limite da carteira
     current_wallet_size = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     if current_wallet_size >= current_user.wallet_limit:
         flash(f'Você atingiu o limite de {current_user.wallet_limit} leads na sua carteira.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
 
-    # Verifica o limite diário de puxadas
     start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
     leads_pulled_today = LeadConsumption.query.filter(
         LeadConsumption.user_id == current_user.id,
@@ -2234,7 +1854,6 @@ def get_lead():
         flash(f'Você atingiu seu limite diário de {current_user.daily_pull_limit} puxadas de lead.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
 
-    # Lógica para encontrar um lead
     lead = Lead.query.filter(
         Lead.produto_id == produto_id,
         Lead.status == 'Novo',
@@ -2244,7 +1863,6 @@ def get_lead():
     if lead:
         lead.consultor_id = current_user.id
         lead.status = 'Em Atendimento'
-        lead.data_atendimento = get_brasilia_time()
         
         consumption = LeadConsumption(
             lead_id=lead.id,
@@ -2289,7 +1907,7 @@ def atendimento(lead_id):
         lead.data_tabulacao = get_brasilia_time()
 
         if tabulation.is_recyclable and tabulation.recycle_in_days:
-            lead.status = 'Reciclado'
+            lead.status = 'Novo' # Alterado de 'Reciclado' para 'Novo' para voltar à fila
             lead.available_after = get_brasilia_time() + timedelta(days=tabulation.recycle_in_days)
             lead.consultor_id = None
 
@@ -2316,4 +1934,29 @@ def atendimento(lead_id):
     update_user_status(current_user, 'Em Atendimento')
     db.session.commit()
     
-    return render_template('atendimento.html', title='Atendimento', lead=lead, tabulations=tabulations)
+    phone_numbers = []
+    if lead.telefone:
+        phone_numbers.append({'label': 'Telefone 1', 'number': re.sub(r'\D', '', lead.telefone)})
+    if lead.telefone_2:
+        phone_numbers.append({'label': 'Telefone 2', 'number': re.sub(r'\D', '', lead.telefone_2)})
+
+    lead_details = {
+        'CPF': lead.cpf,
+        'Cidade': lead.cidade,
+        'Estado': lead.estado,
+        'Bairro': lead.bairro,
+        'Nascimento': lead.nascimento,
+        'Idade': lead.idade,
+        'Convênio': lead.convenio,
+        'Orgão': lead.orgao,
+        'Benefício': lead.beneficio
+    }
+    if lead.additional_data:
+        lead_details.update(lead.additional_data)
+
+    return render_template('atendimento.html', 
+                           title='Atendimento', 
+                           lead=lead, 
+                           tabulations=tabulations,
+                           phone_numbers=phone_numbers,
+                           lead_details=lead_details)

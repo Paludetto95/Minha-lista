@@ -4,7 +4,6 @@
 <div class="container mt-4">
     <h2 class="mb-4">Gerir Utilizadores</h2>
 
-    <!-- Formulário para adicionar novo utilizador -->
     {% if current_user.role == 'super_admin' %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header">Adicionar Novo Utilizador</div>
@@ -25,11 +24,9 @@
     </div>
     {% endif %}
 
-    <!-- Tabela de utilizadores -->
     <div class="card shadow-sm">
         <div class="card-header">
-             <!-- Filtros e Busca -->
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0">Utilizadores Existentes</h5>
                 <form action="{{ url_for('main.manage_users') }}" method="GET" class="d-flex flex-grow-1 flex-wrap gap-2 justify-content-end align-items-center">
                     <div class="flex-grow-1 me-2" style="max-width: 250px;"><input type="text" name="search_query" class="form-control" placeholder="Buscar por usuário ou email..." value="{{ search_query or '' }}"></div>
@@ -69,7 +66,6 @@
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center">
                                     {% if user.role == 'consultor' %}
-                                    <!-- Botão que ABRE o modal de edição -->
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"
                                             data-user-id="{{ user.id }}"
                                             data-user-name="{{ user.username }}"
@@ -81,7 +77,6 @@
                                     {% endif %}
                                     
                                     {% if user.id != current_user.id and (current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id)) %}
-                                    <!-- Botão de Apagar (com formulário separado e invisível) -->
                                     <form action="{{ url_for('main.delete_user', id=user.id) }}" method="POST" id="delete-form-{{ user.id }}" class="d-inline" onsubmit="return confirm('Tem a certeza que quer apagar este utilizador?');">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Apagar Usuário"><i class="fas fa-trash"></i></button>
                                     </form>
@@ -94,10 +89,36 @@
                 </table>
             </div>
         </div>
-    </div>
+        {% if pagination and pagination.pages > 1 %}
+        <div class="card-footer bg-light">
+            <nav aria-label="Paginação de utilizadores">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.manage_users', page=pagination.prev_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">Anterior</a>
+                    </li>
+
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3) %}
+                        {% if page_num %}
+                            {% if pagination.page == page_num %}
+                                <li class="page-item active" aria-current="page"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                                <li class="page-item"><a class="page-link" href="{{ url_for('main.manage_users', page=page_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.manage_users', page=pagination.next_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">Próximo</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+        </div>
 </div>
 
-<!-- INÍCIO DO MODAL DE EDIÇÃO DE LIMITES -->
 <div class="modal fade" id="editLimitsModal" tabindex="-1" aria-labelledby="editLimitsModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
