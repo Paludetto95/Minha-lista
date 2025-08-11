@@ -1031,7 +1031,7 @@ def delete_product(id):
         initial_message=f"A exclusão do produto '{product_name}' e seus leads associados está sendo processada em segundo plano.",
         product_id=id
     )
-    log_system_action('PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
+    log_system_action(action_type='PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
                       description=f"Exclusão do produto '{product_name}' e seus leads iniciada em segundo plano.",
                       details={'task_id': task_id})
     return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão do produto '{product_name}' e seus leads associados foi iniciada em segundo plano."})
@@ -2101,6 +2101,87 @@ def get_lead():
     else:
         flash('Nenhum lead novo disponível para este produto no momento.', 'warning')
         return redirect(url_for('main.consultor_dashboard'))
+
+@bp.route('/consultor/pegar_leads_selecionados', methods=['POST'])
+@login_required
+@require_role('consultor')
+def pegar_leads_selecionados():
+    form_data = request.form
+    total_leads_a_pegar = 0
+    leads_a_pegar_por_lote = {}
+
+    for key, value in form_data.items():
+        if key.startswith('leads_') and value.isdigit() and int(value) > 0:
+            try:
+                produto_id_str, estado = key.split('_')[1].split('-', 1)
+                produto_id = int(produto_id_str)
+                quantidade = int(value)
+                total_leads_a_pegar += quantidade
+                if (produto_id, estado) not in leads_a_pegar_por_lote:
+                    leads_a_pegar_por_lote[(produto_id, estado)] = 0
+                leads_a_pegar_por_lote[(produto_id, estado)] += quantidade
+            except (ValueError, IndexError):
+                flash('Erro ao processar o formulário de seleção de leads.', 'danger')
+                return redirect(url_for('main.consultor_dashboard'))
+
+    if total_leads_a_pegar == 0:
+        flash('Nenhuma quantidade de lead foi selecionada.', 'warning')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
+
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    leads_consumidos_hoje = LeadConsumption.query.filter(
+        LeadConsumption.user_id == current_user.id,
+        LeadConsumption.timestamp >= start_of_day
+    ).count()
+    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
+
+    if total_leads_a_pegar > vagas_na_carteira:
+        flash(f'Você tentou pegar {total_leads_a_pegar} leads, mas só tem {vagas_na_carteira} vagas na carteira.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    if total_leads_a_pegar > vagas_na_puxada_diaria:
+        flash(f'Você tentou pegar {total_leads_a_pegar} leads, mas só tem {vagas_na_puxada_diaria} puxadas restantes hoje.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    leads_pegos_count = 0
+    for (produto_id, estado), quantidade in leads_a_pegar_por_lote.items():
+        if quantidade <= 0:
+            continue
+
+        leads_disponiveis = Lead.query.filter(
+            Lead.produto_id == produto_id,
+            Lead.estado == estado,
+            Lead.status == 'Novo',
+            or_(Lead.available_after.is_(None), Lead.available_after <= get_brasilia_time())
+        ).order_by(Lead.data_criacao).limit(quantidade).all()
+
+        for lead in leads_disponiveis:
+            lead.consultor_id = current_user.id
+            lead.status = 'Em Atendimento'
+            db.session.add(lead)
+
+            consumption = LeadConsumption(
+                lead_id=lead.id,
+                user_id=current_user.id,
+                timestamp=get_brasilia_time()
+            )
+            db.session.add(consumption)
+            leads_pegos_count += 1
+
+    if leads_pegos_count > 0:
+        update_user_status(current_user, 'Em Atendimento')
+        db.session.commit()
+        flash(f'{leads_pegos_count} leads foram adicionados à sua carteira!', 'success')
+        log_system_action('LEADS_PULLED_BATCH', entity_type='Lead',
+                          description=f"{leads_pegos_count} leads puxados em lote por '{current_user.username}'.",
+                          details={'total_pulled': leads_pegos_count, 'breakdown': {f'{pid}-{est}': qty for (pid, est), qty in leads_a_pegar_por_lote.items()}})
+    else:
+        flash('Nenhum lead novo foi encontrado para os lotes selecionados.', 'warning')
+
+    return redirect(url_for('main.consultor_dashboard'))
 
 @bp.route('/atendimento/<int:lead_id>', methods=['GET', 'POST'])
 @login_required
