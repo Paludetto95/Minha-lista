@@ -2276,23 +2276,34 @@ def atendimento(lead_id=None):
 @require_role('consultor')
 def retabulate_lead(lead_id):
     lead = Lead.query.get_or_404(lead_id)
-    if lead.consultor_id != current_user.id:
-        flash('Este lead não está atribuído a você.', 'danger')
+    
+    activity_by_user = ActivityLog.query.filter_by(lead_id=lead.id, user_id=current_user.id).first()
+
+    if not activity_by_user:
+        flash('Você não tem permissão para retabular este lead, pois não há histórico de interação sua com ele.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
 
     new_tabulation_id = request.form.get('new_tabulation_id')
     if not new_tabulation_id:
         flash('Selecione uma nova tabulação.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
+        return redirect(url_for('main.consultor_dashboard', tab='historico'))
 
     tabulation = Tabulation.query.get(new_tabulation_id)
     if not tabulation:
         flash('Tabulação inválida.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
+        return redirect(url_for('main.consultor_dashboard', tab='historico'))
 
     old_tabulation_id = lead.tabulation_id
     lead.tabulation_id = new_tabulation_id
     lead.data_tabulacao = get_brasilia_time()
+
+    if tabulation.is_recyclable and tabulation.recycle_in_days:
+        lead.status = 'Novo'
+        lead.available_after = get_brasilia_time() + timedelta(days=tabulation.recycle_in_days)
+        lead.consultor_id = None
+    else:
+        lead.status = 'Tabulado'
+        lead.consultor_id = current_user.id
 
     activity = ActivityLog(
         lead_id=lead.id,
