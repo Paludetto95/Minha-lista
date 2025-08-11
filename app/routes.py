@@ -2183,11 +2183,20 @@ def pegar_leads_selecionados():
 
     return redirect(url_for('main.consultor_dashboard'))
 
+@bp.route('/atendimento', methods=['GET', 'POST'])
 @bp.route('/atendimento/<int:lead_id>', methods=['GET', 'POST'])
 @login_required
 @require_role('consultor')
-def atendimento(lead_id):
-    lead = Lead.query.get_or_404(lead_id)
+def atendimento(lead_id=None):
+    if lead_id:
+        lead = Lead.query.get_or_404(lead_id)
+    else:
+        lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').first()
+
+    if not lead:
+        flash('Não há leads em atendimento no momento.', 'info')
+        return redirect(url_for('main.consultor_dashboard'))
+
     if lead.consultor_id != current_user.id:
         flash('Este lead não está atribuído a você.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))

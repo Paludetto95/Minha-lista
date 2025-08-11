@@ -76,7 +76,7 @@
 
             <hr class="my-4">
 
-            <form action="{{ url_for('main.atender_lead', lead_id=lead.id) }}" method="POST" id="tabulation-form" class="no-loader">
+            <form action="{{ url_for('main.atendimento', lead_id=lead.id) }}" method="POST" id="tabulation-form" class="no-loader">
                 <h5 class="mb-3">Tabular Atendimento:</h5>
                 
                 <div id="phone-click-alert" class="alert alert-warning" style="display: none;">
