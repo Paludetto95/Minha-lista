@@ -53,7 +53,7 @@
 
     <div class="row">
         <!-- Coluna de Ações Rápidas -->
-        <div class="col-md-4 mb-4">
+        <div class="col-md-6 mb-4">
             <div class="card h-100 shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0">Ações Rápidas</h5>
@@ -75,20 +75,21 @@
         </div>
 
         <!-- Coluna de Métricas -->
-        <div class="col-md-4 mb-4">
+        <div class="col-md-6 mb-4">
             <div class="card h-100 shadow-sm">
                 <div class="card-header">
-                    <h5 class="mb-0">Métricas da Equipe</h5>
+                    <h5 class="mb-0">Consumo Mensal de Leads</h5>
                 </div>
                 <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 text-muted">Consumo Mensal de Leads</h6>
+                    <h6 class="card-subtitle mb-2 text-muted">      </h6>
                     <p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-muted">{{ grupo.monthly_pull_limit or '∞' }}</span></p>
                 </div>
             </div>
         </div>
-
+    </div>
+    <div class="row">
         <!-- Coluna de Últimas Atividades da Equipe -->
-        <div class="col-md-4 mb-4">
+        <div class="col-md-12 mb-4">
             <div class="card h-100 shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0">Últimas Atividades da Equipe</h5>

@@ -390,20 +390,31 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
+        ignored_columns_headers = []
         
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
         
         for i in range(len(df_headers.columns)):
             original_header_name = form_data.get(f'header_name_{i}')
             if not original_header_name: continue
+            
+            # Check if the column is explicitly included (checkbox is checked)
             if f'include_column_{i}' in form_data:
                 selected_system_field = form_data.get(f'mapping_{i}')
+                
+                # Check if the user selected a mapping and it's not 'Ignorar'
                 if selected_system_field and selected_system_field != 'Ignorar':
                     if selected_system_field in mapping:
                         flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
                         return redirect(url_for('main.admin_dashboard'))
                     mapping[selected_system_field] = original_header_name
                     layout_mapping_to_save[selected_system_field] = original_header_name
+                else:
+                    # If checkbox is checked but mapping is 'Ignorar', add to ignored list
+                    ignored_columns_headers.append(original_header_name)
+            else:
+                # If checkbox is not checked, add to ignored list
+                ignored_columns_headers.append(original_header_name)
 
         if 'cpf' not in mapping or 'nome' not in mapping:
             flash("Erro de mapeamento: As colunas 'CPF' e 'Nome' são obrigatórias.", 'danger')
