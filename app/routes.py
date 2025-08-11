@@ -742,6 +742,76 @@ def delete_group(group_id):
     log_system_action(action_type='GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Grupo '{group_name}' excluído.")
     return redirect(url_for('main.manage_teams'))
 
+@bp.route('/admin/teams/add_member/<int:group_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_member_to_team(group_id):
+    grupo = Grupo.query.get_or_404(group_id)
+    user_id = request.form.get('user_id')
+    new_role = request.form.get('role')
+    user = User.query.get_or_404(user_id)
+    
+    old_group_id = user.grupo_id
+    old_role = user.role
+
+    if user.grupo_id == group_id and user.role == new_role:
+        flash(f'Erro: {user.username} já é {new_role} nesta equipe.', 'warning')
+        log_system_action(action_type='TEAM_MEMBER_ADD_FAILED', entity_type='User', entity_id=user.id, 
+                          description=f"Tentativa de adicionar '{user.username}' ao grupo '{grupo.nome}' falhou: já pertence com o mesmo papel.")
+        return redirect(url_for('main.team_details', group_id=group_id))
+    
+    user.grupo_id = group_id
+    user.role = new_role
+    db.session.commit()
+    flash(f'{user.username} adicionado(a) como {new_role} à equipe {grupo.nome}!', 'success')
+    log_system_action(action_type='TEAM_MEMBER_UPDATED', entity_type='User', entity_id=user.id, 
+                      description=f"Usuário '{user.username}' movido/atualizado para equipe '{grupo.nome}' como '{new_role}'.",
+                      details={'old_group_id': old_group_id, 'old_role': old_role, 
+                               'new_group_id': group_id, 'new_role': new_role})
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+@bp.route('/admin/teams/remove_member/<int:group_id>/<int:user_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def remove_member_from_team(group_id, user_id):
+    grupo = Grupo.query.get_or_404(group_id)
+    user_to_remove = User.query.get_or_404(user_id)
+    
+    old_group_id = user_to_remove.grupo_id
+    old_role = user_to_remove.role
+
+    if user_to_remove.role == 'super_admin':
+        flash('Não é possível remover um Super Administrador de uma equipe.', 'danger')
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+                          description=f"Tentativa de remover Super Admin '{user_to_remove.username}' da equipe '{grupo.nome}'.")
+        return redirect(url_for('main.team_details', group_id=group_id))
+    if user_to_remove.grupo_id != group_id:
+        flash(f'Erro: {user_to_remove.username} não pertence à equipe {grupo.nome}.', 'danger')
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+                          description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: não é membro.")
+        return redirect(url_for('main.team_details', group_id=group_id))
+    
+    equipe_principal = Grupo.query.filter_by(nome="Equipe Principal").first()
+    if equipe_principal:
+        user_to_remove.grupo_id = equipe_principal.id
+        user_to_remove.role = 'consultor'
+        db.session.commit()
+        flash(f'{user_to_remove.username} removido(a) da equipe {grupo.nome} e movido(a) para Equipe Principal.', 'info')
+        log_system_action(action_type='TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
+                          description=f"Usuário '{user_to_remove.username}' removido da equipe '{grupo.nome}' e movido para '{equipe_principal.nome}'.",
+                          details={'old_group_id': old_group_id, 'old_role': old_role, 
+                                   'new_group_id': equipe_principal.id, 'new_role': 'consultor'})
+    else:
+        flash('Erro: Não foi possível mover o usuário para uma equipe padrão. Crie uma "Equipe Principal".', 'danger')
+        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
+                          description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: Equipe Principal não encontrada.")
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+# --- O RESTANTE DO SEU ARQUIVO `routes.py` CONTINUA ABAIXO ---
+# (As funções restantes não foram coladas para manter a resposta concisa,
+# mas elas devem estar aqui no seu arquivo final)
+
+
 @bp.route('/admin/users/add', methods=['POST'])
 @login_required
 @require_role('super_admin')
