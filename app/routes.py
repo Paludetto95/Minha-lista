@@ -1363,6 +1363,22 @@ def delete_tabulation(id):
                           details={'error': str(e)})
     return redirect(url_for('main.manage_tabulations'))
 
+@bp.route('/admin/tabulations/edit/<int:id>', methods=['GET', 'POST'])
+@login_required
+@require_role('super_admin')
+def edit_tabulation(id):
+    tabulation = Tabulation.query.get_or_404(id)
+    if request.method == 'POST':
+        tabulation.name = request.form.get('name')
+        tabulation.color = request.form.get('color')
+        tabulation.is_recyclable = request.form.get('is_recyclable') == 'on'
+        tabulation.is_positive_conversion = request.form.get('is_positive_conversion') == 'on'
+        tabulation.recycle_in_days = int(request.form.get('recycle_in_days', 0)) if tabulation.is_recyclable else None
+        db.session.commit()
+        flash('Tabulação atualizada com sucesso!', 'success')
+        return redirect(url_for('main.manage_tabulations'))
+    return render_template('admin/edit_tabulation.html', title="Editar Tabulação", tabulation=tabulation)
+
 @bp.route('/admin/export/tabulations')
 @login_required
 @require_role('super_admin')
@@ -2271,17 +2287,16 @@ def atendimento(lead_id=None):
                            phone_numbers=phone_numbers,
                            lead_details=lead_details)
 
-@bp.route('/consultor/retabulate_lead/<int:lead_id>', methods=['POST'])
+@bp.route('/consultor/retabulate_lead/<int:log_id>', methods=['POST'])
 @login_required
 @require_role('consultor')
-def retabulate_lead(lead_id):
-    lead = Lead.query.get_or_404(lead_id)
-    
-    activity_by_user = ActivityLog.query.filter_by(lead_id=lead.id, user_id=current_user.id).first()
+def retabulate_lead(log_id):
+    activity_to_update = ActivityLog.query.get_or_404(log_id)
+    lead = activity_to_update.lead
 
-    if not activity_by_user:
-        flash('Você não tem permissão para retabular este lead, pois não há histórico de interação sua com ele.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
+    if activity_to_update.user_id != current_user.id:
+        flash('Você não tem permissão para retabular esta atividade.', 'danger')
+        return redirect(url_for('main.consultor_dashboard', tab='historico'))
 
     new_tabulation_id = request.form.get('new_tabulation_id')
     if not new_tabulation_id:
@@ -2294,6 +2309,8 @@ def retabulate_lead(lead_id):
         return redirect(url_for('main.consultor_dashboard', tab='historico'))
 
     old_tabulation_id = lead.tabulation_id
+    
+    # Update the lead
     lead.tabulation_id = new_tabulation_id
     lead.data_tabulacao = get_brasilia_time()
 
@@ -2305,15 +2322,11 @@ def retabulate_lead(lead_id):
         lead.status = 'Tabulado'
         lead.consultor_id = current_user.id
 
-    activity = ActivityLog(
-        lead_id=lead.id,
-        user_id=current_user.id,
-        action_type='Retabulação',
-        tabulation_id=new_tabulation_id,
-        details=f'Tabulação alterada de {old_tabulation_id} para {new_tabulation_id}',
-        timestamp=get_brasilia_time()
-    )
-    db.session.add(activity)
+    # Update the ActivityLog
+    activity_to_update.action_type = 'Retabulação'
+    activity_to_update.tabulation_id = new_tabulation_id
+    activity_to_update.timestamp = get_brasilia_time()
+    
     db.session.commit()
 
     log_system_action('LEAD_RETABULATED', entity_type='Lead', entity_id=lead.id,

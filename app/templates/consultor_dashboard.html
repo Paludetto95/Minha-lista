@@ -160,7 +160,7 @@
                                     </span>
                                     {% endif %}
                                     <!-- O botão de editar agora usa o ID do lead do log -->
-                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-lead-id="{{ log_entry.lead.id }}" data-lead-name="{{ log_entry.lead.nome }}">Editar</button>
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-log-id="{{ log_entry.id }}" data-lead-name="{{ log_entry.lead.nome }}">Editar</button>
                                 </div>
                             </li>
                             {% endfor %}
@@ -294,10 +294,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (editModal) {
         editModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget;
-            var leadId = button.getAttribute('data-lead-id');
+            var logId = button.getAttribute('data-log-id');
             var leadName = button.getAttribute('data-lead-name');
             var form = editModal.querySelector('#edit-form');
-            var actionUrl = "{{ url_for('main.retabulate_lead', lead_id=0) }}".replace('0', leadId);
+            var actionUrl = "{{ url_for('main.retabulate_lead', log_id=0) }}".replace('0', logId);
             form.setAttribute('action', actionUrl);
             var modalTitle = editModal.querySelector('.modal-title');
             var leadNameInModal = editModal.querySelector('#lead-name-in-modal');
