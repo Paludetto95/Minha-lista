@@ -1031,7 +1031,7 @@ def delete_product(id):
         initial_message=f"A exclusão do produto '{product_name}' e seus leads associados está sendo processada em segundo plano.",
         product_id=id
     )
-    log_system_action(action_type='PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
+    log_system_action('PRODUCT_DELETE_BACKGROUND_INITIATED', entity_type='Product', entity_id=id, 
                       description=f"Exclusão do produto '{product_name}' e seus leads iniciada em segundo plano.",
                       details={'task_id': task_id})
     return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão do produto '{product_name}' e seus leads associados foi iniciada em segundo plano."})
@@ -1767,7 +1767,7 @@ def admin_export_filtered_leads():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Relatorio_Leads_Filtrado')
-    output.seek(0);
+    output.seek(0)
 
     filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.xlsx"
     log_system_action('LEAD_EXPORT_FILTERED', entity_type='Lead', 
@@ -1933,7 +1933,7 @@ def parceiro_performance_dashboard_export():
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Desempenho_Equipe')
-    output.seek(0);
+    output.seek(0)
 
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
     return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
@@ -2180,3 +2180,44 @@ def atendimento(lead_id):
                            tabulations=tabulations,
                            phone_numbers=phone_numbers,
                            lead_details=lead_details)
+
+@bp.route('/consultor/retabulate_lead/<int:lead_id>', methods=['POST'])
+@login_required
+@require_role('consultor')
+def retabulate_lead(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    if lead.consultor_id != current_user.id:
+        flash('Este lead não está atribuído a você.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    new_tabulation_id = request.form.get('new_tabulation_id')
+    if not new_tabulation_id:
+        flash('Selecione uma nova tabulação.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    tabulation = Tabulation.query.get(new_tabulation_id)
+    if not tabulation:
+        flash('Tabulação inválida.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    old_tabulation_id = lead.tabulation_id
+    lead.tabulation_id = new_tabulation_id
+    lead.data_tabulacao = get_brasilia_time()
+
+    activity = ActivityLog(
+        lead_id=lead.id,
+        user_id=current_user.id,
+        action_type='Retabulação',
+        tabulation_id=new_tabulation_id,
+        details=f'Tabulação alterada de {old_tabulation_id} para {new_tabulation_id}',
+        timestamp=get_brasilia_time()
+    )
+    db.session.add(activity)
+    db.session.commit()
+
+    log_system_action('LEAD_RETABULATED', entity_type='Lead', entity_id=lead.id,
+                      description=f"Lead '{lead.nome}' (ID: {lead.id}) retabulado como '{tabulation.name}' por '{current_user.username}'.",
+                      details={'old_tabulation_id': old_tabulation_id, 'new_tabulation_id': new_tabulation_id, 'tabulation_name': tabulation.name})
+
+    flash(f'Lead {lead.nome} retabulado com sucesso!', 'success')
+    return redirect(url_for('main.consultor_dashboard', tab='historico'))
