@@ -1392,12 +1392,32 @@ def edit_tabulation(id):
 
 @bp.route('/admin/export/tabulations')
 @login_required
-@require_role('super_admin')
+@require_role('super_admin', 'admin_parceiro')
 def export_tabulations():
-    results = ActivityLog.query.options(joinedload(ActivityLog.lead).joinedload(Lead.produto), joinedload(ActivityLog.user), joinedload(ActivityLog.tabulation)).order_by(ActivityLog.timestamp.asc()).all()
+    # Get user IDs in the current user's group if the user is an admin_parceiro
+    user_ids_in_group = []
+    if current_user.role == 'admin_parceiro':
+        user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id).with_entities(User.id)]
+        if not user_ids_in_group:
+            flash('Nenhum usuário encontrado na sua equipe para gerar o relatório.', 'warning')
+            return redirect(url_for('main.parceiro_dashboard'))
+
+    results_query = ActivityLog.query.options(
+        joinedload(ActivityLog.lead).joinedload(Lead.produto),
+        joinedload(ActivityLog.user),
+        joinedload(ActivityLog.tabulation)
+    )
+
+    if current_user.role == 'admin_parceiro':
+        results_query = results_query.filter(ActivityLog.user_id.in_(user_ids_in_group))
+
+    results = results_query.order_by(ActivityLog.timestamp.asc()).all()
     if not results:
         flash('Nenhum dado encontrado para exportar.', 'warning')
-        return redirect(url_for('main.admin_dashboard'))
+        if current_user.role == 'admin_parceiro':
+            return redirect(url_for('main.parceiro_dashboard'))
+        else:
+            return redirect(url_for('main.admin_dashboard'))
     data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
@@ -1825,6 +1845,19 @@ def parceiro_dashboard():
                            recent_activity=recent_activity,
                            monthly_consumption=monthly_consumption,
                            grupo=current_user.grupo)
+
+@bp.route('/parceiro/atividades/fullscreen')
+@login_required
+@require_role('admin_parceiro')
+def parceiro_atividades_fullscreen():
+    user_ids_in_group = [user.id for user in User.query.filter_by(grupo_id=current_user.grupo_id).with_entities(User.id)]
+    recent_activity = ActivityLog.query.filter(ActivityLog.user_id.in_(user_ids_in_group)).options(joinedload(ActivityLog.lead), joinedload(ActivityLog.user), joinedload(ActivityLog.tabulation)).order_by(ActivityLog.timestamp.desc()).all() # Removed limit(15) to show all
+    
+    user_theme = request.args.get('theme', 'default') # Get theme from query parameter
+    
+    return render_template('parceiro/parceiro_atividades_fullscreen.html', 
+                           recent_activity=recent_activity,
+                           user_theme=user_theme) # Pass theme to template
 
 @bp.route('/parceiro/monitor')
 @login_required

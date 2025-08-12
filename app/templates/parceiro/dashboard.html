@@ -52,9 +52,18 @@
     </div>
 
     <div class="row">
-        <!-- Coluna de Ações Rápidas -->
+        <!-- Coluna Esquerda: Consumo Mensal de Leads e Ações Rápidas -->
         <div class="col-md-6 mb-4">
-            <div class="card h-100 shadow-sm">
+            <!-- Card de Consumo Mensal de Leads (Scoreboard) -->
+            <div class="card bg-primary text-white shadow-lg mb-4">
+                <div class="card-body text-center py-3">
+                    <h5 class="card-title mb-1">Consumo Mensal de Leads</h5>
+                    <p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-light">{{ grupo.monthly_pull_limit or '∞' }}</span></p>
+                </div>
+            </div>
+
+            <!-- Coluna de Ações Rápidas -->
+            <div class="card shadow-sm">
                 <div class="card-header">
                     <h5 class="mb-0">Ações Rápidas</h5>
                 </div>
@@ -69,32 +78,25 @@
                         <a href="{{ url_for('main.parceiro_manage_users') }}" class="list-group-item list-group-item-action">
                             <i class="fas fa-users-cog me-2"></i>Gerir Consultores e Leads
                         </a>
+                        <a href="{{ url_for('main.export_tabulations') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-file-export me-2"></i>Exportar Relatório de Tabulações
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Coluna de Métricas -->
+        <!-- Coluna Direita: Últimas Atividades -->
         <div class="col-md-6 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header">
-                    <h5 class="mb-0">Consumo Mensal de Leads</h5>
-                </div>
-                <div class="card-body text-center">
-                    <h6 class="card-subtitle mb-2 text-muted">      </h6>
-                    <p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-muted">{{ grupo.monthly_pull_limit or '∞' }}</span></p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row">
-        <!-- Coluna de Últimas Atividades da Equipe -->
-        <div class="col-md-12 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-header">
+            <!-- Card de Últimas Atividades -->
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Últimas Atividades da Equipe</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openFullscreenActivity()">
+                        <i class="fas fa-expand me-1"></i> Tela Cheia
+                    </button>
                 </div>
-                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                     {% for log_entry in recent_activity %}
                         <li class="list-group-item">
@@ -120,4 +122,13 @@
         </div>
     </div>
 </div>
+
+<script>
+    function openFullscreenActivity() {
+        const userTheme = "{{ current_user.theme }}"; // Get the current user's theme
+        const url = "{{ url_for('main.parceiro_atividades_fullscreen') }}?theme=" + userTheme;
+        const newWindow = window.open(url, "_blank", "fullscreen=yes");
+        // No automatic fullscreen on load, user will trigger it from the new window
+    }
+</script>
 {% endblock %}
