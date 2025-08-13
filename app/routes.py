@@ -7,6 +7,7 @@ import threading
 import plotly.graph_objects as go
 import plotly.io as pio
 import pytz
+import random
 from collections import defaultdict
 from functools import wraps
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
@@ -817,11 +818,6 @@ def remove_member_from_team(group_id, user_id):
         log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
                           description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: Equipe Principal não encontrada.")
     return redirect(url_for('main.team_details', group_id=group_id))
-
-# --- O RESTANTE DO SEU ARQUIVO `routes.py` CONTINUA ABAIXO ---
-# (As funções restantes não foram coladas para manter a resposta concisa,
-# mas elas devem estar aqui no seu arquivo final)
-
 
 @bp.route('/admin/users/add', methods=['POST'])
 @login_required
@@ -2243,139 +2239,189 @@ def pegar_leads_selecionados():
 
     return redirect(url_for('main.consultor_dashboard'))
 
-@bp.route('/atendimento', methods=['GET', 'POST'])
-@bp.route('/atendimento/<int:lead_id>', methods=['GET', 'POST'])
+@bp.route('/consultor/retabulate_lead', methods=['POST'])
+@login_required
+def retabulate_lead():
+    log_id = request.form.get('log_id')
+    new_tabulation_id = request.form.get('new_tabulation_id')
+
+    if not log_id or not new_tabulation_id:
+        flash('Dados inválidos para retabulação.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    log_entry = ActivityLog.query.get(log_id)
+    if not log_entry:
+        flash('Registro de atividade não encontrado.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    if log_entry.user_id != current_user.id:
+        flash('Você não tem permissão para retabular este lead.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    new_tabulation = Tabulation.query.get(new_tabulation_id)
+    if not new_tabulation:
+        flash('Tabulação inválida.', 'danger')
+        return redirect(url_for('main.consultor_dashboard'))
+
+    # Update the ActivityLog entry
+    log_entry.tabulation_id = new_tabulation.id
+    log_entry.action_type = 'Retabulação' # Or a more specific type if needed
+    log_entry.timestamp = get_brasilia_time() # Update timestamp to reflect retabulation
+
+    # Also update the lead's current tabulation and status if applicable
+    lead = Lead.query.get(log_entry.lead_id)
+    if lead:
+        lead.tabulation_id = new_tabulation.id
+        lead.data_tabulacao = get_brasilia_time()
+        # If the new tabulation is a positive conversion, update lead status
+        if new_tabulation.is_positive_conversion:
+            lead.status = 'Convertido'
+        elif new_tabulation.is_recyclable:
+            lead.status = 'Novo' # Or 'Reciclado'
+            lead.available_after = get_brasilia_time() + timedelta(days=new_tabulation.recycle_in_days)
+        else:
+            lead.status = 'Tabulado' # Default status for non-recyclable, non-conversion tabulations
+
+    db.session.commit()
+    flash('Lead retabulado com sucesso!', 'success')
+    log_system_action('LEAD_RETABULATED', entity_type='Lead', entity_id=lead.id if lead else None,
+                      description=f"Lead {lead.nome if lead else 'N/A'} retabulado para '{new_tabulation.name}' por {current_user.username}.",
+                      details={'old_tabulation_id': log_entry.tabulation_id, 'new_tabulation_id': new_tabulation.id})
+
+    return redirect(url_for('main.consultor_dashboard'))
+
+@bp.route('/consultor/atendimento', methods=['GET', 'POST'])
 @login_required
 @require_role('consultor')
-def atendimento(lead_id=None):
-    if lead_id:
-        lead = Lead.query.get_or_404(lead_id)
-    else:
-        lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').first()
-
-    if not lead:
-        flash('Não há leads em atendimento no momento.', 'info')
-        return redirect(url_for('main.consultor_dashboard'))
-
-    if lead.consultor_id != current_user.id:
-        flash('Este lead não está atribuído a você.', 'danger')
-        return redirect(url_for('main.consultor_dashboard'))
-
+def atendimento():
     if request.method == 'POST':
+        lead_id = request.form.get('lead_id')
         tabulation_id = request.form.get('tabulation_id')
-        if not tabulation_id:
-            flash('Selecione uma tabulação.', 'danger')
-            return redirect(url_for('main.atendimento', lead_id=lead.id))
 
+        if not lead_id or not tabulation_id:
+            flash('Informações de tabulação inválidas.', 'danger')
+            return redirect(url_for('main.consultor_dashboard'))
+
+        lead = Lead.query.get(lead_id)
         tabulation = Tabulation.query.get(tabulation_id)
-        if not tabulation:
-            flash('Tabulação inválida.', 'danger')
-            return redirect(url_for('main.atendimento', lead_id=lead.id))
 
-        lead.status = 'Tabulado'
+        if not lead or not tabulation or lead.consultor_id != current_user.id:
+            flash('Lead ou tabulação inválida.', 'danger')
+            return redirect(url_for('main.consultor_dashboard'))
+
         lead.tabulation_id = tabulation.id
         lead.data_tabulacao = get_brasilia_time()
 
-        if tabulation.is_recyclable and tabulation.recycle_in_days:
-            lead.status = 'Novo' # Alterado de 'Reciclado' para 'Novo' para voltar à fila
+        if tabulation.is_positive_conversion:
+            lead.status = 'Convertido'
+        elif tabulation.is_recyclable:
+            lead.status = 'Novo'
             lead.available_after = get_brasilia_time() + timedelta(days=tabulation.recycle_in_days)
-            lead.consultor_id = None
-
-        activity = ActivityLog(
+        else:
+            lead.status = 'Tabulado'
+        
+        log = ActivityLog(
             lead_id=lead.id,
             user_id=current_user.id,
-            action_type='Tabulação',
             tabulation_id=tabulation.id,
-            timestamp=get_brasilia_time()
+            action_type='Tabulação'
         )
-        db.session.add(activity)
-        
-        update_user_status(current_user, 'Ocioso')
+        db.session.add(log)
         db.session.commit()
 
-        log_system_action('LEAD_TABULATED', entity_type='Lead', entity_id=lead.id, 
-                          description=f"Lead '{lead.nome}' (ID: {lead.id}) tabulado como '{tabulation.name}' por '{current_user.username}'.",
-                          details={'tabulation_id': tabulation.id, 'tabulation_name': tabulation.name})
+        flash(f'Lead {lead.nome} tabulado com sucesso como "{tabulation.name}".', 'success')
+        return redirect(url_for('main.atendimento'))
 
-        flash(f'Lead {lead.nome} tabulado com sucesso!', 'success')
-        return redirect(url_for('main.consultor_dashboard'))
-
-    tabulations = Tabulation.query.order_by(Tabulation.name).all()
-    update_user_status(current_user, 'Em Atendimento')
-    db.session.commit()
+    # GET request logic
+    lead_id = request.args.get('lead_id', type=int)
     
-    phone_numbers = []
-    if lead.telefone:
-        phone_numbers.append({'label': 'Telefone 1', 'number': re.sub(r'\D', '', lead.telefone)})
-    if lead.telefone_2:
-        phone_numbers.append({'label': 'Telefone 2', 'number': re.sub(r'\D', '', lead.telefone_2)})
+    # If no lead_id is provided, find the next available lead
+    if not lead_id:
+        lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        if lead:
+            return redirect(url_for('main.atendimento', lead_id=lead.id))
+        else:
+            flash('Nenhum lead em atendimento no momento.', 'info')
+            return redirect(url_for('main.consultor_dashboard'))
 
+    # If a lead_id is provided, display the lead
+    lead = Lead.query.get(lead_id)
+    if not lead or lead.consultor_id != current_user.id or lead.status != 'Em Atendimento':
+        flash('Lead não encontrado ou não está mais em atendimento.', 'warning')
+        # Try to find the next one
+        next_lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        if next_lead:
+            return redirect(url_for('main.atendimento', lead_id=next_lead.id))
+        else:
+            return redirect(url_for('main.consultor_dashboard'))
+
+    # Calculations for the template
+    start_of_day = get_brasilia_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    leads_consumidos_hoje = LeadConsumption.query.filter(
+        LeadConsumption.user_id == current_user.id,
+        LeadConsumption.timestamp >= start_of_day
+    ).count()
+    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
+    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
+    all_tabulations = Tabulation.query.order_by(Tabulation.name).all()
+    cleaned_telefone = re.sub(r'\D', '', lead.telefone) if lead.telefone else None
+    cleaned_telefone_2 = re.sub(r'\D', '', lead.telefone_2) if lead.telefone_2 else None
     lead_details = {
+        'Nome': lead.nome,
         'CPF': lead.cpf,
+        'Telefone 1': lead.telefone,
+        'Telefone 2': lead.telefone_2,
+        'Produto': lead.produto.name if lead.produto else 'N/A',
+        'Status': lead.status,
         'Cidade': lead.cidade,
         'Estado': lead.estado,
-        'Bairro': lead.bairro,
-        'Nascimento': lead.nascimento,
-        'Idade': lead.idade,
-        'Convênio': lead.convenio,
-        'Orgão': lead.orgao,
-        'Benefício': lead.beneficio
+        'Data de Criação': lead.data_criacao.strftime('%d/%m/%Y %H:%M') if lead.data_criacao else 'N/A',
+        'Último Contato WhatsApp': lead.last_whatsapp_contact.strftime('%d/%m/%Y %H:%M') if lead.last_whatsapp_contact else 'N/A',
+        'Observações': lead.notes if lead.notes else 'N/A'
     }
     if lead.additional_data:
-        lead_details.update(lead.additional_data)
+        for key, value in lead.additional_data.items():
+            lead_details[key] = value
 
     return render_template('atendimento.html', 
                            title='Atendimento', 
                            lead=lead, 
-                           tabulations=tabulations,
-                           phone_numbers=phone_numbers,
-                           lead_details=lead_details)
+                           all_tabulations=all_tabulations, 
+                           cleaned_telefone=cleaned_telefone, 
+                           cleaned_telefone_2=cleaned_telefone_2, 
+                           lead_details=lead_details, 
+                           vagas_na_puxada_diaria=vagas_na_puxada_diaria, 
+                           vagas_na_carteira=vagas_na_carteira)
 
-@bp.route('/consultor/retabulate_lead/<int:log_id>', methods=['POST'])
+@bp.route('/consultor/get_next_whatsapp_contact', methods=['POST'])
 @login_required
 @require_role('consultor')
-def retabulate_lead(log_id):
-    activity_to_update = ActivityLog.query.get_or_404(log_id)
-    lead = activity_to_update.lead
+def get_next_whatsapp_contact():
+    lead_id = request.form.get('lead_id')
+    phone_number = request.form.get('phone_number')
 
-    if activity_to_update.user_id != current_user.id:
-        flash('Você não tem permissão para retabular esta atividade.', 'danger')
-        return redirect(url_for('main.consultor_dashboard', tab='historico'))
+    if not lead_id or not phone_number:
+        return jsonify({'status': 'error', 'message': 'Lead ID ou número de telefone não fornecido.'}), 400
 
-    new_tabulation_id = request.form.get('new_tabulation_id')
-    if not new_tabulation_id:
-        flash('Selecione uma nova tabulação.', 'danger')
-        return redirect(url_for('main.consultor_dashboard', tab='historico'))
+    lead = Lead.query.get(lead_id)
 
-    tabulation = Tabulation.query.get(new_tabulation_id)
-    if not tabulation:
-        flash('Tabulação inválida.', 'danger')
-        return redirect(url_for('main.consultor_dashboard', tab='historico'))
+    if not lead or lead.consultor_id != current_user.id:
+        return jsonify({'status': 'error', 'message': 'Lead não encontrado ou não autorizado.'}), 404
 
-    old_tabulation_id = lead.tabulation_id
+    lead.last_whatsapp_contact = get_brasilia_time()
     
-    # Update the lead
-    lead.tabulation_id = new_tabulation_id
-    lead.data_tabulacao = get_brasilia_time()
+    log_system_action('WHATSAPP_CONTACT', entity_type='Lead', entity_id=lead.id,
+                      description=f"Link do WhatsApp gerado para o lead '{lead.nome}' por '{current_user.username}'.",
+                      details={'phone_number': phone_number})
 
-    if tabulation.is_recyclable and tabulation.recycle_in_days:
-        lead.status = 'Novo'
-        lead.available_after = get_brasilia_time() + timedelta(days=tabulation.recycle_in_days)
-        lead.consultor_id = None
-    else:
-        lead.status = 'Tabulado'
-        lead.consultor_id = current_user.id
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERRO: Falha ao commitar no banco de dados: {e}")
+        return jsonify({'status': 'error', 'message': 'Erro ao salvar os dados.'}), 500
 
-    # Update the ActivityLog
-    activity_to_update.action_type = 'Retabulação'
-    activity_to_update.tabulation_id = new_tabulation_id
-    activity_to_update.timestamp = get_brasilia_time()
+    whatsapp_link = f"https://wa.me/{phone_number}"
     
-    db.session.commit()
-
-    log_system_action('LEAD_RETABULATED', entity_type='Lead', entity_id=lead.id,
-                      description=f"Lead '{lead.nome}' (ID: {lead.id}) retabulado como '{tabulation.name}' por '{current_user.username}'.",
-                      details={'old_tabulation_id': old_tabulation_id, 'new_tabulation_id': new_tabulation_id, 'tabulation_name': tabulation.name})
-
-    flash(f'Lead {lead.nome} retabulado com sucesso!', 'success')
-    return redirect(url_for('main.consultor_dashboard', tab='historico'))
+    return jsonify({'status': 'success', 'whatsapp_link': whatsapp_link, 'message': 'Link do WhatsApp gerado com sucesso.'})

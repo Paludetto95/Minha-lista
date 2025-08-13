@@ -1,4 +1,3 @@
-# app/models.py (VERSÃO ATUALIZADA E MELHORADA)
 from datetime import datetime
 from app import db, login_manager
 from flask_login import UserMixin
@@ -23,6 +22,8 @@ class User(UserMixin, db.Model):
     last_activity_at = db.Column(db.DateTime, default=datetime.utcnow)
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
+    # ===== NOVO CAMPO ADICIONADO =====
+    last_whatsapp_contact_at = db.Column(db.DateTime, nullable=True)
 
     # Relacionamentos
     leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
@@ -61,6 +62,7 @@ class Lead(db.Model):
     logradouro = db.Column(db.String(200))
     numero = db.Column(db.String(20))
     complemento = db.Column(db.String(100))
+    notes = db.Column(db.Text, nullable=True)
     extra_1 = db.Column(db.String(255))
     extra_2 = db.Column(db.String(255))
     extra_3 = db.Column(db.String(255))
@@ -79,6 +81,7 @@ class Lead(db.Model):
     data_tabulacao = db.Column(db.DateTime)
     available_after = db.Column(db.DateTime, nullable=True, index=True)
     additional_data = db.Column(db.JSON)
+    last_whatsapp_contact = db.Column(db.DateTime, nullable=True)
     __table_args__ = (
         db.Index('ix_lead_get_new_lead', 'produto_id', 'status', 'available_after', 'data_criacao'),
     )

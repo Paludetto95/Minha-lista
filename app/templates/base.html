@@ -1,352 +1,87 @@
-<!doctype html>
-<html lang="pt-br">
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or 'Sistema' }} - FS PROMOTORA</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-    {% block styles %}{% endblock %}
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Meu Sistema</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Hover effect for list-group-item-action */
-        .list-group-item-action {
-            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        }
-
-        .list-group-item-action:hover {
-            transform: translateY(-3px) scale(1.01); /* Slightly move up and zoom in */
-            box_shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Add a subtle shadow */
-            z-index: 1; /* Bring to front on hover */
-        }
-
-        /* Loader */
-        #loader-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(255, 255, 255, 0.7); z-index: 9999;
-            display: none; justify-content: center; align-items: center;
-        }
-        .spinner {
-            border: 8px solid #f3f3f3; border-top: 8px solid #0d6efd;
-            border-radius: 50%; width: 60px; height: 60px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        .navbar-brand {
+        .navbar-brand-centered {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
-            padding: 0 !important;
         }
-
-        .logo-light, .logo-dark {
-            height: 55px;
-            width: auto;
-            display: block;
-        }
-        
-        /* Oculta o logo escuro por padrão */
-        .logo-dark {
-            display: none;
-        }
-
-        /* Regras de Tema para os Logos e Body */
-        [data-theme="dark"] .logo-light { display: none; }
-        [data-theme="dark"] .logo-dark { display: block; }
-
-        .navbar-collapse { padding-top: 10px; }
-        
-        @media (min-width: 992px) {
-            .navbar-collapse { padding-top: 0; }
-        }
-
-        /* ===== CSS DOS TEMAS ===== */
-        [data-theme="default"] { background-color: #f8f9fa !important; color: #212529; }
-        [data-theme="default"] .card, 
-        [data-theme="default"] .list-group-item,
-        [data-theme="default"] .modal-content { background-color: #fff; color: #212529; }
-        [data-theme="default"] .navbar-dark.bg-dark { background: #d2d2d2 !important; }
-        [data-theme="default"] h1, [data-theme="default"] h2, [data-theme="default"] h3,
-        [data-theme="default"] h4, [data-theme="default"] h5, [data-theme="default"] h6 { color: #212529; }
-        [data-theme="default"] .table-secondary th { color: #212529; }
-
-        [data-theme="dark"] { background-color: #212529 !important; color: #dee2e6; }
-        [data-theme="dark"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #191919 0%, #1c1c1c 100%) !important; }
-        [data-theme="dark"] .card, 
-        [data-theme="dark"] .list-group-item,
-        [data-theme="dark"] .modal-content { background-color: #343a40; border-color: #495057; color: #dee2e6; }
-        
-        [data-theme="dark"] .table {
-            --bs-table-color: #dee2e6; --bs-table-bg: #343a40; --bs-table-border-color: #495057;
-            --bs-table-striped-color: #dee2e6; --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
-            --bs-table-hover-color: #fff; --bs-table-hover-bg: rgba(255, 255, 255, 0.05);
-        }
-        [data-theme="dark"] .table-secondary {
-            --bs-table-bg: #495057; --bs-table-color: #fff; --bs-table-border-color: #6c757d;
-        }
-        
-        [data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
-        [data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 { color: #fff; }
-        [data-theme="dark"] .text-muted { color: #adb5bd !important; }
-
-        [data-theme="dark"] .modal-header, [data-theme="dark"] .modal-footer { border-color: #495057; }
-        [data-theme="dark"] .btn-close { filter: invert(1) grayscale(100) brightness(200%); }
-        [data-theme="dark"] .accordion-item { background-color: #343a40; border-color: #495057; }
-        [data-theme="dark"] .accordion-button { background-color: #495057; color: #fff; }
-        [data-theme="dark"] .accordion-button:not(.collapsed) { background-color: #0d6efd; color: #fff; }
-        [data-theme="dark"] .accordion-button::after { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e"); }
-
-        [data-theme="dark"] .form-control,
-        [data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
-        [data-theme="dark"] .form-control:focus,
-        [data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
-        
-        [data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
-        [data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
-        [data-theme="ocean"] .card, 
-        [data-theme="ocean"] .list-group-item,
-        [data-theme="ocean"] .modal-content { background-color: #fff; color: #003d5b; }
-        [data-theme="ocean"] h1, [data-theme="ocean"] h2, [data-theme="ocean"] h3,
-        [data-theme="ocean"] h4, [data-theme="ocean"] h5, [data-theme="ocean"] h6 { color: #003d5b; }
     </style>
-
-    <!-- ===== CORREÇÃO DEFINITIVA DO TEMA ===== -->
-    <script>
-        (function() {
-            // Pega o tema do localStorage para evitar o "flash" da página
-            let theme = localStorage.getItem('userTheme');
-            
-            // Se não houver tema no localStorage, usa o tema vindo do servidor
-            if (!theme) {
-                theme = "{{ current_user.theme if current_user.is_authenticated else 'default' }}";
-            }
-            
-            // Aplica o atributo ao elemento raiz (html) para carregar o estilo imediatamente
-            document.documentElement.setAttribute('data-theme', theme);
-        })();
-    </script>
-    <!-- FIM DA CORREÇÃO -->
+    {% block styles %}{% endblock %}
 </head>
-
-<!-- O atributo `data-theme` agora é definido pelo script acima, no `html`, mas mantemos no body por compatibilidade com seu CSS original -->
-<body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
-
-    <div id="loader-overlay">
-        <div class="spinner"></div>
-    </div>
-
-    <header>
-        <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="{{ url_for('main.index') }}" aria-label="Início">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo-light" alt="Logo FS Promotora">
-                    <img src="{{ url_for('static', filename='images/logo1.png') }}" class="logo-dark" alt="Logo FS Promotora Dark">
-                </a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        {% if current_user.is_authenticated %}
-                            {% if current_user.role == 'super_admin' %}
-                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.admin_dashboard') }}">Painel Principal</a></li>
-                            {% elif current_user.role == 'admin_parceiro' %}
-                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.parceiro_dashboard') }}">Meu Painel</a></li>
-                            {% else %}
-                                <li class="nav-item"><a class="nav-link" href="{{ url_for('main.consultor_dashboard') }}">Meu Painel</a></li>
-                            {% endif %}
-                        {% endif %}
-                    </ul>
-                    <ul class="navbar-nav">
-                        {% if current_user.is_authenticated %}
-                            {% if current_user.role == 'super_admin' %}
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="fas fa-cog"></i> Gestão
-                                </a>
-                                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_teams') }}">Gerir Equipes</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_users') }}">Gerir Utilizadores</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_mailings') }}">Gerir Mailings</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_products') }}">Gerir Produtos</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_layouts') }}">Gerir Layouts</a></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.manage_tabulations') }}">Gerir Tabulações</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.hygiene_upload_page') }}">Higienizar Leads</a></li>
-                                </ul>
-                            </li>
-                            {% endif %}
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="fas fa-user-circle"></i> Olá, {{ current_user.username }}!
-                                </a>
-                                <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fas fa-palette fa-fw me-2"></i>Mudar Aparência</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt fa-fw me-2"></i>Logout</a></li>
-                                </ul>
-                            </li>
-                        {% else %}
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('main.login') }}" title="Acessar o sistema">Login</a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </div>
+<body>
+    <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand navbar-brand-centered" href="{{ url_for('main.index') }}">
+                <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="Logo" height="40">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user-circle me-1"></i> {{ current_user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('main.profile') }}">Minhas Configurações</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('main.logout') }}">Sair</a></li>
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-palette me-1"></i> Tema
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><button class="dropdown-item" onclick="setTheme('default')">Claro</button></li>
+                                <li><button class="dropdown-item" onclick="setTheme('dark')">Escuro</button></li>
+                                <li><button class="dropdown-item" onclick="setTheme('ocean')">Oceano</button></li>
+                            </ul>
+                        </li>
+                    {% endif %}
+                </ul>
             </div>
-        </nav>
-    </header>
+        </div>
+    </nav>
 
-    <main role="main" class="container-fluid my-4">
+    <main class="container-fluid mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="row">
-                    <div class="col-md-10 offset-md-1 col-lg-8 offset-lg-2">
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                {{ message | safe }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                            </div>
-                        {% endfor %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
-                </div>
+                {% endfor %}
             {% endif %}
         {% endwith %}
-
         {% block content %}{% endblock %}
     </main>
 
-    <div class="modal fade" id="progressBarModal" tabindex="-1" aria-labelledby="progressBarModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="progressBarModalLabel">Processando Operação...</h5>
-                </div>
-                <div class="modal-body">
-                    <div class="progress mb-3">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="progressBar">0%</div>
-                    </div>
-                    <p class="text-center" id="progressMessage">Iniciando...</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProgressBarModalButton" style="display: none;">Fechar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.plot.ly/plotly-2.33.0.min.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Sincroniza o tema vindo do servidor com o localStorage, garantindo que a escolha seja "lembrada"
-            // Esta é a parte que garante que, após o redirect, o localStorage esteja correto.
-            const serverTheme = document.body.getAttribute('data-theme');
-            if (serverTheme) {
-                localStorage.setItem('userTheme', serverTheme);
-                // Atualiza também o atributo do HTML para consistência
-                document.documentElement.setAttribute('data-theme', serverTheme);
-            }
-
-            // Script do loader
-            document.querySelectorAll('form').forEach(form => {
-                form.addEventListener('submit', function() {
-                    if (!form.classList.contains('no-loader') && form.checkValidity()) {
-                        document.getElementById('loader-overlay').style.display = 'flex';
-                    }
-                });
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-bs-theme', theme);
+            // Save theme preference to server
+            fetch("{{ url_for('main.profile') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'theme': theme
+                })
             });
-            window.addEventListener('pageshow', function(event) {
-                if (event.persisted) {
-                    document.getElementById('loader-overlay').style.display = 'none';
-                }
-            });
-
-            const progressBarModal = new bootstrap.Modal(document.getElementById('progressBarModal'));
-            const progressBar = document.getElementById('progressBar');
-            const progressMessage = document.getElementById('progressMessage');
-            const closeProgressBarModalButton = document.getElementById('closeProgressBarModalButton');
-
-            closeProgressBarModalButton.addEventListener('click', function() {
-                const progressBarElement = document.getElementById('progressBar');
-                if (progressBarElement.classList.contains('bg-success') || progressBarElement.classList.contains('bg-danger')) {
-                    window.location.reload();
-                }
-            });
-
-            let pollingInterval;
-
-            window.flashMessage = function(category, message) {
-                const alertContainer = document.querySelector('main .container-fluid .row .col-md-10');
-                if (alertContainer) {
-                    const existingAlerts = alertContainer.querySelectorAll('.alert');
-                    existingAlerts.forEach(alert => alert.remove());
-
-                    const alertHtml = `
-                        <div class="alert alert-${category} alert-dismissible fade show" role="alert">
-                            ${message}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                        </div>
-                    `;
-                    alertContainer.insertAdjacentHTML('afterbegin', alertHtml);
-                }
-            };
-
-            window.startPollingProgress = function(taskId) {
-                progressBar.style.width = '0%';
-                progressBar.setAttribute('aria-valuenow', 0);
-                progressBar.textContent = '0%';
-                progressBar.classList.remove('bg-success', 'bg-danger');
-                progressBar.classList.add('bg-primary', 'progress-bar-animated', 'progress-bar-striped');
-                progressMessage.textContent = 'Iniciando operação...';
-                closeProgressBarModalButton.style.display = 'none';
-                progressBarModal.show();
-
-                if (pollingInterval) {
-                    clearInterval(pollingInterval);
-                }
-
-                pollingInterval = setInterval(function() {
-                    fetch(`/task_status/${taskId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            progressBar.style.width = data.progress + '%';
-                            progressBar.setAttribute('aria-valuenow', data.progress);
-                            progressBar.textContent = data.progress + '%';
-                            progressMessage.textContent = data.message;
-
-                            if (data.status === 'COMPLETED' || data.status === 'FAILED') {
-                                clearInterval(pollingInterval);
-                                progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-                                closeProgressBarModalButton.style.display = 'block';
-
-                                if (data.status === 'COMPLETED') {
-                                    progressBar.classList.add('bg-success');
-                                    setTimeout(() => {
-                                        progressBarModal.hide();
-                                        window.location.reload(); 
-                                    }, 1500);
-                                } else if (data.status === 'FAILED') {
-                                    progressBar.classList.add('bg-danger');
-                                }
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Erro ao buscar status da tarefa:', error);
-                            clearInterval(pollingInterval);
-                            progressBar.classList.remove('progress-bar-animated', 'progress-bar-striped');
-                            progressBar.classList.add('bg-danger');
-                            progressMessage.textContent = 'Erro ao carregar o progresso da tarefa.';
-                            closeProgressBarModalButton.style.display = 'block';
-                        });
-                }, 1000);
-            };
-        });
+        }
     </script>
     {% block scripts %}{% endblock %}
 </body>

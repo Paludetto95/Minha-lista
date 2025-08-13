@@ -1,4 +1,3 @@
-<!-- templates/consultor_dashboard.html (VERSÃO FINAL COM LOGO DO PARCEIRO) -->
 {% extends "base.html" %}
 
 {% block styles %}
@@ -6,7 +5,6 @@
 <style>
     /* Estilos para o logo do parceiro no painel */
     .partner-dashboard-logo {
-        /* MODIFICADO: Aumenta a altura máxima para o logo no painel do consultor */
         max-height: 90px; 
         width: auto;
         margin-right: 15px;
@@ -36,10 +34,8 @@
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        {# MODIFICADO: Título do painel para exibir logo e nome do grupo #}
         <div class="dashboard-title-container">
             {% if current_user.grupo and current_user.grupo.logo_filename %}
-                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
                 <img src="{{ url_for('main.serve_partner_logo', filename=current_user.grupo.logo_filename) }}" 
                      alt="Logo {{ current_user.grupo.nome }}" 
                      class="partner-dashboard-logo">
@@ -48,7 +44,6 @@
                 <h2>Painel do Consultor</h2>
             {% endif %}
         </div>
-        {# FIM MODIFICAÇÃO TÍTULO DO PAINEL #}
 
         {% if leads_em_atendimento > 0 %}
             <a href="{{ url_for('main.atendimento') }}" class="btn btn-success btn-lg">
@@ -57,7 +52,6 @@
         {% endif %}
     </div>
 
-    <!-- ESTRUTURA DE ABAS -->
     <ul class="nav nav-tabs" id="myTab" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link active" id="pegar-leads-tab" data-bs-toggle="tab" data-bs-target="#pegar-leads" type="button" role="tab" aria-controls="pegar-leads" aria-selected="true">Pegar Novos Leads</button>
@@ -68,10 +62,8 @@
     </ul>
 
     <div class="tab-content" id="myTabContent">
-        <!-- ABA 1: PEGAR NOVOS LEADS -->
         <div class="tab-pane fade show active" id="pegar-leads" role="tabpanel" aria-labelledby="pegar-leads-tab">
             <div class="row mt-3">
-                <!-- Coluna de Informações e Limites -->
                 <div class="col-md-4 mb-4">
                     <div class="card h-100 shadow-sm">
                         <div class="card-header">
@@ -93,7 +85,6 @@
                     </div>
                 </div>
 
-                <!-- Coluna para Pegar Novos Leads com Filtros -->
                 <div class="col-md-8 mb-4">
                     <div class="card h-100 shadow-sm">
                         <div class="card-header"><h5 class="mb-0">Encontrar Leads Disponíveis</h5></div>
@@ -125,7 +116,6 @@
             </div>
         </div>
 
-        <!-- ABA 2: HISTÓRICO DE ATENDIMENTOS -->
         <div class="tab-pane fade" id="historico" role="tabpanel" aria-labelledby="historico-tab">
             <div class="card mt-3 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -137,7 +127,6 @@
                     </form>
                 </div>
                 <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                    <!-- ATUALIZADO: O loop agora itera sobre 'tabulated_history' (que são os logs) -->
                     {% if tabulated_history %}
                         <ul class="list-group list-group-flush">
                             {% for log_entry in tabulated_history %}
@@ -159,7 +148,6 @@
                                         {{ log_entry.tabulation.name }}
                                     </span>
                                     {% endif %}
-                                    <!-- O botão de editar agora usa o ID do lead do log -->
                                     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-log-id="{{ log_entry.id }}" data-lead-name="{{ log_entry.lead.nome }}">Editar</button>
                                 </div>
                             </li>
@@ -174,7 +162,6 @@
     </div>
 </div>
 
-<!-- Modal de Edição -->
 <div class="modal fade" id="editTabulationModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
