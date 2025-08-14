@@ -19,7 +19,7 @@
     <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom shadow-sm">
         <div class="container-fluid">
             <a class="navbar-brand navbar-brand-centered" href="{{ url_for('main.index') }}">
-                <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="Logo" height="40">
+                <img id="logo-img" src="{{ url_for('static', filename='images/logo.png') if not current_user.is_authenticated or current_user.theme == 'default' else url_for('static', filename='images/logo1.png') }}" alt="Logo" height="60">
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -71,6 +71,14 @@
     <script>
         function setTheme(theme) {
             document.documentElement.setAttribute('data-bs-theme', theme);
+            const logoImg = document.getElementById('logo-img');
+            if (logoImg) {
+                if (theme === 'default') {
+                    logoImg.src = "{{ url_for('static', filename='images/logo.png') }}";
+                } else {
+                    logoImg.src = "{{ url_for('static', filename='images/logo1.png') }}";
+                }
+            }
             // Save theme preference to server
             fetch("{{ url_for('main.profile') }}", {
                 method: 'POST',
