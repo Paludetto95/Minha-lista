@@ -2384,14 +2384,14 @@ def atendimento():
         for key, value in lead.additional_data.items():
             lead_details[key] = value
 
-    return render_template('atendimento.html', 
-                           title='Atendimento', 
-                           lead=lead, 
-                           all_tabulations=all_tabulations, 
-                           cleaned_telefone=cleaned_telefone, 
-                           cleaned_telefone_2=cleaned_telefone_2, 
-                           lead_details=lead_details, 
-                           vagas_na_puxada_diaria=vagas_na_puxada_diaria, 
+    return render_template('atendimento.html',
+                           title='Atendimento',
+                           lead=lead,
+                           all_tabulations=all_tabulations,
+                           cleaned_telefone=cleaned_telefone,
+                           cleaned_telefone_2=cleaned_telefone_2,
+                           lead_details=lead_details,
+                           vagas_na_puxada_diaria=vagas_na_puxada_diaria,
                            vagas_na_carteira=vagas_na_carteira)
 
 @bp.route('/consultor/get_next_whatsapp_contact', methods=['POST'])
