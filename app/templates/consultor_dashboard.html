@@ -166,7 +166,10 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="editModalLabel">Editar Tabulação para </h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-      <form id="edit-form" method="POST">
+      <!-- FORMULÁRIO CORRIGIDO -->
+      <form id="edit-form" method="POST" action="{{ url_for('main.retabulate_lead') }}">
+          <!-- CAMPO OCULTO ADICIONADO -->
+          <input type="hidden" name="log_id" id="log_id_input">
           <div class="modal-body">
             <p>Selecione a nova tabulação para o cliente <strong id="lead-name-in-modal"></strong>.</p>
             <div class="mb-3"><label for="new_tabulation_id" class="form-label">Nova Tabulação</label><select class="form-select" name="new_tabulation_id" required><option value="" disabled selected>Escolha uma opção...</option>{% for tab in all_tabulations %}<option value="{{ tab.id }}">{{ tab.name }}</option>{% endfor %}</select></div>
@@ -283,9 +286,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var button = event.relatedTarget;
             var logId = button.getAttribute('data-log-id');
             var leadName = button.getAttribute('data-lead-name');
-            var form = editModal.querySelector('#edit-form');
-            var actionUrl = "{{ url_for('main.retabulate_lead', log_id=0) }}".replace('0', logId);
-            form.setAttribute('action', actionUrl);
+            
+            // SCRIPT CORRIGIDO
+            var logIdInput = editModal.querySelector('#log_id_input');
+            logIdInput.value = logId;
+
             var modalTitle = editModal.querySelector('.modal-title');
             var leadNameInModal = editModal.querySelector('#lead-name-in-modal');
             modalTitle.textContent = 'Editar Tabulação para ' + leadName;

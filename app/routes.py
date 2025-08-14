@@ -2241,6 +2241,7 @@ def pegar_leads_selecionados():
 
 @bp.route('/consultor/retabulate_lead', methods=['POST'])
 @login_required
+@require_role('consultor')
 def retabulate_lead():
     log_id = request.form.get('log_id')
     new_tabulation_id = request.form.get('new_tabulation_id')
@@ -2392,7 +2393,8 @@ def atendimento():
                            cleaned_telefone_2=cleaned_telefone_2,
                            lead_details=lead_details,
                            vagas_na_puxada_diaria=vagas_na_puxada_diaria,
-                           vagas_na_carteira=vagas_na_carteira)
+                           vagas_na_carteira=vagas_na_carteira,
+                           leads_em_atendimento=leads_em_atendimento) # <-- CORREÇÃO APLICADA AQUI
 
 @bp.route('/consultor/get_next_whatsapp_contact', methods=['POST'])
 @login_required

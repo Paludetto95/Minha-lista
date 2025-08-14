@@ -44,8 +44,12 @@
     <!-- Div wrapper para controlar o layout de altura total -->
     <div class="atendimento-wrapper">
         <div class="card shadow-sm">
-            <div class="card-header table-secondary">
+            <div class="card-header table-secondary d-flex justify-content-between align-items-center">
                 <h3 class="mb-0">Atendimento: {{ lead.nome or 'Lead sem nome' }}</h3>
+                <!-- BOTÃO DE VOLTAR ADICIONADO AQUI -->
+                <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i> Voltar ao Painel
+                </a>
             </div>
             <div class="card-body">
                 
