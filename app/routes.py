@@ -2095,6 +2095,14 @@ def consultor_dashboard():
 
     all_tabulations = Tabulation.query.order_by(Tabulation.name).all()
 
+    produtos_em_atendimento = db.session.query(
+        Produto, 
+        func.count(Lead.id).label('lead_count')
+    ).join(Lead, Produto.id == Lead.produto_id).filter(
+        Lead.consultor_id == current_user.id,
+        Lead.status == 'Em Atendimento'
+    ).group_by(Produto).order_by(Produto.name).all()
+
     return render_template('consultor_dashboard.html', 
                            title='Dashboard do Consultor',
                            leads_em_atendimento=leads_em_atendimento,
@@ -2105,7 +2113,8 @@ def consultor_dashboard():
                            tabulated_history=tabulated_history,
                            search_history=search_history,
                            all_tabulations=all_tabulations,
-                           available_products=Produto.query.all())
+                           available_products=Produto.query.all(),
+                           produtos_em_atendimento=produtos_em_atendimento)
 
 @bp.route('/consultor/get_lead', methods=['POST'])
 @login_required
@@ -2334,15 +2343,20 @@ def atendimento():
         return redirect(url_for('main.atendimento'))
 
     # GET request logic
+    produto_id = request.args.get('produto_id', type=int)
     lead_id = request.args.get('lead_id', type=int)
     
     # If no lead_id is provided, find the next available lead
     if not lead_id:
-        lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        if produto_id:
+            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento', produto_id=produto_id).order_by(Lead.data_criacao).first()
+        else:
+            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        
         if lead:
             return redirect(url_for('main.atendimento', lead_id=lead.id))
         else:
-            flash('Nenhum lead em atendimento no momento.', 'info')
+            flash('Nenhum lead em atendimento no momento para este produto.', 'info')
             return redirect(url_for('main.consultor_dashboard'))
 
     # If a lead_id is provided, display the lead
@@ -2394,7 +2408,7 @@ def atendimento():
                            lead_details=lead_details,
                            vagas_na_puxada_diaria=vagas_na_puxada_diaria,
                            vagas_na_carteira=vagas_na_carteira,
-                           leads_em_atendimento=leads_em_atendimento) # <-- CORREÇÃO APLICADA AQUI
+                           leads_em_atendimento=leads_em_atendimento)
 
 @bp.route('/consultor/get_next_whatsapp_contact', methods=['POST'])
 @login_required

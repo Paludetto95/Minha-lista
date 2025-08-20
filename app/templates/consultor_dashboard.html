@@ -44,13 +44,38 @@
                 <h2>Painel do Consultor</h2>
             {% endif %}
         </div>
-
-        {% if leads_em_atendimento > 0 %}
-            <a href="{{ url_for('main.atendimento') }}" class="btn btn-success btn-lg">
-                <i class="fas fa-headset"></i> Iniciar Atendimento ({{ leads_em_atendimento }})
-            </a>
-        {% endif %}
     </div>
+
+    {% if produtos_em_atendimento %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header">
+            <h5 class="mb-0">Minhas Carteiras de Atendimento</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-8">
+                    <label for="product-select" class="form-label visually-hidden">Selecione um Produto:</label>
+                    <select class="form-select form-select-lg" id="product-select">
+                        <option value="" selected disabled>-- Selecione um produto para atender --</option>
+                        {% for produto, lead_count in produtos_em_atendimento %}
+                            <option value="{{ produto.id }}" data-lead-count="{{ lead_count }}">{{ produto.name }} ({{ lead_count }} leads)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <a href="#" id="start-atendimento-btn" class="btn btn-success btn-lg w-100" disabled>
+                        <i class="fas fa-headset me-2"></i> Iniciar Atendimento
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center mb-4" role="alert">
+        <h4 class="alert-heading">Nenhuma carteira de atendimento ativa!</h4>
+        <p>Você não possui leads "Em Atendimento" no momento. Pegue novos leads para começar a trabalhar.</p>
+    </div>
+    {% endif %}
 
     <ul class="nav nav-tabs" id="myTab" role="tablist">
         <li class="nav-item" role="presentation">
@@ -295,6 +320,37 @@ document.addEventListener('DOMContentLoaded', function () {
             var leadNameInModal = editModal.querySelector('#lead-name-in-modal');
             modalTitle.textContent = 'Editar Tabulação para ' + leadName;
             leadNameInModal.textContent = leadName;
+        });
+    }
+
+    // Lógica para o novo dropdown de produtos em atendimento
+    const productSelect = document.getElementById('product-select');
+    const startAtendimentoBtn = document.getElementById('start-atendimento-btn');
+
+    if (productSelect && startAtendimentoBtn) {
+        // Initial state check in case a product is pre-selected (though not in this case)
+        if (productSelect.value) {
+            startAtendimentoBtn.href = "{{ url_for('main.atendimento') }}?produto_id=" + productSelect.value;
+            startAtendimentoBtn.removeAttribute('disabled');
+        } else {
+            startAtendimentoBtn.href = "#";
+            startAtendimentoBtn.setAttribute('disabled', 'disabled');
+        }
+
+        productSelect.addEventListener('change', function() {
+            const selectedProductId = this.value;
+            console.log("Selected Product ID:", selectedProductId);
+            if (selectedProductId) {
+                const targetUrl = "{{ url_for('main.atendimento') }}?produto_id=" + selectedProductId;
+                startAtendimentoBtn.href = targetUrl;
+                startAtendimentoBtn.removeAttribute('disabled');
+                console.log("Button Href set to:", targetUrl);
+                console.log("Button disabled status:", startAtendimentoBtn.disabled);
+            } else {
+                startAtendimentoBtn.href = "#";
+                startAtendimentoBtn.setAttribute('disabled', 'disabled');
+                console.log("Button Href set to #, disabled.");
+            }
         });
     }
 });
