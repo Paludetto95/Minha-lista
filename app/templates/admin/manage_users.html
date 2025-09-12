@@ -18,6 +18,11 @@
                     <div class="col-md-6"><label for="role" class="form-label">Papel do Utilizador</label><select name="role" class="form-select" required><option value="consultor" selected>Consultor</option><option value="admin_parceiro">Admin do Parceiro</option><option value="super_admin">Super Admin</option></select></div>
                     <div class="col-md-6"><label for="grupo_id" class="form-label">Equipe / Grupo</label><select name="grupo_id" class="form-select" required><option value="" disabled selected>-- Selecione uma equipe --</option>{% for grupo in grupos %}<option value="{{ grupo.id }}">{{ grupo.nome }}</option>{% endfor %}</select></div>
                 </div>
+                {% if current_user.is_master_admin %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-12"><label for="allowed_ip" class="form-label">IP Permitido</label><input type="text" class="form-control" name="allowed_ip"></div>
+                </div>
+                {% endif %}
                 <button type="submit" class="btn btn-success">Criar Utilizador</button>
             </form>
         </div>
@@ -45,6 +50,7 @@
                             <th>Email</th>
                             <th>Equipe</th>
                             <th>Perfil</th>
+                            <th>IP Permitido</th>
                             <th class="text-center">Limite Carteira</th>
                             <th class="text-center">Puxada Diária</th>
                             <th style="width: 12%;" class="text-center">Ações</th>
@@ -61,10 +67,20 @@
                                 {% elif user.role == 'admin_parceiro' %}<span class="badge bg-info text-dark">Admin Parceiro</span>
                                 {% else %}<span class="badge bg-secondary">Consultor</span>{% endif %}
                             </td>
+                            <td>{{ user.allowed_ip or 'N/A' }}</td>
                             <td class="text-center">{{ user.wallet_limit or 0 }}</td>
                             <td class="text-center">{{ user.daily_pull_limit or 0 }}</td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center">
+                                    {% if current_user.is_master_admin %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editIpModal"
+                                            data-user-id="{{ user.id }}"
+                                            data-user-name="{{ user.username }}"
+                                            data-user-ip="{{ user.allowed_ip or '' }}"
+                                            title="Editar IP">
+                                        <i class="fas fa-network-wired"></i>
+                                    </button>
+                                    {% endif %}
                                     {% if user.role == 'consultor' %}
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"
                                             data-user-id="{{ user.id }}"
@@ -145,6 +161,29 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="editIpModal" tabindex="-1" aria-labelledby="editIpModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editIpModalLabel">Editar IP para</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="editIpForm" action="" method="POST">
+        <div class="modal-body">
+            <div class="mb-3">
+                <label for="modalUserIp" class="form-label">IP Permitido</label>
+                <input type="text" class="form-control" id="modalUserIp" name="allowed_ip">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock content %}
 
 {% block scripts %}
@@ -176,6 +215,24 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Constrói a URL dinamicamente para a action do formulário
         var actionUrl = "{{ url_for('main.update_user_limits', user_id=0) }}".replace('0', userId);
+        modalForm.setAttribute('action', actionUrl);
+    });
+
+    var editIpModal = document.getElementById('editIpModal');
+    editIpModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var userId = button.getAttribute('data-user-id');
+        var userName = button.getAttribute('data-user-name');
+        var userIp = button.getAttribute('data-user-ip');
+
+        var modalTitle = editIpModal.querySelector('.modal-title');
+        var modalForm = editIpModal.querySelector('#editIpForm');
+        var ipInput = editIpModal.querySelector('#modalUserIp');
+
+        modalTitle.textContent = 'Editar IP para ' + userName;
+        ipInput.value = userIp;
+        
+        var actionUrl = "{{ url_for('main.update_user_ip', user_id=0) }}".replace('0', userId);
         modalForm.setAttribute('action', actionUrl);
     });
 });

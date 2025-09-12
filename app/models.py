@@ -14,6 +14,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), default='consultor')
+    is_master_admin = db.Column(db.Boolean, default=False)
+    allowed_ip = db.Column(db.String(45))
     last_login = db.Column(db.DateTime, default=datetime.utcnow)
     theme = db.Column(db.String(20), default='default')
     grupo_id = db.Column(db.Integer, db.ForeignKey('grupo.id'))

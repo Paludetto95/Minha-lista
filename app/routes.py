@@ -23,6 +23,12 @@ from sqlalchemy.sql import text
 
 bp = Blueprint('main', __name__)
 
+@bp.before_request
+def check_ip():
+    if current_user.is_authenticated and current_user.allowed_ip:
+        if request.remote_addr != current_user.allowed_ip:
+            abort(403)
+
 # --- FUNÇÕES HELPER ---
 
 def get_brasilia_time():
@@ -166,7 +172,7 @@ def register():
         db.session.add(grupo)
         db.session.flush()
 
-        user = User(username=request.form['username'], email=request.form['email'], role='super_admin', grupo_id=grupo.id)
+        user = User(username=request.form['username'], email=request.form['email'], role='super_admin', is_master_admin=True, grupo_id=grupo.id)
         user.set_password(request.form['password'])
         db.session.add(user)
         db.session.commit()
@@ -828,6 +834,7 @@ def add_user():
     password = request.form.get('password')
     role = request.form.get('role', 'consultor')
     grupo_id = request.form.get('grupo_id')
+    allowed_ip = request.form.get('allowed_ip')
     
     if not all([username, email, password, role, grupo_id]):
         flash('Todos os campos são obrigatórios.', 'danger')
@@ -842,14 +849,31 @@ def add_user():
         log_system_action(action_type='USER_CREATE_FAILED', description=f"Tentativa de criar usuário '{username}' com email '{email}' falhou: email já utilizado. Por: '{current_user.username}'.")
         return redirect(url_for('main.manage_users'))
     
-    new_user = User(username=username, email=email, role=role, grupo_id=int(grupo_id))
+    new_user = User(username=username, email=email, role=role, grupo_id=int(grupo_id), allowed_ip=allowed_ip)
     new_user.set_password(password)
     db.session.add(new_user)
     db.session.commit()
     flash('Utilizador criado com sucesso!', 'success')
     log_system_action(action_type='USER_CREATED', entity_type='User', entity_id=new_user.id, 
                       description=f"Usuário '{new_user.username}' criado com papel '{new_user.role}' no grupo '{new_user.grupo.nome}'.",
-                      details={'email': new_user.email, 'role': new_user.role, 'grupo_id': new_user.grupo_id})
+                      details={'email': new_user.email, 'role': new_user.role, 'grupo_id': new_user.grupo_id, 'allowed_ip': new_user.allowed_ip})
+    return redirect(url_for('main.manage_users'))
+
+@bp.route('/admin/users/update_ip/<int:user_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def update_user_ip(user_id):
+    if not current_user.is_master_admin:
+        flash('Você não tem permissão para executar esta ação.', 'danger')
+        return redirect(url_for('main.manage_users'))
+    user = User.query.get_or_404(user_id)
+    new_ip = request.form.get('allowed_ip')
+    user.allowed_ip = new_ip
+    db.session.commit()
+    flash(f'IP do usuário {user.username} atualizado com sucesso!', 'success')
+    log_system_action(action_type='USER_IP_UPDATED', entity_type='User', entity_id=user.id, 
+                      description=f"IP do usuário '{user.username}' atualizado para '{new_ip}'.",
+                      details={'new_ip': new_ip})
     return redirect(url_for('main.manage_users'))
 
 @bp.route('/users/update_name/<int:user_id>', methods=['POST'])
@@ -1799,13 +1823,10 @@ def admin_export_filtered_leads():
         'ID do Lead', 'Nome', 'CPF', 'Telefone 1', 'Telefone 2', 'Produto', 
         'Estado', 'Status Atual', 'Consultor Responsável', 'Tabulação Final', 
         'Data de Criação', 'Data de Tabulação', 'Disponível Após (Reciclagem)'
-    ]
-    
-    all_df_columns = df.columns.tolist()
-    
-    ordered_columns = base_columns_order + [col for col in all_df_columns if col not in base_columns_order]
-    
-    df = df[ordered_columns]
+    ]    
+    all_df_columns = df.columns.tolist()    
+    ordered_columns = base_columns_order + [col for col in all_df_columns if col not in base_columns_order]    
+    df = df[ordered_columns]  
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -2344,8 +2365,7 @@ def atendimento():
 
     # GET request logic
     produto_id = request.args.get('produto_id', type=int)
-    lead_id = request.args.get('lead_id', type=int)
-    
+    lead_id = request.args.get('lead_id', type=int)    
     # If no lead_id is provided, find the next available lead
     if not lead_id:
         if produto_id:
