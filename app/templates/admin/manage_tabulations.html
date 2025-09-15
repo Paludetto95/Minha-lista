@@ -35,6 +35,12 @@
                                 Reciclar esta tabulação
                             </label>
                         </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="is_positive_conversion" id="is_positive_conversion_check">
+                            <label class="form-check-label" for="is_positive_conversion_check">
+                                Conversão Positiva
+                            </label>
+                        </div>
                         <button type="submit" class="btn btn-success w-100">Adicionar</button>
                     </div>
                 </div>
@@ -59,10 +65,16 @@
                         {% if tab.is_recyclable %}
                             <small class="text-muted d-block ms-4 ps-2"><i class="fas fa-recycle"></i> Recicla em {{ tab.recycle_in_days or '0' }} dias</small>
                         {% endif %}
+                        {% if tab.is_positive_conversion %}
+                            <small class="text-success d-block ms-4 ps-2"><i class="fas fa-check-circle"></i> Conversão Positiva</small>
+                        {% endif %}
                     </div>
-                    <form action="{{ url_for('main.delete_tabulation', id=tab.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer eliminar esta tabulação?');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
-                    </form>
+                    <div>
+                        <a href="{{ url_for('main.edit_tabulation', id=tab.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                        <form action="{{ url_for('main.delete_tabulation', id=tab.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer eliminar esta tabulação?');" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                        </form>
+                    </div>
                 </li>
                 {% endfor %}
             </ul>

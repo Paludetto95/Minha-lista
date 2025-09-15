@@ -14,6 +14,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), index=True, unique=True)
     password_hash = db.Column(db.String(256))
     role = db.Column(db.String(20), default='consultor')
+    is_master_admin = db.Column(db.Boolean, default=False)
+    allowed_ip = db.Column(db.String(45))
     last_login = db.Column(db.DateTime, default=datetime.utcnow)
     theme = db.Column(db.String(20), default='default')
     grupo_id = db.Column(db.Integer, db.ForeignKey('grupo.id'))
@@ -22,13 +24,15 @@ class User(UserMixin, db.Model):
     last_activity_at = db.Column(db.DateTime, default=datetime.utcnow)
     wallet_limit = db.Column(db.Integer, default=50) 
     daily_pull_limit = db.Column(db.Integer, default=100)
+    # ===== NOVO CAMPO ADICIONADO =====
+    last_whatsapp_contact_at = db.Column(db.DateTime, nullable=True)
 
-    # Relacionamentos com outras tabelas
-    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic', foreign_keys='SystemLog.user_id')
-    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic', foreign_keys='ActivityLog.user_id')
-    tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic', foreign_keys='BackgroundTask.user_id')
+    # Relacionamentos
     leads = db.relationship('Lead', back_populates='consultor', lazy='dynamic', foreign_keys='Lead.consultor_id')
-
+    consumptions = db.relationship('LeadConsumption', back_populates='user', lazy='dynamic')
+    activity_logs = db.relationship('ActivityLog', back_populates='user', lazy='dynamic')
+    tasks = db.relationship('BackgroundTask', back_populates='user', lazy='dynamic')
+    system_logs = db.relationship('SystemLog', back_populates='user', lazy='dynamic')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -43,10 +47,7 @@ class Lead(db.Model):
     telefone = db.Column(db.String(20))
     telefone_2 = db.Column(db.String(20))
     cidade = db.Column(db.String(100))
-    # --- CORREÇÃO APLICADA AQUI ---
-    # O tamanho da coluna 'rg' foi aumentado de 20 para 100 caracteres.
     rg = db.Column(db.String(100))
-    # --- FIM DA CORREÇÃO ---
     estado = db.Column(db.String(2), index=True)
     bairro = db.Column(db.String(100))
     cep = db.Column(db.String(10))
@@ -63,6 +64,7 @@ class Lead(db.Model):
     logradouro = db.Column(db.String(200))
     numero = db.Column(db.String(20))
     complemento = db.Column(db.String(100))
+    notes = db.Column(db.Text, nullable=True)
     extra_1 = db.Column(db.String(255))
     extra_2 = db.Column(db.String(255))
     extra_3 = db.Column(db.String(255))
@@ -81,10 +83,18 @@ class Lead(db.Model):
     data_tabulacao = db.Column(db.DateTime)
     available_after = db.Column(db.DateTime, nullable=True, index=True)
     additional_data = db.Column(db.JSON)
-
-    produto = db.relationship('Produto', backref='leads')
+    last_whatsapp_contact = db.Column(db.DateTime, nullable=True)
+    __table_args__ = (
+        db.Index('ix_lead_get_new_lead', 'produto_id', 'status', 'available_after', 'data_criacao'),
+    )
+    
+    # Relacionamentos
+    produto = db.relationship('Produto', back_populates='leads')
     consultor = db.relationship('User', back_populates='leads')
-    tabulation = db.relationship('Tabulation', backref='leads')
+    tabulation = db.relationship('Tabulation', back_populates='leads')
+    activity_logs = db.relationship('ActivityLog', back_populates='lead', cascade="all, delete-orphan")
+    consumptions = db.relationship('LeadConsumption', back_populates='lead', cascade="all, delete-orphan")
+
 
 class Proposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -119,6 +129,10 @@ class LeadConsumption(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     lead_id = db.Column(db.Integer, db.ForeignKey('lead.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relacionamentos
+    user = db.relationship('User', back_populates='consumptions')
+    lead = db.relationship('Lead', back_populates='consumptions')
 
 class Tabulation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -127,17 +141,27 @@ class Tabulation(db.Model):
     is_recyclable = db.Column(db.Boolean, default=False)
     recycle_in_days = db.Column(db.Integer, nullable=True)
     is_positive_conversion = db.Column(db.Boolean, default=False)
+    
+    # Relacionamentos
+    leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')
+    activity_logs = db.relationship('ActivityLog', back_populates='tabulation', lazy='dynamic')
 
 class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    
+    # Relacionamentos
+    leads = db.relationship('Lead', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
+    layouts = db.relationship('LayoutMailing', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
 
 class LayoutMailing(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False)
     mapping = db.Column(db.JSON, nullable=False)
-    produto = db.relationship('Produto', backref='layouts')
+    
+    # Relacionamento
+    produto = db.relationship('Produto', back_populates='layouts')
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -147,15 +171,19 @@ class ActivityLog(db.Model):
     action_type = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     
-    lead = db.relationship('Lead', backref='activity_logs')
+    # Relacionamentos
     user = db.relationship('User', back_populates='activity_logs')
-    tabulation = db.relationship('Tabulation', backref='activity_logs')
+    lead = db.relationship('Lead', back_populates='activity_logs')
+    tabulation = db.relationship('Tabulation', back_populates='activity_logs')
 
 class Grupo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), unique=True, nullable=False)
     color = db.Column(db.String(7), default='#6c757d')
     logo_filename = db.Column(db.String(255), nullable=True)
+    monthly_pull_limit = db.Column(db.Integer, nullable=True)
+    
+    # Relacionamento
     users = db.relationship('User', backref='grupo', lazy='dynamic')
 
 class BackgroundTask(db.Model):
@@ -170,6 +198,8 @@ class BackgroundTask(db.Model):
     total_items = db.Column(db.Integer, default=0)
     items_processed = db.Column(db.Integer, default=0)
     details = db.Column(db.JSON, nullable=True)
+    
+    # Relacionamento
     user = db.relationship('User', back_populates='tasks')
 
 class SystemLog(db.Model):
@@ -182,4 +212,5 @@ class SystemLog(db.Model):
     description = db.Column(db.Text, nullable=True)
     details = db.Column(db.JSON, nullable=True)
 
+    # Relacionamento
     user = db.relationship('User', back_populates='system_logs')

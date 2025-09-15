@@ -1,0 +1,64 @@
+<!-- templates/admin/edit_tabulation.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Editar Tabulação</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form action="{{ url_for('main.edit_tabulation', id=tabulation.id) }}" method="POST">
+                <div class="mb-3">
+                    <label for="name" class="form-label fw-bold">Nome da Tabulação</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ tabulation.name }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="color" class="form-label fw-bold">Cor do Botão</label>
+                    <input type="color" class="form-control form-control-color" id="color" name="color" value="{{ tabulation.color }}" title="Escolha uma cor">
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="is_recyclable" id="is_recyclable_check" {% if tabulation.is_recyclable %}checked{% endif %}>
+                    <label class="form-check-label" for="is_recyclable_check">
+                        Reciclar esta tabulação
+                    </label>
+                </div>
+                <div class="mb-3" id="recycle-days-container" style="display: {% if tabulation.is_recyclable %}block{% else %}none{% endif %};">
+                    <label for="recycle_in_days" class="form-label fw-bold">Reciclar em (dias)</label>
+                    <input type="number" class="form-control" name="recycle_in_days" min="1" value="{{ tabulation.recycle_in_days or '' }}" placeholder="Ex: 30">
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="is_positive_conversion" id="is_positive_conversion_check" {% if tabulation.is_positive_conversion %}checked{% endif %}>
+                    <label class="form-check-label" for="is_positive_conversion_check">
+                        Conversão Positiva
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                <a href="{{ url_for('main.manage_tabulations') }}" class="btn btn-secondary">Cancelar</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isRecyclableCheckbox = document.getElementById('is_recyclable_check');
+    const recycleDaysContainer = document.getElementById('recycle-days-container');
+    const recycleDaysInput = recycleDaysContainer.querySelector('input');
+
+    if (isRecyclableCheckbox) {
+        isRecyclableCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                recycleDaysContainer.style.display = 'block';
+                recycleDaysInput.required = true;
+            } else {
+                recycleDaysContainer.style.display = 'none';
+                recycleDaysInput.required = false;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

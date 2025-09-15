@@ -1,41 +1,27 @@
-<!doctype html>
-<html lang="pt-br">
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or 'Sistema' }} - FS PROMOTORA</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-    {% block styles %}{% endblock %}
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Meu Sistema</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Loader */
-        #loader-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(255, 255, 255, 0.7); z-index: 9999;
-            display: none; justify-content: center; align-items: center;
-        }
-        .spinner {
-            border: 8px solid #f3f3f3; border-top: 8px solid #0d6efd;
-            border-radius: 50%; width: 60px; height: 60px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        .navbar-brand {
+        .navbar-brand-centered {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
-            padding: 0 !important;
         }
 
-        .logo-light, .logo-dark {
-            height: 55px;
-            width: auto;
-            display: block;
+        [data-bs-theme="ocean"] {
+            --bs-body-bg: #e6f7ff;
+            --bs-body-color: #003366;
+            --bs-primary: #007bff;
+            --bs-secondary: #6c757d;
+            --bs-light: #f8f9fa;
+            --bs-dark: #343a40;
         }
+<<<<<<< HEAD
         .logo-dark { display: none; }
         [data-theme="dark"] .logo-light { display: none; }
         [data-theme="dark"] .logo-dark { display: block; }
@@ -299,52 +285,66 @@
                         {% endif %}
                     </ul>
                 </div>
+=======
+    </style>
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand navbar-brand-centered" href="{{ url_for('main.index') }}">
+                <img id="logo-img" src="{{ url_for('static', filename='images/logo.png') if not current_user.is_authenticated or current_user.theme == 'default' or current_user.theme == 'ocean' else url_for('static', filename='images/logo1.png') }}" alt="Logo" height="60">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user-circle me-1"></i> {{ current_user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('main.profile') }}">Minhas Configurações</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{{ url_for('main.logout') }}">Sair</a></li>
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-palette me-1"></i> Tema
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><button class="dropdown-item" onclick="setTheme('default')">Claro</button></li>
+                                <li><button class="dropdown-item" onclick="setTheme('dark')">Escuro</button></li>
+                                <li><button class="dropdown-item" onclick="setTheme('ocean')">Oceano</button></li>
+                            </ul>
+                        </li>
+                    {% endif %}
+                </ul>
+>>>>>>> 67df349a4bcb06cfc2b1e8a7b1f97147dc8a180d
             </div>
-        </nav>
-    </header>
+        </div>
+    </nav>
 
-    <main role="main" class="container-fluid my-4">
+    <main class="container-fluid mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="row">
-                    <div class="col-md-10 offset-md-1 col-lg-8 offset-lg-2">
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                {{ message | safe }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                            </div>
-                        {% endfor %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
-                </div>
+                {% endfor %}
             {% endif %}
         {% endwith %}
-
         {% block content %}{% endblock %}
     </main>
 
-    <div class="modal fade" id="progressBarModal" tabindex="-1" aria-labelledby="progressBarModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="progressBarModalLabel">Processando Operação...</h5>
-                </div>
-                <div class="modal-body">
-                    <div class="progress mb-3">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" id="progressBar">0%</div>
-                    </div>
-                    <p class="text-center" id="progressMessage">Iniciando...</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeProgressBarModalButton" style="display: none;">Fechar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.plot.ly/plotly-2.33.0.min.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script>
+<<<<<<< HEAD
         document.addEventListener('DOMContentLoaded', function() {
             if (window._initialThemeAppliedByHead) {
                 localStorage.setItem('userTheme', window._initialThemeAppliedByHead);
@@ -474,6 +474,28 @@
                     'theme': theme
                 })
             }).catch(error => console.error('Falha ao salvar o tema no servidor:', error));
+=======
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-bs-theme', theme);
+            const logoImg = document.getElementById('logo-img');
+            if (logoImg) {
+                if (theme === 'default') {
+                    logoImg.src = "{{ url_for('static', filename='images/logo.png') }}";
+                } else {
+                    logoImg.src = "{{ url_for('static', filename='images/logo1.png') }}";
+                }
+            }
+            // Save theme preference to server
+            fetch("{{ url_for('main.profile') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'theme': theme
+                })
+            });
+>>>>>>> 67df349a4bcb06cfc2b1e8a7b1f97147dc8a180d
         }
     </script>
     {% block scripts %}{% endblock %}

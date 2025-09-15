@@ -1,159 +1,103 @@
-<!-- app/templates/admin/manage_users.html (VERSÃO FINAL E CORRIGIDA COM FILTROS E ORDENAÇÃO) -->
 {% extends "base.html" %}
 
 {% block content %}
 <div class="container mt-4">
     <h2 class="mb-4">Gerir Utilizadores</h2>
 
-    <!-- Formulário para adicionar novo utilizador - VISÍVEL APENAS PARA SUPER ADMIN -->
     {% if current_user.role == 'super_admin' %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header">Adicionar Novo Utilizador</div>
         <div class="card-body">
             <form action="{{ url_for('main.add_user') }}" method="POST">
-                <!-- Linha 1: Nome, Email, Senha -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-4"><label for="username" class="form-label">Nome de Utilizador</label><input type="text" class="form-control" name="username" required></div>
                     <div class="col-md-4"><label for="email" class="form-label">Email</label><input type="email" class="form-control" name="email" required></div>
                     <div class="col-md-4"><label for="password" class="form-label">Senha</label><input type="password" class="form-control" name="password" required></div>
                 </div>
-                <!-- Linha 2: Papel e Grupo -->
                 <div class="row g-3 mb-3">
                     <div class="col-md-6"><label for="role" class="form-label">Papel do Utilizador</label><select name="role" class="form-select" required><option value="consultor" selected>Consultor</option><option value="admin_parceiro">Admin do Parceiro</option><option value="super_admin">Super Admin</option></select></div>
                     <div class="col-md-6"><label for="grupo_id" class="form-label">Equipe / Grupo</label><select name="grupo_id" class="form-select" required><option value="" disabled selected>-- Selecione uma equipe --</option>{% for grupo in grupos %}<option value="{{ grupo.id }}">{{ grupo.nome }}</option>{% endfor %}</select></div>
                 </div>
+                {% if current_user.is_master_admin %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-12"><label for="allowed_ip" class="form-label">IP Permitido</label><input type="text" class="form-control" name="allowed_ip"></div>
+                </div>
+                {% endif %}
                 <button type="submit" class="btn btn-success">Criar Utilizador</button>
             </form>
         </div>
     </div>
-    {% endif %} {# Fim da condição para super_admin #}
+    {% endif %}
 
-    <!-- Tabela de utilizadores existentes -->
     <div class="card shadow-sm">
         <div class="card-header">
-            <!-- INÍCIO DA SEÇÃO DO FORMULÁRIO DE BUSCA E FILTRO -->
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0">Utilizadores Existentes</h5>
                 <form action="{{ url_for('main.manage_users') }}" method="GET" class="d-flex flex-grow-1 flex-wrap gap-2 justify-content-end align-items-center">
-                    <div class="flex-grow-1 me-2" style="max-width: 250px;">
-                        <input type="text" name="search_query" class="form-control" placeholder="Buscar por usuário ou email..." value="{{ search_query }}">
-                    </div>
-                    <div class="me-2" style="max-width: 150px;">
-                        <select name="filter_role" class="form-select">
-                            <option value="all" {% if filter_role == 'all' %}selected{% endif %}>Todos os Perfis</option>
-                            <option value="super_admin" {% if filter_role == 'super_admin' %}selected{% endif %}>Super Admin</option>
-                            <option value="admin_parceiro" {% if filter_role == 'admin_parceiro' %}selected{% endif %}>Admin Parceiro</option>
-                            <option value="consultor" {% if filter_role == 'consultor' %}selected{% endif %}>Consultor</option>
-                        </select>
-                    </div>
-                    <div class="me-2" style="max-width: 150px;">
-                        <select name="filter_group" class="form-select">
-                            <option value="all" {% if filter_group == 'all' %}selected{% endif %}>Todas as Equipes</option>
-                            {% for grupo in grupos %}
-                                <option value="{{ grupo.id }}" {% if filter_group|int == grupo.id %}selected{% endif %}>{{ grupo.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                    <div class="flex-grow-1 me-2" style="max-width: 250px;"><input type="text" name="search_query" class="form-control" placeholder="Buscar por usuário ou email..." value="{{ search_query or '' }}"></div>
+                    <div class="me-2" style="max-width: 150px;"><select name="filter_role" class="form-select"><option value="all" {% if not filter_role or filter_role == 'all' %}selected{% endif %}>Todos os Perfis</option><option value="super_admin" {% if filter_role == 'super_admin' %}selected{% endif %}>Super Admin</option><option value="admin_parceiro" {% if filter_role == 'admin_parceiro' %}selected{% endif %}>Admin Parceiro</option><option value="consultor" {% if filter_role == 'consultor' %}selected{% endif %}>Consultor</option></select></div>
+                    <div class="me-2" style="max-width: 150px;"><select name="filter_group" class="form-select"><option value="all" {% if not filter_group or filter_group == 'all' %}selected{% endif %}>Todas as Equipes</option>{% for grupo in grupos %}<option value="{{ grupo.id }}" {% if filter_group and filter_group|int == grupo.id %}selected{% endif %}>{{ grupo.nome }}</option>{% endfor %}</select></div>
                     <button type="submit" class="btn btn-secondary"><i class="fas fa-filter me-1"></i>Aplicar Filtros</button>
                 </form>
             </div>
-            <!-- FIM DA SEÇÃO DO FORMULÁRIO DE BUSCA E FILTRO -->
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped table-hover align-middle">
-                    <thead class="table-secondary">
+                    <thead class="table-dark">
                         <tr>
-                            <!-- Cabeçalhos clicáveis para ordenação -->
-                            <th>
-                                <a href="{{ url_for('main.manage_users', search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by='username', sort_order='asc' if sort_by == 'username' and sort_order == 'desc' else 'desc') }}" class="text-decoration-none text-white">
-                                    Usuário 
-                                    {% if sort_by == 'username' %}
-                                        {% if sort_order == 'asc' %}<i class="fas fa-sort-up"></i>{% else %}<i class="fas fa-sort-down"></i>{% endif %}
-                                    {% else %}
-                                        <i class="fas fa-sort"></i>
-                                    {% endif %}
-                                </a>
-                            </th>
-                            <th>
-                                <a href="{{ url_for('main.manage_users', search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by='email', sort_order='asc' if sort_by == 'email' and sort_order == 'desc' else 'desc') }}" class="text-decoration-none text-white">
-                                    Email 
-                                    {% if sort_by == 'email' %}
-                                        {% if sort_order == 'asc' %}<i class="fas fa-sort-up"></i>{% else %}<i class="fas fa-sort-down"></i>{% endif %}
-                                    {% else %}
-                                        <i class="fas fa-sort"></i>
-                                    {% endif %}
-                                </a>
-                            </th>
-                            <th>
-                                <a href="{{ url_for('main.manage_users', search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by='group', sort_order='asc' if sort_by == 'group' and sort_order == 'desc' else 'desc') }}" class="text-decoration-none text-white">
-                                    Equipe 
-                                    {% if sort_by == 'group' %}
-                                        {% if sort_order == 'asc' %}<i class="fas fa-sort-up"></i>{% else %}<i class="fas fa-sort-down"></i>{% endif %}
-                                    {% else %}
-                                        <i class="fas fa-sort"></i>
-                                    {% endif %}
-                                </a>
-                            </th>
-                            <th>
-                                <a href="{{ url_for('main.manage_users', search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by='role', sort_order='asc' if sort_by == 'role' and sort_order == 'desc' else 'desc') }}" class="text-decoration-none text-white">
-                                    Perfil 
-                                    {% if sort_by == 'role' %}
-                                        {% if sort_order == 'asc' %}<i class="fas fa-sort-up"></i>{% else %}<i class="fas fa-sort-down"></i>{% endif %}
-                                    {% else %}
-                                        <i class="fas fa-sort"></i>
-                                    {% endif %}
-                                </a>
-                            </th>
-                            <th style="width: 15%;">Limite Carteira</th>
-                            <th style="width: 15%;">Puxada Diária</th>
-                            <th style="width: 15%;">Ações</th>
+                            <th>Usuário</th>
+                            <th>Email</th>
+                            <th>Equipe</th>
+                            <th>Perfil</th>
+                            <th>IP Permitido</th>
+                            <th class="text-center">Limite Carteira</th>
+                            <th class="text-center">Puxada Diária</th>
+                            <th style="width: 12%;" class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <!-- CORPO DA TABELA -->
                     <tbody>
                         {% for user in users %}
                         <tr>
-                            <td>
-                                {# Edição do Nome de Utilizador: Apenas para Super Admin ou Admin Parceiro para consultores do seu grupo #}
-                                {% if current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id) %}
-                                <form action="{{ url_for('main.update_user_name', user_id=user.id) }}" method="POST" class="no-loader">
-                                    <div class="input-group">
-                                        <input type="text" name="username" class="form-control form-control-sm" value="{{ user.username }}" required>
-                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Salvar Nome"><i class="fas fa-save"></i></button>
-                                    </div>
-                                </form>
-                                {% else %}
-                                {{ user.username }}
-                                {% endif %}
-                            </td>
+                            <td>{{ user.username }}</td>
                             <td>{{ user.email }}</td>
-                            <td>
-                                <span class="badge" style="background-color: {{ user.grupo.color or '#6c757d' }}; color: white;">{{ user.grupo.nome if user.grupo else 'N/A' }}</span>
-                            </td>
+                            <td><span class="badge" style="background-color: {{ user.grupo.color if user.grupo else '#6c757d' }}; color: white;">{{ user.grupo.nome if user.grupo else 'N/A' }}</span></td>
                             <td>
                                 {% if user.role == 'super_admin' %}<span class="badge bg-danger">Super Admin</span>
                                 {% elif user.role == 'admin_parceiro' %}<span class="badge bg-info text-dark">Admin Parceiro</span>
                                 {% else %}<span class="badge bg-secondary">Consultor</span>{% endif %}
                             </td>
-                            <td>
-                                {% if user.role == 'consultor' %}
-                                <form action="{{ url_for('main.update_user_limits', user_id=user.id) }}" method="POST" class="no-loader"><div class="input-group"><input type="number" name="wallet_limit" class="form-control form-control-sm" value="{{ user.wallet_limit }}"><button type="submit" class="btn btn-sm btn-outline-primary" title="Salvar Limites"><i class="fas fa-save"></i></button></div></form>
-                                {% else %}<span class="text-muted">N/A</span>{% endif %}
-                            </td>
-                            <td>
-                                {% if user.role == 'consultor' %}
-                                <form action="{{ url_for('main.update_user_limits', user_id=user.id) }}" method="POST" class="no-loader"><div class="input-group"><input type="number" name="daily_pull_limit" class="form-control form-control-sm" value="{{ user.daily_pull_limit }}"><button type="submit" class="btn btn-sm btn-outline-primary" title="Salvar Limites"><i class="fas fa-save"></i></button></div></form>
-                                {% else %}<span class="text-muted">N/A</span>{% endif %}
-                            </td>
-                            <td>
-                                {# Botão Apagar Usuário:
-                                   - Super Admin pode apagar qualquer um (exceto a si mesmo)
-                                   - Admin Parceiro pode apagar apenas consultores do seu grupo (e não a si mesmo)
-                                #}
-                                {% if user.id != current_user.id and (current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id)) %}
-                                <form action="{{ url_for('main.delete_user', id=user.id) }}" method="POST" onsubmit="return confirm('Tem a certeza que quer apagar este utilizador?');"><button type="submit" class="btn btn-sm btn-outline-danger" title="Apagar Usuário"><i class="fas fa-trash"></i></button></form>
-                                {% endif %}
+                            <td>{{ user.allowed_ip or 'N/A' }}</td>
+                            <td class="text-center">{{ user.wallet_limit or 0 }}</td>
+                            <td class="text-center">{{ user.daily_pull_limit or 0 }}</td>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    {% if current_user.is_master_admin %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editIpModal"
+                                            data-user-id="{{ user.id }}"
+                                            data-user-name="{{ user.username }}"
+                                            data-user-ip="{{ user.allowed_ip or '' }}"
+                                            title="Editar IP">
+                                        <i class="fas fa-network-wired"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if user.role == 'consultor' %}
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"
+                                            data-user-id="{{ user.id }}"
+                                            data-user-name="{{ user.username }}"
+                                            data-wallet-limit="{{ user.wallet_limit or 0 }}"
+                                            data-daily-pull-limit="{{ user.daily_pull_limit or 0 }}"
+                                            title="Editar Limites">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% endif %}
+                                    
+                                    {% if user.id != current_user.id and (current_user.role == 'super_admin' or (current_user.role == 'admin_parceiro' and user.role == 'consultor' and user.grupo_id == current_user.grupo_id)) %}
+                                    <form action="{{ url_for('main.delete_user', id=user.id) }}" method="POST" id="delete-form-{{ user.id }}" class="d-inline" onsubmit="return confirm('Tem a certeza que quer apagar este utilizador?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Apagar Usuário"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -161,6 +105,136 @@
                 </table>
             </div>
         </div>
-    </div>
+        {% if pagination and pagination.pages > 1 %}
+        <div class="card-footer bg-light">
+            <nav aria-label="Paginação de utilizadores">
+                <ul class="pagination justify-content-center mb-0">
+                    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.manage_users', page=pagination.prev_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">Anterior</a>
+                    </li>
+
+                    {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=3) %}
+                        {% if page_num %}
+                            {% if pagination.page == page_num %}
+                                <li class="page-item active" aria-current="page"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                                <li class="page-item"><a class="page-link" href="{{ url_for('main.manage_users', page=page_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.manage_users', page=pagination.next_num, search_query=search_query, filter_role=filter_role, filter_group=filter_group, sort_by=sort_by, sort_order=sort_order) }}">Próximo</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+        </div>
 </div>
-{% endblock %}
+
+<div class="modal fade" id="editLimitsModal" tabindex="-1" aria-labelledby="editLimitsModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editLimitsModalLabel">Editar Limites para</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="editLimitsForm" action="" method="POST">
+        <div class="modal-body">
+            <div class="mb-3">
+                <label for="modalWalletLimit" class="form-label">Limite de Carteira</label>
+                <input type="number" class="form-control" id="modalWalletLimit" name="wallet_limit" required>
+            </div>
+            <div class="mb-3">
+                <label for="modalDailyPullLimit" class="form-label">Limite de Puxada Diária</label>
+                <input type="number" class="form-control" id="modalDailyPullLimit" name="daily_pull_limit" required>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editIpModal" tabindex="-1" aria-labelledby="editIpModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editIpModalLabel">Editar IP para</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="editIpForm" action="" method="POST">
+        <div class="modal-body">
+            <div class="mb-3">
+                <label for="modalUserIp" class="form-label">IP Permitido</label>
+                <input type="text" class="form-control" id="modalUserIp" name="allowed_ip">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Este script é executado quando o modal está prestes a ser aberto
+document.addEventListener('DOMContentLoaded', function () {
+    var editLimitsModal = document.getElementById('editLimitsModal');
+    editLimitsModal.addEventListener('show.bs.modal', function (event) {
+        // Botão que acionou o modal
+        var button = event.relatedTarget;
+
+        // Extrai os dados dos atributos data-* do botão
+        var userId = button.getAttribute('data-user-id');
+        var userName = button.getAttribute('data-user-name');
+        var walletLimit = button.getAttribute('data-wallet-limit');
+        var dailyPullLimit = button.getAttribute('data-daily-pull-limit');
+
+        // Atualiza o conteúdo do modal
+        var modalTitle = editLimitsModal.querySelector('.modal-title');
+        var modalForm = editLimitsModal.querySelector('#editLimitsForm');
+        var walletInput = editLimitsModal.querySelector('#modalWalletLimit');
+        var dailyPullInput = editLimitsModal.querySelector('#modalDailyPullLimit');
+
+        // Define o título, os valores dos inputs e a action do formulário
+        modalTitle.textContent = 'Editar Limites para ' + userName;
+        walletInput.value = walletLimit;
+        dailyPullInput.value = dailyPullLimit;
+        
+        // Constrói a URL dinamicamente para a action do formulário
+        var actionUrl = "{{ url_for('main.update_user_limits', user_id=0) }}".replace('0', userId);
+        modalForm.setAttribute('action', actionUrl);
+    });
+
+    var editIpModal = document.getElementById('editIpModal');
+    editIpModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var userId = button.getAttribute('data-user-id');
+        var userName = button.getAttribute('data-user-name');
+        var userIp = button.getAttribute('data-user-ip');
+
+        var modalTitle = editIpModal.querySelector('.modal-title');
+        var modalForm = editIpModal.querySelector('#editIpForm');
+        var ipInput = editIpModal.querySelector('#modalUserIp');
+
+        modalTitle.textContent = 'Editar IP para ' + userName;
+        ipInput.value = userIp;
+        
+        var actionUrl = "{{ url_for('main.update_user_ip', user_id=0) }}".replace('0', userId);
+        modalForm.setAttribute('action', actionUrl);
+    });
+});
+</script>
+{% endblock scripts %}
