@@ -36,15 +36,11 @@
             width: auto;
             display: block;
         }
-        
-        /* Oculta o logo escuro por padrão */
-        .logo-dark {
-            display: none;
-        }
-
-        /* Regras de Tema para os Logos e Body */
+        .logo-dark { display: none; }
         [data-theme="dark"] .logo-light { display: none; }
         [data-theme="dark"] .logo-dark { display: block; }
+        [data-theme="ocean"] .logo-dark { display: none; } /* Ocean should use light logo */
+        [data-theme="ocean"] .logo-light { display: block; }
 
         .navbar-collapse { padding-top: 10px; }
         
@@ -92,35 +88,150 @@
         [data-theme="dark"] .form-select { background-color: #495057; color: #dee2e6; border-color: #6c757d; }
         [data-theme="dark"] .form-control:focus,
         [data-theme="dark"] .form-select:focus { background-color: #495057; color: #fff; border-color: #86b7fe; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
-        
-        [data-theme="ocean"] { background-color: #eef7ff !important; color: #003d5b; }
-        [data-theme="ocean"] .navbar-dark.bg-dark { background: linear-gradient(90deg, #005f73 0%, #0a9396 100%) !important; }
-        [data-theme="ocean"] .card, 
+
+        /* REGRAS DE TEMA PARA O THEMA OCEAN - AJUSTADAS CONFORME A IMAGEM ORIGINAL */
+        [data-theme="ocean"] {
+            background-color: #f0f8ff !important; /* Um azul bem claro, como a espuma do mar */
+            color: #0b3954; /* Um azul escuro para o texto principal */
+        }
+
+        [data-theme="ocean"] .navbar-dark.bg-dark {
+            /* Gradiente com tons de azul do oceano */
+            background: linear-gradient(90deg, #0077b6 0%, #023e8a 100%) !important;
+        }
+
+        /* AJUSTE AQUI: Fundo de cards, listas e conteúdo de modais volta a ser branco */
+        [data-theme="ocean"] .card,
         [data-theme="ocean"] .list-group-item,
-        [data-theme="ocean"] .modal-content { background-color: #fff; color: #003d5b; }
-        [data-theme="ocean"] h1, [data-theme="ocean"] h2, [data-theme="ocean"] h3,
-        [data-theme="ocean"] h4, [data-theme="ocean"] h5, [data-theme="ocean"] h6 { color: #003d5b; }
+        [data-theme="ocean"] .modal-content {
+          background-color: #fff; /* Fundo branco, como na imagem original */
+          border-color: #bde0fe;   /* Borda em um tom azul claro */
+          color: #0b3954;         /* Texto principal dentro dos cards */
+        }
+
+        /* AJUSTE AQUI: Fundo do cabeçalho do card volta a ser branco */
+        [data-theme="ocean"] .card-header {
+          background-color: #fff; /* Fundo branco, como na imagem original */
+          color: #0077b6;         /* Título do card em um azul vibrante */
+          border-bottom: 1px solid #bde0fe;
+        }
+
+        [data-theme="ocean"] h1,
+        [data-theme="ocean"] h2,
+        [data-theme="ocean"] h3,
+        [data-theme="ocean"] h4, [data-theme="ocean"] h5, [data-theme="ocean"] h6 {
+            color: #003d5b; /* Títulos atualizados para um azul marinho mais fechado */
+        }
+
+        [data-theme="ocean"] .table-secondary th {
+            color: #003d5b; /* Texto do cabeçalho da tabela (ajustado para consistência) */
+        }
+
+        [data-theme="ocean"] .table {
+            --bs-table-color: #0b3954; /* Cor do texto da tabela */
+            --bs-table-bg: #e0f2f7;    /* Fundo geral da tabela (um azul muito claro) */
+            --bs-table-border-color: #a7d9f7; /* Borda da tabela */
+            --bs-table-striped-color: #0b3954; /* Cor do texto para linhas zebradas */
+            --bs-table-striped-bg: #d0eaf5; /* Fundo para linhas zebradas */
+            --bs-table-hover-color: #003d5b; /* Cor do texto ao passar o mouse */
+            --bs-table-hover-bg: #c1e0eb; /* Fundo ao passar o mouse */
+        }
+
+        [data-theme="ocean"] .table-secondary {
+            --bs-table-bg: #bde0fe; /* Fundo para cabeçalhos ou linhas secundárias */
+            --bs-table-color: #003d5b; /* Cor do texto para cabeçalhos ou linhas secundárias */
+            --bs-table-border-color: #9bcfe0;
+        }
+
+        [data-theme="ocean"] .text-muted {
+            color: #668ca7 !important; /* Um tom de azul acinzentado para texto mutado */
+        }
+
+        /* AJUSTE AQUI: Fundo do cabeçalho e rodapé do modal volta a ser branco */
+        [data-theme="ocean"] .modal-header, 
+        [data-theme="ocean"] .modal-footer { 
+            border-color: #a7d9f7; /* Borda dos cabeçalhos e rodapés de modais */
+            background-color: #fff; /* Fundo branco, como na imagem original */
+        }
+
+        [data-theme="ocean"] .btn-close { 
+            filter: none; /* Resetar filtro, usar cor padrão ou ajustar com cor específica */
+            color: #0b3954; /* Cor do X de fechar o modal */
+        }
+        
+        [data-theme="ocean"] .btn-close:hover {
+            opacity: .75;
+        }
+        [data-theme="ocean"] .btn-close {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230b3954'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e");
+        }
+
+        /* AJUSTE AQUI: Fundo do item do acordeão volta a ser branco */
+        [data-theme="ocean"] .accordion-item { 
+            background-color: #fff; /* Fundo branco, como na imagem original */
+            border-color: #bde0fe; /* Borda do item do acordeão */
+        }
+
+        [data-theme="ocean"] .accordion-button { 
+            background-color: #e0f2f7; /* Fundo do botão do acordeão (quando não clicado) */
+            color: #0b3954; /* Cor do texto do botão do acordeão */
+            border-color: #a7d9f7;
+        }
+
+        [data-theme="ocean"] .accordion-button:not(.collapsed) { 
+            background-color: #0077b6; /* Fundo do botão do acordeão (quando expandido) */
+            color: #fff; /* Cor do texto do botão do acordeão (quando expandido) */
+        }
+
+        [data-theme="ocean"] .accordion-button::after { 
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230b3954'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+        }
+        [data-theme="ocean"] .accordion-button:not(.collapsed)::after {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+        }
+
+        [data-theme="ocean"] .form-control,
+        [data-theme="ocean"] .form-select { 
+            background-color: #e6f2f7; /* Fundo dos campos de formulário */
+            color: #0b3954; /* Cor do texto dos campos de formulário */
+            border-color: #a7d9f7; /* Borda dos campos de formulário */
+        }
+
+        [data-theme="ocean"] .form-control:focus,
+        [data-theme="ocean"] .form-select:focus { 
+            background-color: #e6f2f7; /* Mantém o fundo */
+            color: #003d5b; /* Cor do texto ao focar */
+            border-color: #0077b6; /* Borda ao focar */
+            box-shadow: 0 0 0 0.25rem rgba(0, 119, 182, 0.25); /* Sombra ao focar (azul do tema) */
+        }
     </style>
 
-    <!-- ===== CORREÇÃO DEFINITIVA DO TEMA ===== -->
     <script>
         (function() {
-            // Pega o tema do localStorage para evitar o "flash" da página
-            let theme = localStorage.getItem('userTheme');
+            // Pega o tema do localStorage (preferência do cliente)
+            let themeFromLocalStorage = localStorage.getItem('userTheme');
             
-            // Se não houver tema no localStorage, usa o tema vindo do servidor
-            if (!theme) {
-                theme = "{{ current_user.theme if current_user.is_authenticated else 'default' }}";
+            // Pega o tema que o servidor renderizou (o tema do usuário logado ou 'default')
+            const serverRenderedTheme = "{{ current_user.theme if current_user.is_authenticated else 'default' }}";
+
+            let finalThemeToApply;
+
+            // Decide qual tema usar para aplicação imediata
+            if (themeFromLocalStorage) {
+                finalThemeToApply = themeFromLocalStorage;
+            } else {
+                finalThemeToApply = serverRenderedTheme; // Se não tem no localStorage, usa o do servidor
             }
             
-            // Aplica o atributo ao elemento raiz (html) para carregar o estilo imediatamente
-            document.documentElement.setAttribute('data-theme', theme);
+            // Aplica o atributo data-theme ao elemento raiz (html) para que o CSS seja aplicado imediatamente
+            document.documentElement.setAttribute('data-theme', finalThemeToApply);
+
+            // Armazena o tema final aplicado para uso posterior no DOMContentLoaded
+            window._initialThemeAppliedByHead = finalThemeToApply;
         })();
     </script>
-    <!-- FIM DA CORREÇÃO -->
-</head>
+    </head>
 
-<!-- O atributo `data-theme` agora é definido pelo script acima, no `html`, mas mantemos no body por compatibilidade com seu CSS original -->
 <body data-theme="{{ current_user.theme if current_user.is_authenticated else 'default' }}">
 
     <div id="loader-overlay">
@@ -131,8 +242,10 @@
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
             <div class="container-fluid">
                 <a class="navbar-brand" href="{{ url_for('main.index') }}" aria-label="Início">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" class="logo-light" alt="Logo FS Promotora">
-                    <img src="{{ url_for('static', filename='images/logo1.png') }}" class="logo-dark" alt="Logo FS Promotora Dark">
+                    <img id="header-logo"
+                         src="{% if current_user.is_authenticated and current_user.theme == 'dark' %}{{ url_for('static', filename='images/logo1.png') }}
+                              {% else %}{{ url_for('static', filename='images/logo.png') }}{% endif %}"
+                         alt="Logo FS Promotora" style="height: 55px; width: auto; display: block;">
                 </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
                     <span class="navbar-toggler-icon"></span>
@@ -233,16 +346,10 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Sincroniza o tema vindo do servidor com o localStorage, garantindo que a escolha seja "lembrada"
-            // Esta é a parte que garante que, após o redirect, o localStorage esteja correto.
-            const serverTheme = document.body.getAttribute('data-theme');
-            if (serverTheme) {
-                localStorage.setItem('userTheme', serverTheme);
-                // Atualiza também o atributo do HTML para consistência
-                document.documentElement.setAttribute('data-theme', serverTheme);
+            if (window._initialThemeAppliedByHead) {
+                localStorage.setItem('userTheme', window._initialThemeAppliedByHead);
             }
-
-            // Script do loader
+            
             document.querySelectorAll('form').forEach(form => {
                 form.addEventListener('submit', function() {
                     if (!form.classList.contains('no-loader') && form.checkValidity()) {
@@ -336,6 +443,38 @@
                 }, 1000);
             };
         });
+
+        // Função global para definir o tema, agora mais robusta
+        function setTheme(theme) {
+            // Aplica o tema visualmente
+            document.documentElement.setAttribute('data-theme', theme);
+            document.body.setAttribute('data-theme', theme);
+
+            // Troca o logo
+            const logoImg = document.getElementById('header-logo');
+            if (logoImg) {
+                if (theme === 'dark') {
+                    logoImg.src = "{{ url_for('static', filename='images/logo1.png') }}";
+                } else {
+                    // Tanto 'default' quanto 'ocean' usam o logo claro
+                    logoImg.src = "{{ url_for('static', filename='images/logo.png') }}";
+                }
+            }
+
+            // Salva a preferência no localStorage
+            localStorage.setItem('userTheme', theme);
+            
+            // Envia a preferência para o servidor para persistir no perfil do usuário
+            fetch("{{ url_for('main.profile') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'theme': theme
+                })
+            }).catch(error => console.error('Falha ao salvar o tema no servidor:', error));
+        }
     </script>
     {% block scripts %}{% endblock %}
 </body>

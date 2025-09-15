@@ -1886,15 +1886,34 @@ def parceiro_manage_users():
 @require_role('consultor')
 def consultor_dashboard():
     start_of_day = datetime.combine(date.today(), time.min)
-    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
+    leads_em_atendimento = Lead.query.filter(
+        Lead.consultor_id == current_user.id,
+        Lead.status == 'Em Atendimento',
+        or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())
+    ).count()
     leads_consumidos_hoje = LeadConsumption.query.filter(LeadConsumption.user_id == current_user.id, LeadConsumption.timestamp >= start_of_day).count()
     vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
     vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
-    mailings_disponiveis = []
-    if vagas_na_carteira > 0 and vagas_na_puxada_diaria > 0:
-        mailings_disponiveis = db.session.query(Lead.produto_id, Produto.name.label('produto_nome'), Lead.estado, func.count(Lead.id).label('leads_disponiveis')).join(Produto, Lead.produto_id == Produto.id).filter(Lead.status == 'Novo', Lead.consultor_id == None, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
+
+    # Garante que a consulta de mailings disponíveis seja sempre executada.
+    # A lógica de desabilitar o formulário no template cuidará da UI.
+    mailings_disponiveis = db.session.query(
+        Lead.produto_id, 
+        Produto.name.label('produto_nome'), 
+        Lead.estado, 
+        func.count(Lead.id).label('leads_disponiveis')
+    ).join(Produto, Lead.produto_id == Produto.id).filter(
+        Lead.status == 'Novo', 
+        Lead.consultor_id == None, 
+        or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())
+    ).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
+
     search_history = request.args.get('search_history', '')
-    history_query = ActivityLog.query.options(joinedload(ActivityLog.lead), joinedload(ActivityLog.tabulation)).filter(ActivityLog.user_id == current_user.id)
+    history_query = ActivityLog.query.options(
+        joinedload(ActivityLog.lead), 
+        joinedload(ActivityLog.tabulation)
+    ).filter(ActivityLog.user_id == current_user.id)
+
     if search_history:
         search_term = f"%{search_history}%"
         history_query = history_query.join(Lead).filter(or_(Lead.nome.ilike(search_term), Lead.cpf.ilike(search_term)))
@@ -1906,42 +1925,78 @@ def consultor_dashboard():
 @login_required
 @require_role('consultor')
 def pegar_leads_selecionados():
-    leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
-    start_of_day = datetime.combine(date.today(), time.min)
-    leads_consumidos_hoje = LeadConsumption.query.filter(LeadConsumption.user_id == current_user.id, LeadConsumption.timestamp >= start_of_day).count()
-    vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
-    vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
-    limite_total_a_pegar = min(vagas_na_carteira, vagas_na_puxada_diaria)
-    leads_pegos_total = 0
-    for key, value in request.form.items():
-        if key.startswith('leads_') and value.isdigit() and int(value) > 0:
-            quantidade_a_pegar = int(value)
-            if leads_pegos_total + quantidade_a_pegar > limite_total_a_pegar:
-                quantidade_a_pegar = limite_total_a_pegar - leads_pegos_total
-            if quantidade_a_pegar <= 0: continue
-            try:
-                produto_id, estado = key.replace('leads_', '').split('-')
-                produto_id = int(produto_id)
-            except (ValueError, IndexError):
-                continue
-            leads_disponiveis = Lead.query.filter(Lead.status == 'Novo', Lead.consultor_id == None, Lead.produto_id == produto_id, Lead.estado == estado, or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())).limit(quantidade_a_pegar).all()
-            if leads_disponiveis:
+    try:
+        # Recalcula os limites para garantir dados atualizados
+        leads_em_atendimento = Lead.query.filter(
+            Lead.consultor_id == current_user.id,
+            Lead.status == 'Em Atendimento',
+            or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())
+        ).count()
+        start_of_day = datetime.combine(date.today(), time.min)
+        leads_consumidos_hoje = LeadConsumption.query.filter(
+            LeadConsumption.user_id == current_user.id, 
+            LeadConsumption.timestamp >= start_of_day
+        ).count()
+
+        vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
+        vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
+        limite_total_a_pegar = min(vagas_na_carteira, vagas_na_puxada_diaria)
+
+        if limite_total_a_pegar <= 0:
+            flash('Você não tem mais vagas na carteira ou atingiu seu limite de puxadas diárias.', 'warning')
+            return redirect(url_for('main.consultor_dashboard'))
+
+        leads_pegos_total = 0
+        leads_a_atualizar = []
+        consumos_a_registrar = []
+
+        # Itera sobre os dados do formulário para pegar os leads
+        for key, value in request.form.items():
+            if key.startswith('leads_') and value.isdigit() and int(value) > 0:
+                quantidade_a_pegar = int(value)
+
+                if leads_pegos_total + quantidade_a_pegar > limite_total_a_pegar:
+                    quantidade_a_pegar = limite_total_a_pegar - leads_pegos_total
+
+                if quantidade_a_pegar <= 0:
+                    continue
+
                 try:
+                    produto_id, estado = key.replace('leads_', '').split('-')
+                    produto_id = int(produto_id)
+                except (ValueError, IndexError):
+                    continue
+
+                # Bloqueia os leads selecionados para evitar que outros consultores os peguem
+                leads_disponiveis = Lead.query.filter(
+                    Lead.status == 'Novo', 
+                    Lead.consultor_id == None, 
+                    Lead.produto_id == produto_id, 
+                    Lead.estado == estado, 
+                    or_(Lead.available_after == None, Lead.available_after <= datetime.utcnow())
+                ).with_for_update().limit(quantidade_a_pegar).all()
+
+                if leads_disponiveis:
                     for lead in leads_disponiveis:
                         lead.consultor_id = current_user.id
                         lead.status = 'Em Atendimento'
-                        consumo = LeadConsumption(user_id=current_user.id, lead_id=lead.id)
-                        db.session.add(consumo)
-                    db.session.commit()
+                        leads_a_atualizar.append(lead)
+                        consumos_a_registrar.append(LeadConsumption(user_id=current_user.id, lead_id=lead.id))
+                    
                     leads_pegos_total += len(leads_disponiveis)
-                except Exception as e:
-                    db.session.rollback()
-                    flash(f'Ocorreu um erro ao atribuir leads: {e}', 'danger')
-                    return redirect(url_for('main.consultor_dashboard'))
-    if leads_pegos_total > 0:
-        flash(f'{leads_pegos_total} novos leads foram adicionados à sua carteira!', 'success')
-    else:
-        flash('Nenhum lead foi selecionado ou não havia leads disponíveis nos lotes escolhidos.', 'warning')
+
+        if leads_a_atualizar:
+            db.session.add_all(leads_a_atualizar)
+            db.session.add_all(consumos_a_registrar)
+            db.session.commit()
+            flash(f'{leads_pegos_total} novos leads foram adicionados à sua carteira!', 'success')
+        else:
+            flash('Nenhum lead foi selecionado ou não havia leads disponíveis nos lotes escolhidos.', 'warning')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ocorreu um erro ao atribuir leads: {e}', 'danger')
+
     return redirect(url_for('main.consultor_dashboard'))
 
 @bp.route('/atendimento')
