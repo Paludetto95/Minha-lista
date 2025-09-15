@@ -465,14 +465,11 @@ def upload_step2_process():
 
                 for system_field, original_header in mapping.items():
                     valor = row.get(original_header)
-                    if system_field in campos_do_modelo_lead and pd.notna(valor):
-                        row_data[system_field] = str(valor).strip()
-
-                for col in df_chunk.columns:
-                    if col not in mapping.values():
-                        valor = row.get(col)
-                        if pd.notna(valor):
-                            additional_data[col.title()] = str(valor).strip()
+                    if pd.notna(valor):
+                        if system_field in campos_do_modelo_lead:
+                            row_data[system_field] = str(valor).strip()
+                        else:
+                            additional_data[system_field] = str(valor).strip()
                 
                 final_lead_data = {
                     'produto_id': produto_id,
@@ -2402,22 +2399,50 @@ def atendimento():
     all_tabulations = Tabulation.query.order_by(Tabulation.name).all()
     cleaned_telefone = re.sub(r'\D', '', lead.telefone) if lead.telefone else None
     cleaned_telefone_2 = re.sub(r'\D', '', lead.telefone_2) if lead.telefone_2 else None
-    lead_details = {
-        'Nome': lead.nome,
-        'CPF': lead.cpf,
-        'Telefone 1': lead.telefone,
-        'Telefone 2': lead.telefone_2,
-        'Produto': lead.produto.name if lead.produto else 'N/A',
-        'Status': lead.status,
-        'Cidade': lead.cidade,
-        'Estado': lead.estado,
-        'Data de Criação': lead.data_criacao.strftime('%d/%m/%Y %H:%M') if lead.data_criacao else 'N/A',
-        'Último Contato WhatsApp': lead.last_whatsapp_contact.strftime('%d/%m/%Y %H:%M') if lead.last_whatsapp_contact else 'N/A',
-        'Observações': lead.notes if lead.notes else 'N/A'
+    
+    lead_details = {}
+    
+    exclude_fields = [
+        'id', 'consultor_id', 'produto_id', 'tabulation_id', 'additional_data', 
+        'consultor', 'produto', 'tabulation', 'activities', 'consumptions',
+        'available_after', 'data_tabulacao'
+    ]
+
+    field_labels = {
+        'nome': 'Nome', 'cpf': 'CPF', 'telefone': 'Telefone 1', 'telefone_2': 'Telefone 2',
+        'cidade': 'Cidade', 'rg': 'RG', 'estado': 'Estado', 'bairro': 'Bairro', 'cep': 'CEP',
+        'convenio': 'Convênio', 'orgao': 'Órgão', 'nome_mae': 'Nome da Mãe', 'sexo': 'Sexo',
+        'nascimento': 'Nascimento', 'idade': 'Idade', 'tipo_vinculo': 'Tipo de Vínculo',
+        'rmc': 'RMC', 'valor_liberado': 'Valor Liberado', 'beneficio': 'Benefício',
+        'logradouro': 'Logradouro', 'numero': 'Número', 'complemento': 'Complemento',
+        'status': 'Status', 'notes': 'Observações',
+        'data_criacao': 'Data de Criação', 'last_whatsapp_contact': 'Último Contato WhatsApp',
+        'extra_1': 'Extra 1', 'extra_2': 'Extra 2', 'extra_3': 'Extra 3', 'extra_4': 'Extra 4',
+        'extra_5': 'Extra 5', 'extra_6': 'Extra 6', 'extra_7': 'Extra 7', 'extra_8': 'Extra 8',
+        'extra_9': 'Extra 9', 'extra_10': 'Extra 10'
     }
+
+    for column in Lead.__table__.columns:
+        if column.name not in exclude_fields:
+            value = getattr(lead, column.name)
+            if value is not None and value != '':
+                label = field_labels.get(column.name, column.name.replace('_', ' ').title())
+                
+                if isinstance(value, datetime):
+                    lead_details[label] = value.strftime('%d/%m/%Y %H:%M')
+                elif isinstance(value, date):
+                    lead_details[label] = value.strftime('%d/%m/%Y')
+                else:
+                    lead_details[label] = str(value)
+
+    if lead.produto:
+        lead_details['Produto'] = lead.produto.name
+
     if lead.additional_data:
         for key, value in lead.additional_data.items():
-            lead_details[key] = value
+            label = field_labels.get(key, key.replace('_', ' ').title())
+            if value is not None and value != '':
+                lead_details[label] = value
 
     return render_template('atendimento.html',
                            title='Atendimento',
