@@ -366,12 +366,18 @@ def upload_step1():
         headers = df.columns.tolist()
         sample_rows = df.head(2).to_dict(orient='records')
         system_fields = ['nome', 'cpf', 'telefone', 'telefone_2','cidade','rg','estado', 'bairro', 'cep', 'convenio', 'orgao', 'nome_mae', 'sexo', 'nascimento', 'idade', 'tipo_vinculo', 'rmc', 'valor_liberado', 'beneficio', 'logradouro', 'numero', 'complemento', 'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10']
-        existing_mapping = None
+        existing_mapping = {}
+        extra_names = {}
         if layout_id:
             layout = LayoutMailing.query.get(layout_id)
-            if layout:
-                existing_mapping = {v: k for k, v in layout.mapping.items()}
-        return render_template('admin/map_columns.html', headers=headers, sample_rows=sample_rows, temp_filename=temp_filename, produto_id=produto_id, system_fields=system_fields, existing_mapping=existing_mapping)
+            if layout and layout.mapping:
+                for field, value in layout.mapping.items():
+                    if isinstance(value, dict): # New format: {'column': '...', 'name': '...'}
+                        existing_mapping[value['column']] = field
+                        extra_names[field] = value.get('name', '')
+                    else: # Old format
+                        existing_mapping[value] = field
+        return render_template('admin/map_columns.html', headers=headers, sample_rows=sample_rows, temp_filename=temp_filename, produto_id=produto_id, system_fields=system_fields, existing_mapping=existing_mapping, extra_names=extra_names)
     except Exception as e:
         flash(f'Erro ao ler o arquivo: {e}', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -397,6 +403,7 @@ def upload_step2_process():
     try:
         mapping = {}
         layout_mapping_to_save = {}
+        extra_field_names = {} # Para armazenar os nomes personalizados dos campos extra
         ignored_columns_headers = []
         
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
@@ -405,26 +412,34 @@ def upload_step2_process():
             original_header_name = form_data.get(f'header_name_{i}')
             if not original_header_name: continue
             
-            # Check if the column is explicitly included (checkbox is checked)
             if f'include_column_{i}' in form_data:
                 selected_system_field = form_data.get(f'mapping_{i}')
                 
-                # Check if the user selected a mapping and it's not 'Ignorar'
                 if selected_system_field and selected_system_field != 'Ignorar':
                     if selected_system_field in mapping:
                         flash(f'Erro: O campo do sistema "{selected_system_field}" foi mapeado para mais de uma coluna.', 'danger')
                         return redirect(url_for('main.admin_dashboard'))
+                    
                     mapping[selected_system_field] = original_header_name
-                    layout_mapping_to_save[selected_system_field] = original_header_name
+                    
+                    # Verifica se é um campo extra e se um nome personalizado foi fornecido
+                    if selected_system_field.startswith('extra_'):
+                        custom_name = form_data.get(f'extra_name_{i}', '').strip()
+                        if custom_name:
+                            extra_field_names[selected_system_field] = custom_name
+                            # Salva no formato de dicionário para o layout
+                            layout_mapping_to_save[selected_system_field] = {'column': original_header_name, 'name': custom_name}
+                        else:
+                            layout_mapping_to_save[selected_system_field] = original_header_name
+                    else:
+                        layout_mapping_to_save[selected_system_field] = original_header_name
                 else:
-                    # If checkbox is checked but mapping is 'Ignorar', add to ignored list
                     ignored_columns_headers.append(original_header_name)
             else:
-                # If checkbox is not checked, add to ignored list
                 ignored_columns_headers.append(original_header_name)
 
         if 'cpf' not in mapping or 'nome' not in mapping:
-            flash("Erro de mapeamento: As colunas 'CPF' e 'Nome' são obrigatórias.", 'danger')
+            flash("Erro de mapeamento: As colunas 'CPF' e 'Nome' são obrigatórias.", "danger")
             return redirect(url_for('main.admin_dashboard'))
 
         if form_data.get('save_layout') and form_data.get('layout_name'):
@@ -466,10 +481,14 @@ def upload_step2_process():
                 for system_field, original_header in mapping.items():
                     valor = row.get(original_header)
                     if pd.notna(valor):
+                        # Se for um campo extra, usa o nome personalizado (se houver), senão o nome do campo
+                        display_name = extra_field_names.get(system_field, system_field)
+                        
                         if system_field in campos_do_modelo_lead:
                             row_data[system_field] = str(valor).strip()
                         else:
-                            additional_data[system_field] = str(valor).strip()
+                            # Garante que campos extra usem o nome personalizado no additional_data
+                            additional_data[display_name] = str(valor).strip()
                 
                 final_lead_data = {
                     'produto_id': produto_id,

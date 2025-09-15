@@ -62,8 +62,9 @@
                     <tr>
                         <th style="width: 5%;">Incluir</th>
                         <th style="width: 5%;">Coluna</th>
-                        <th style="width: 40%;">Nome da Coluna (do Arquivo)</th>
-                        <th style="width: 20%;">Mapear para Campo do Sistema</th>
+                        <th style="width: 30%;">Nome da Coluna (do Arquivo)</th>
+                        <th style="width: 25%;">Mapear para Campo do Sistema</th>
+                        <th style="width: 25%;">Nome Personalizado (para campos Extra)</th>
                         <th>Exemplo</th>
                     </tr>
                 </thead>
@@ -81,7 +82,7 @@
                             <input type="hidden" name="header_name_{{ i }}" value="{{ header }}">
                         </td>
                         <td>
-                            <select name="mapping_{{ i }}" class="form-select form-select-sm mapping-select">
+                            <select name="mapping_{{ i }}" class="form-select form-select-sm mapping-select" data-row-index="{{ i }}">
                                 <option value="Ignorar">-- Ignorar esta coluna --</option>
                                 {% for field in system_fields %}
                                     <option value="{{ field }}" 
@@ -94,6 +95,14 @@
                                     </option>
                                 {% endfor %}
                             </select>
+                        </td>
+                        <td>
+                            {% set mapped_field = existing_mapping.get(header) %}
+                            <input type="text" name="extra_name_{{ i }}" id="extra_name_{{ i }}" 
+                                   class="form-control form-control-sm extra-name-input" 
+                                   placeholder="Nome para exibição"
+                                   style="display: none;"
+                                   value="{{ extra_names.get(mapped_field) if mapped_field and mapped_field.startswith('extra_') else '' }}">
                         </td>
                         <td><small class="text-muted">{{ sample_rows[0].get(header, '') if sample_rows else '' }}</small></td>
                     </tr>
@@ -143,6 +152,25 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    document.querySelectorAll('.mapping-select').forEach(select => {
+        const rowIndex = select.dataset.rowIndex;
+        const extraNameInput = document.getElementById('extra_name_' + rowIndex);
+
+        function toggleExtraNameInput() {
+            if (select.value.startsWith('extra_')) {
+                extraNameInput.style.display = 'block';
+            } else {
+                extraNameInput.style.display = 'none';
+                extraNameInput.value = ''; // Limpa o valor se não for um campo extra
+            }
+        }
+
+        select.addEventListener('change', toggleExtraNameInput);
+        
+        // Executa na inicialização para campos pré-selecionados
+        toggleExtraNameInput();
+    });
 
     const form = document.getElementById('mapping-form');
     const validationAlert = document.getElementById('validation-alert');
