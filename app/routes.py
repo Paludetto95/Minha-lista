@@ -2459,9 +2459,8 @@ def atendimento():
 
     if lead.additional_data:
         for key, value in lead.additional_data.items():
-            label = field_labels.get(key, key.replace('_', ' ').title())
             if value is not None and value != '':
-                lead_details[label] = value
+                lead_details[key] = value
 
     return render_template('atendimento.html',
                            title='Atendimento',
