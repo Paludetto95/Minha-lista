@@ -2086,8 +2086,9 @@ def parceiro_manage_users():
 @login_required
 @require_role('consultor')
 def consultor_dashboard():
-    update_user_status(current_user, 'Ocioso')
-    db.session.commit()
+    if current_user.current_status != 'Ocioso':
+        update_user_status(current_user, 'Ocioso')
+        db.session.commit()
     
     leads_em_atendimento = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     vagas_na_carteira = current_user.wallet_limit - leads_em_atendimento
@@ -2463,6 +2464,9 @@ def atendimento():
                 label = field_labels.get(key, key)
                 lead_details[label] = value
 
+    if current_user.current_status != 'Em Atendimento':
+        update_user_status(current_user, 'Em Atendimento')
+        db.session.commit()
     return render_template('atendimento.html',
                            title='Atendimento',
                            lead=lead,
