@@ -10,7 +10,7 @@ import pytz
 import random
 from collections import defaultdict
 from functools import wraps
-from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
+from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory, session
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from app import db
@@ -1045,3 +1045,550 @@ def serve_partner_logo(filename):
         # Se não encontrar, tenta servir de um caminho estático legado como fallback
         return send_from_directory(os.path.join(current_app.root_path, 'static', 'partner_logos'), filename, as_attachment=False)
     return send_from_directory(logo_path, filename, as_attachment=False)
+
+@bp.route('/admin/manage-users', methods=['GET'])
+@login_required
+@require_role('super_admin')
+def manage_users():
+    """ Rota para exibir e gerenciar todos os usuários. """
+    page = request.args.get('page', 1, type=int)
+    search_query = request.args.get('search_query', '')
+    filter_role = request.args.get('filter_role', 'all')
+    filter_group = request.args.get('filter_group', 'all')
+    sort_by = request.args.get('sort_by', 'username')
+    sort_order = request.args.get('sort_order', 'asc')
+
+    users_query = User.query.options(joinedload(User.grupo))
+
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        users_query = users_query.filter(
+            or_(User.username.ilike(search_pattern), User.email.ilike(search_pattern))
+        )
+
+    if filter_role != 'all':
+        users_query = users_query.filter(User.role == filter_role)
+
+    if filter_group != 'all':
+        users_query = users_query.filter(User.grupo_id == filter_group)
+
+    order_column = getattr(User, sort_by, User.username)
+    if sort_order == 'desc':
+        order_column = order_column.desc()
+    
+    users_query = users_query.order_by(order_column)
+
+    pagination = users_query.paginate(page=page, per_page=15, error_out=False)
+    users = pagination.items
+    grupos = Grupo.query.order_by(Grupo.nome).all()
+
+    return render_template('admin/manage_users.html', 
+                           title="Gerir Utilizadores",
+                           users=users, 
+                           pagination=pagination, 
+                           grupos=grupos,
+                           search_query=search_query,
+                           filter_role=filter_role,
+                           filter_group=filter_group,
+                           sort_by=sort_by,
+                           sort_order=sort_order)
+
+@bp.route('/admin/users/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_user():
+    """ Adiciona um novo usuário. """
+    username = request.form.get('username')
+    email = request.form.get('email')
+    password = request.form.get('password')
+    role = request.form.get('role')
+    grupo_id = request.form.get('grupo_id')
+    allowed_ip = request.form.get('allowed_ip')
+
+    if User.query.filter_by(email=email).first():
+        flash('Este email já está em uso.', 'danger')
+        return redirect(url_for('main.manage_users'))
+
+    user = User(
+        username=username,
+        email=email,
+        role=role,
+        grupo_id=int(grupo_id) if grupo_id else None,
+        allowed_ip=allowed_ip if allowed_ip else None
+    )
+    user.set_password(password)
+    db.session.add(user)
+    db.session.commit()
+    
+    log_system_action('USER_CREATED', entity_type='User', entity_id=user.id, description=f"Usuário '{user.username}' criado.")
+    flash('Utilizador criado com sucesso!', 'success')
+    return redirect(url_for('main.manage_users'))
+
+@bp.route('/admin/users/<int:user_id>/update_limits', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def update_user_limits(user_id):
+    """ Atualiza os limites de um usuário. """
+    user = User.query.get_or_404(user_id)
+    wallet_limit = request.form.get('wallet_limit')
+    daily_pull_limit = request.form.get('daily_pull_limit')
+
+    user.wallet_limit = int(wallet_limit) if wallet_limit else 0
+    user.daily_pull_limit = int(daily_pull_limit) if daily_pull_limit else 0
+    
+    db.session.commit()
+    log_system_action('USER_LIMITS_UPDATED', entity_type='User', entity_id=user.id, description=f"Limites do usuário '{user.username}' atualizados.")
+    flash('Limites do utilizador atualizados com sucesso!', 'success')
+    return redirect(url_for('main.manage_users'))
+
+@bp.route('/admin/users/<int:user_id>/update_ip', methods=['POST'])
+@login_required
+@require_role('super_admin', 'master_admin')
+def update_user_ip(user_id):
+    """ Atualiza o IP permitido de um usuário. """
+    user = User.query.get_or_404(user_id)
+    allowed_ip = request.form.get('allowed_ip')
+    
+    user.allowed_ip = allowed_ip if allowed_ip else None
+    
+    db.session.commit()
+    log_system_action('USER_IP_UPDATED', entity_type='User', entity_id=user.id, description=f"IP do usuário '{user.username}' atualizado.")
+    flash('IP do utilizador atualizado com sucesso!', 'success')
+    return redirect(url_for('main.manage_users'))
+
+@bp.route('/admin/users/<int:id>/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_user(id):
+    """ Exclui um usuário. """
+    user = User.query.get_or_404(id)
+    if user.id == current_user.id:
+        flash('Não pode apagar a sua própria conta.', 'danger')
+        return redirect(url_for('main.manage_users'))
+        
+    db.session.delete(user)
+    db.session.commit()
+    log_system_action('USER_DELETED', entity_type='User', entity_id=id, description=f"Usuário '{user.username}' excluído.")
+    flash('Utilizador apagado com sucesso!', 'success')
+    return redirect(url_for('main.manage_users'))
+
+@bp.route('/admin/manage-mailings')
+@login_required
+@require_role('super_admin')
+def manage_mailings():
+    """ Exibe uma visão geral de todos os mailings, agrupados por produto e estado. """
+    mailings_query = db.session.query(
+        Lead.produto_id,
+        Produto.name.label('produto_nome'),
+        Lead.estado,
+        func.count(Lead.id).label('total_leads'),
+        func.sum(case((Lead.status == 'Novo', 1), else_=0)).label('leads_novos')
+    ).join(Produto, Lead.produto_id == Produto.id)\
+     .group_by(Lead.produto_id, Produto.name, Lead.estado)\
+     .order_by(Produto.name, Lead.estado)\
+     .all()
+
+    mailings_por_produto = defaultdict(list)
+    for mailing in mailings_query:
+        mailings_por_produto[mailing.produto_nome].append(mailing)
+
+    return render_template('admin/manage_mailings.html', 
+                           title="Gerenciar Mailings",
+                           mailings_por_produto=mailings_por_produto)
+
+@bp.route('/admin/mailings/export-all')
+@login_required
+@require_role('super_admin')
+def export_all_mailings():
+    """ Exporta um relatório completo de todos os mailings para um arquivo Excel. """
+    all_leads = Lead.query.options(joinedload(Lead.produto), joinedload(Lead.consultor)).all()
+    
+    if not all_leads:
+        flash('Não há leads para exportar.', 'warning')
+        return redirect(url_for('main.manage_mailings'))
+
+    leads_data = []
+    for lead in all_leads:
+        leads_data.append({
+            'Produto': lead.produto.name if lead.produto else 'N/A',
+            'Estado': lead.estado,
+            'Nome': lead.nome,
+            'CPF': lead.cpf,
+            'Telefone': lead.telefone,
+            'Status': lead.status,
+            'Consultor': lead.consultor.username if lead.consultor else 'N/A',
+            'Data Criação': lead.data_criacao.strftime('%Y-%m-%d %H:%M:%S') if lead.data_criacao else '',
+            'Data Tabulação': lead.data_tabulacao.strftime('%Y-%m-%d %H:%M:%S') if lead.data_tabulacao else ''
+        })
+    
+    df = pd.DataFrame(leads_data)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Todos os Leads')
+    output.seek(0)
+
+    return Response(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment;filename=relatorio_completo_mailings.xlsx"}
+    )
+
+@bp.route('/admin/mailings/export/<int:produto_id>/<estado>')
+@login_required
+@require_role('super_admin')
+def export_mailing(produto_id, estado):
+    """ Exporta um mailing específico (produto/estado) para um arquivo CSV. """
+    leads = Lead.query.filter_by(produto_id=produto_id, estado=estado).all()
+    
+    if not leads:
+        flash('Nenhum lead encontrado para este mailing.', 'warning')
+        return redirect(url_for('main.manage_mailings'))
+
+    # Create a list of dictionaries
+    leads_data = []
+    for lead in leads:
+        leads_data.append(lead.to_dict()) # Assumes you have a to_dict() method in your Lead model
+
+    df = pd.DataFrame(leads_data)
+    
+    output = io.StringIO()
+    df.to_csv(output, index=False, sep=';', encoding='latin1')
+    output.seek(0)
+
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={f"Content-Disposition": f"attachment;filename=mailing_{produto_id}_{estado}.csv"}
+    )
+
+def _delete_mailing_task(app, task_id, produto_id, estado):
+    with app.app_context():
+        task = BackgroundTask.query.get(task_id)
+        if not task:
+            return
+
+        try:
+            leads_to_delete = Lead.query.filter_by(produto_id=produto_id, estado=estado)
+            total_leads = leads_to_delete.count()
+
+            task.status = 'RUNNING'
+            task.total_items = total_leads
+            task.message = f"Excluindo {total_leads} leads..."
+            db.session.commit()
+
+            deleted_count = 0
+            for lead_batch in leads_to_delete.yield_per(100):
+                # Log activities before deleting the lead
+                ActivityLog.query.filter(ActivityLog.lead_id == lead_batch.id).delete(synchronize_session=False)
+                LeadConsumption.query.filter(LeadConsumption.lead_id == lead_batch.id).delete(synchronize_session=False)
+                
+                db.session.delete(lead_batch)
+                deleted_count += 1
+                if deleted_count % 100 == 0:
+                    task.progress = (deleted_count / total_leads) * 100
+                    task.items_processed = deleted_count
+                    task.message = f"Excluindo {deleted_count}/{total_leads} leads..."
+                    db.session.commit()
+            
+            db.session.commit()
+
+            task.status = 'COMPLETED'
+            task.progress = 100
+            task.message = "Exclusão concluída com sucesso."
+            db.session.commit()
+
+        except Exception as e:
+            db.session.rollback()
+            task.status = 'FAILED'
+            task.message = f"Erro durante a exclusão: {str(e)}"
+            db.session.commit()
+
+
+@bp.route('/admin/mailings/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_mailing():
+    """ Inicia a exclusão de um mailing em segundo plano. """
+    produto_id = request.form.get('produto_id')
+    estado = request.form.get('estado')
+
+    if not produto_id or not estado:
+        return jsonify({'status': 'error', 'message': 'Produto e Estado são obrigatórios.'}), 400
+
+    task_id = start_background_task(
+        _delete_mailing_task,
+        'DELETE_MAILING',
+        current_user.id,
+        f"Preparando para excluir mailing (Produto ID: {produto_id}, Estado: {estado})",
+        produto_id=int(produto_id),
+        estado=estado
+    )
+
+    return jsonify({'status': 'processing', 'task_id': task_id})
+
+@bp.route('/admin/manage-products', methods=['GET'])
+@login_required
+@require_role('super_admin')
+def manage_products():
+    """ Rota para exibir e gerenciar todos os produtos. """
+    products = Produto.query.order_by(Produto.name).all()
+    return render_template('admin/manage_products.html', title="Gerenciar Produtos", products=products)
+
+@bp.route('/admin/products/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_product():
+    """ Adiciona um novo produto. """
+    name = request.form.get('name')
+    if not name:
+        flash('O nome do produto é obrigatório.', 'danger')
+        return redirect(url_for('main.manage_products'))
+
+    new_product = Produto(name=name)
+    db.session.add(new_product)
+    db.session.commit()
+    
+    log_system_action('PRODUCT_CREATED', entity_type='Product', entity_id=new_product.id, description=f"Produto '{new_product.name}' criado.")
+    flash(f'O produto "{name}" foi criado com sucesso!', 'success')
+    return redirect(url_for('main.manage_products'))
+
+def _delete_product_task(app, task_id, product_id):
+    with app.app_context():
+        task = BackgroundTask.query.get(task_id)
+        if not task:
+            return
+
+        try:
+            product = Produto.query.get(product_id)
+            if not product:
+                task.status = 'FAILED'
+                task.message = 'Produto não encontrado.'
+                db.session.commit()
+                return
+
+            leads_to_delete = Lead.query.filter_by(produto_id=product_id)
+            total_leads = leads_to_delete.count()
+
+            task.status = 'RUNNING'
+            task.total_items = total_leads
+            task.message = f"Excluindo {total_leads} leads associados ao produto '{product.name}'..."
+            db.session.commit()
+
+            # Delete related records in batches
+            lead_ids = [lead.id for lead in leads_to_delete]
+            for i in range(0, len(lead_ids), 100):
+                batch_ids = lead_ids[i:i+100]
+                ActivityLog.query.filter(ActivityLog.lead_id.in_(batch_ids)).delete(synchronize_session=False)
+                LeadConsumption.query.filter(LeadConsumption.lead_id.in_(batch_ids)).delete(synchronize_session=False)
+                Lead.query.filter(Lead.id.in_(batch_ids)).delete(synchronize_session=False)
+                db.session.commit()
+
+                task.progress = ((i + len(batch_ids)) / total_leads) * 100
+                task.items_processed = i + len(batch_ids)
+                task.message = f"Excluindo leads... ({task.items_processed}/{total_leads})"
+                db.session.commit()
+
+            db.session.delete(product)
+            db.session.commit()
+
+            task.status = 'COMPLETED'
+            task.progress = 100
+            task.message = "Produto e leads associados foram excluídos com sucesso."
+            db.session.commit()
+
+        except Exception as e:
+            db.session.rollback()
+            task.status = 'FAILED'
+            task.message = f"Erro durante a exclusão: {str(e)}"
+            db.session.commit()
+
+
+@bp.route('/admin/products/<int:id>/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_product(id):
+    """ Inicia a exclusão de um produto e seus leads associados em segundo plano. """
+    product = Produto.query.get_or_404(id)
+    
+    task_id = start_background_task(
+        _delete_product_task,
+        'DELETE_PRODUCT',
+        current_user.id,
+        f"Preparando para excluir o produto '{product.name}' e seus leads.",
+        product_id=id
+    )
+
+    return jsonify({
+        'status': 'processing',
+        'message': f'A exclusão do produto "{product.name}" e seus leads foi iniciada em segundo plano.',
+        'task_id': task_id
+    })
+
+@bp.route('/admin/manage-layouts')
+@login_required
+@require_role('super_admin')
+def manage_layouts():
+    """ Rota para exibir e gerenciar todos os layouts de mailing. """
+    layouts = LayoutMailing.query.options(joinedload(LayoutMailing.produto)).order_by(LayoutMailing.name).all()
+    return render_template('admin/manage_layouts.html', title="Gerenciar Layouts", layouts=layouts)
+
+@bp.route('/admin/layouts/<int:layout_id>/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_layout(layout_id):
+    """ Exclui um layout de mailing. """
+    layout = LayoutMailing.query.get_or_404(layout_id)
+    db.session.delete(layout)
+    db.session.commit()
+    log_system_action('LAYOUT_DELETED', entity_type='Layout', entity_id=layout_id, description=f"Layout '{layout.name}' excluído.")
+    flash(f'O layout "{layout.name}" foi excluído com sucesso!', 'success')
+    return redirect(url_for('main.manage_layouts'))
+
+@bp.route('/admin/manage-tabulations', methods=['GET'])
+@login_required
+@require_role('super_admin')
+def manage_tabulations():
+    """ Rota para exibir e gerenciar todas as tabulações. """
+    tabulations = Tabulation.query.order_by(Tabulation.name).all()
+    return render_template('admin/manage_tabulations.html', title="Gerenciar Tabulações", tabulations=tabulations)
+
+@bp.route('/admin/tabulations/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_tabulation():
+    """ Adiciona uma nova tabulação. """
+    name = request.form.get('name')
+    color = request.form.get('color')
+    is_recyclable = 'is_recyclable' in request.form
+    recycle_in_days = request.form.get('recycle_in_days')
+    is_positive_conversion = 'is_positive_conversion' in request.form
+
+    if not name:
+        flash('O nome da tabulação é obrigatório.', 'danger')
+        return redirect(url_for('main.manage_tabulations'))
+
+    new_tabulation = Tabulation(
+        name=name,
+        color=color,
+        is_recyclable=is_recyclable,
+        recycle_in_days=int(recycle_in_days) if is_recyclable and recycle_in_days else None,
+        is_positive_conversion=is_positive_conversion
+    )
+    db.session.add(new_tabulation)
+    db.session.commit()
+    
+    log_system_action('TABULATION_CREATED', entity_type='Tabulation', entity_id=new_tabulation.id, description=f"Tabulação '{new_tabulation.name}' criada.")
+    flash(f'A tabulação "{name}" foi criada com sucesso!', 'success')
+    return redirect(url_for('main.manage_tabulations'))
+
+@bp.route('/admin/tabulations/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@require_role('super_admin')
+def edit_tabulation(id):
+    """ Edita uma tabulação existente. """
+    tabulation = Tabulation.query.get_or_404(id)
+    if request.method == 'POST':
+        tabulation.name = request.form.get('name')
+        tabulation.color = request.form.get('color')
+        tabulation.is_recyclable = 'is_recyclable' in request.form
+        tabulation.recycle_in_days = int(request.form.get('recycle_in_days')) if tabulation.is_recyclable and request.form.get('recycle_in_days') else None
+        tabulation.is_positive_conversion = 'is_positive_conversion' in request.form
+        
+        db.session.commit()
+        log_system_action('TABULATION_UPDATED', entity_type='Tabulation', entity_id=tabulation.id, description=f"Tabulação '{tabulation.name}' atualizada.")
+        flash('Tabulação atualizada com sucesso!', 'success')
+        return redirect(url_for('main.manage_tabulations'))
+
+    return render_template('admin/edit_tabulation.html', title="Editar Tabulação", tabulation=tabulation)
+
+@bp.route('/admin/tabulations/<int:id>/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_tabulation(id):
+    """ Exclui uma tabulação. """
+    tabulation = Tabulation.query.get_or_404(id)
+    db.session.delete(tabulation)
+    db.session.commit()
+    log_system_action('TABULATION_DELETED', entity_type='Tabulation', entity_id=id, description=f"Tabulação '{tabulation.name}' excluída.")
+    flash('Tabulação excluída com sucesso!', 'success')
+    return redirect(url_for('main.manage_tabulations'))
+
+@bp.route('/admin/hygiene', methods=['GET', 'POST'])
+@login_required
+@require_role('super_admin')
+def hygiene_upload_page():
+    """ Exibe a página de upload para higienização e processa o arquivo enviado. """
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        if file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+
+        if file and allowed_file(file.filename):
+            try:
+                if file.filename.lower().endswith('.csv'):
+                    df = pd.read_csv(file.stream, sep=None, engine='python', encoding='latin1', dtype=str)
+                else:
+                    df = pd.read_excel(file.stream, dtype=str)
+
+                if df.empty:
+                    flash('O arquivo enviado está vazio.', 'warning')
+                    return redirect(request.url)
+
+                # Assume the first column contains the CPFs
+                cpf_column = df.columns[0]
+                cpfs_to_check = {re.sub(r'\D', '', str(cpf)) for cpf in df[cpf_column].dropna()}
+                
+                leads_to_delete = Lead.query.filter(Lead.cpf.in_(cpfs_to_check)).all()
+                
+                # Store the list of lead IDs in the session to pass to the next step
+                session['leads_to_delete_ids'] = [lead.id for lead in leads_to_delete]
+
+                return render_template('admin/hygiene_confirm.html', 
+                                       title="Confirmar Higienização", 
+                                       leads=leads_to_delete,
+                                       total_found=len(leads_to_delete))
+
+            except Exception as e:
+                flash(f'Erro ao processar o arquivo: {e}', 'danger')
+                return redirect(request.url)
+        else:
+            flash('Formato de arquivo inválido. Apenas .csv ou .xlsx são permitidos.', 'danger')
+            return redirect(request.url)
+
+    return render_template('admin/hygiene_upload.html', title="Higienizar Base")
+
+@bp.route('/admin/hygiene/execute', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def execute_hygiene():
+    """ Executa a exclusão dos leads selecionados para higienização. """
+    lead_ids_to_delete = session.pop('leads_to_delete_ids', [])
+
+    if not lead_ids_to_delete:
+        flash('Nenhum lead para excluir. A sessão pode ter expirado.', 'warning')
+        return redirect(url_for('main.hygiene_upload_page'))
+
+    try:
+        # Delete related records
+        ActivityLog.query.filter(ActivityLog.lead_id.in_(lead_ids_to_delete)).delete(synchronize_session=False)
+        LeadConsumption.query.filter(LeadConsumption.lead_id.in_(lead_ids_to_delete)).delete(synchronize_session=False)
+        
+        # Delete leads
+        leads_deleted_count = Lead.query.filter(Lead.id.in_(lead_ids_to_delete)).delete(synchronize_session=False)
+        
+        db.session.commit()
+        
+        log_system_action('HYGIENE_EXECUTED', entity_type='Lead', description=f"{leads_deleted_count} leads foram higienizados (excluídos).")
+        flash(f'{leads_deleted_count} leads foram removidos com sucesso!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Ocorreu um erro durante a exclusão: {e}', 'danger')
+
+    return redirect(url_for('main.hygiene_upload_page'))
