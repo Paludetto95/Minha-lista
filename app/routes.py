@@ -817,3 +817,231 @@ def atendimento():
                            vagas_na_puxada_diaria=vagas_na_puxada_diaria,
                            vagas_na_carteira=vagas_na_carteira,
                            leads_em_atendimento=leads_em_atendimento)
+
+@bp.route('/admin/manage-groups', methods=['GET'])
+@login_required
+@require_role('super_admin')
+def manage_groups():
+    """ Rota para exibir e gerenciar todos os grupos/equipes. """
+    
+    # Subquery para contar usuários por grupo
+    user_count_subquery = db.session.query(
+        User.grupo_id,
+        func.count(User.id).label('user_count')
+    ).group_by(User.grupo_id).subquery()
+
+    # Subquery para calcular o consumo mensal de leads por grupo
+    start_of_month = get_brasilia_time().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    monthly_consumption_subquery = db.session.query(
+        User.grupo_id,
+        func.count(LeadConsumption.id).label('monthly_consumption')
+    ).join(User, LeadConsumption.user_id == User.id)\
+     .filter(LeadConsumption.timestamp >= start_of_month)\
+     .group_by(User.grupo_id).subquery()
+
+    # Query principal para buscar os grupos com os dados agregados
+    teams_data = db.session.query(
+        Grupo,
+        func.coalesce(user_count_subquery.c.user_count, 0).label('user_count'),
+        func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
+    ).outerjoin(user_count_subquery, Grupo.id == user_count_subquery.c.grupo_id)\
+     .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
+     .order_by(Grupo.nome).all()
+
+    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_data)
+
+@bp.route('/admin/groups/add', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_group():
+    """ Adiciona um novo grupo/equipe. """
+    name = request.form.get('name')
+    monthly_pull_limit = request.form.get('monthly_pull_limit')
+    color = request.form.get('color')
+    logo_file = request.files.get('logo_file')
+
+    if not name:
+        flash('O nome da equipe é obrigatório.', 'danger')
+        return redirect(url_for('main.manage_groups'))
+
+    new_group = Grupo(
+        nome=name,
+        color=color,
+        monthly_pull_limit=int(monthly_pull_limit) if monthly_pull_limit else None
+    )
+
+    if logo_file:
+        logo_filename = save_partner_logo(logo_file)
+        if logo_filename:
+            new_group.logo_filename = logo_filename
+        else:
+            flash('Houve um erro ao salvar o logo.', 'warning')
+
+    db.session.add(new_group)
+    db.session.commit()
+    
+    log_system_action('GROUP_CREATED', entity_type='Group', entity_id=new_group.id, description=f"Equipe '{new_group.nome}' criada.")
+    flash(f'A equipe "{name}" foi criada com sucesso!', 'success')
+    return redirect(url_for('main.manage_groups'))
+
+@bp.route('/admin/groups/<int:group_id>/details')
+@login_required
+@require_role('super_admin')
+def team_details(group_id):
+    """ Exibe os detalhes de uma equipe/grupo específico. """
+    grupo = Grupo.query.get_or_404(group_id)
+    
+    admins = User.query.filter_by(grupo_id=group_id, role='admin_parceiro').all()
+    consultores = User.query.filter_by(grupo_id=group_id, role='consultor').all()
+    
+    # Calcula o consumo mensal do grupo
+    start_of_month = get_brasilia_time().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
+        .join(User, LeadConsumption.user_id == User.id)\
+        .filter(User.grupo_id == group_id, LeadConsumption.timestamp >= start_of_month)\
+        .scalar() or 0
+        
+    # Calcula o total de logins do grupo
+    total_logins_group = db.session.query(func.count(SystemLog.id)) \
+        .filter(SystemLog.action_type == 'LOGIN', SystemLog.user_id.in_([u.id for u in admins + consultores])) \
+        .scalar() or 0
+
+    # Usuários disponíveis para adicionar à equipe (que não estão em nenhuma ou estão na equipe "principal" e não são super_admin)
+    available_users = User.query.filter(
+        or_(User.grupo_id.is_(None), User.grupo_id == 1),
+        User.role != 'super_admin'
+    ).order_by(User.username).all()
+
+    return render_template('admin/team_details.html', 
+                           title=f"Detalhes da Equipe {grupo.nome}",
+                           grupo=grupo, 
+                           admins=admins, 
+                           consultores=consultores,
+                           monthly_consumption=monthly_consumption,
+                           total_logins_group=total_logins_group,
+                           available_users=available_users)
+
+@bp.route('/admin/groups/<int:group_id>/edit', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def edit_group_name_color(group_id):
+    """ Edita o nome, cor, limite e logo de um grupo. """
+    group = Grupo.query.get_or_404(group_id)
+    
+    # Obter dados do formulário
+    name = request.form.get('name')
+    color = request.form.get('color')
+    monthly_pull_limit = request.form.get('monthly_pull_limit')
+    remove_logo = request.form.get('remove_logo')
+    logo_file = request.files.get('logo_file')
+
+    if not name:
+        flash('O nome da equipe não pode ser vazio.', 'danger')
+        return redirect(url_for('main.team_details', group_id=group_id))
+
+    # Atualizar campos
+    group.nome = name
+    group.color = color
+    group.monthly_pull_limit = int(monthly_pull_limit) if monthly_pull_limit and monthly_pull_limit.isdigit() else None
+
+    # Lógica para o logo
+    if logo_file: # Novo logo enviado
+        if group.logo_filename: # Deleta o antigo se existir
+            delete_partner_logo(group.logo_filename)
+        logo_filename = save_partner_logo(logo_file)
+        if logo_filename:
+            group.logo_filename = logo_filename
+        else:
+            flash('Erro ao salvar o novo logo.', 'warning')
+    elif remove_logo: # Checkbox para remover logo marcada
+        if group.logo_filename:
+            delete_partner_logo(group.logo_filename)
+            group.logo_filename = None
+
+    db.session.commit()
+    log_system_action('GROUP_UPDATED', entity_type='Group', entity_id=group.id, description=f"Equipe '{group.nome}' atualizada.")
+    flash('Equipe atualizada com sucesso!', 'success')
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+@bp.route('/admin/groups/<int:group_id>/delete', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def delete_group(group_id):
+    """ Exclui um grupo se ele não tiver membros. """
+    group = Grupo.query.get_or_404(group_id)
+    if group.users.count() > 0:
+        flash('Não é possível excluir uma equipe que ainda tem membros.', 'danger')
+        return redirect(url_for('main.team_details', group_id=group_id))
+    
+    # Deletar logo associado se existir
+    if group.logo_filename:
+        delete_partner_logo(group.logo_filename)
+
+    db.session.delete(group)
+    db.session.commit()
+    log_system_action('GROUP_DELETED', entity_type='Group', entity_id=group_id, description=f"Equipe '{group.nome}' excluída.")
+    flash(f'A equipe "{group.nome}" foi excluída com sucesso.', 'success')
+    return redirect(url_for('main.manage_groups'))
+
+@bp.route('/admin/groups/<int:group_id>/add_member', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def add_member_to_team(group_id):
+    """ Adiciona ou atualiza um membro em uma equipe. """
+    group = Grupo.query.get_or_404(group_id)
+    user_id = request.form.get('user_id')
+    role = request.form.get('role')
+
+    if not user_id or not role:
+        flash('Usuário e Papel são obrigatórios.', 'danger')
+        return redirect(url_for('main.team_details', group_id=group_id))
+
+    user = User.query.get(user_id)
+    if not user:
+        flash('Usuário não encontrado.', 'danger')
+        return redirect(url_for('main.team_details', group_id=group_id))
+
+    user.grupo_id = group_id
+    user.role = role
+    db.session.commit()
+    
+    log_system_action('USER_ADDED_TO_GROUP', entity_type='Group', entity_id=group_id, description=f"Usuário '{user.username}' adicionado/atualizado na equipe '{group.nome}'.")
+    flash(f'Usuário {user.username} foi adicionado/atualizado na equipe {group.nome} como {role}.', 'success')
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+@bp.route('/admin/groups/<int:group_id>/remove_member/<int:user_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def remove_member_from_team(group_id, user_id):
+    """ Remove um membro de uma equipe, movendo-o para o grupo padrão. """
+    user = User.query.get_or_404(user_id)
+    
+    # Garante que o usuário pertence ao grupo do qual está sendo removido
+    if user.grupo_id != group_id:
+        flash('Este usuário não pertence a esta equipe.', 'warning')
+        return redirect(url_for('main.team_details', group_id=group_id))
+
+    # Encontra o grupo "Equipe Principal" ou cria se não existir
+    default_group = Grupo.query.filter_by(nome="Equipe Principal").first()
+    if not default_group:
+        default_group = Grupo(nome="Equipe Principal")
+        db.session.add(default_group)
+        db.session.flush() # Garante que o ID está disponível
+
+    user.grupo_id = default_group.id
+    user.role = 'consultor' # Papel padrão ao ser removido
+    db.session.commit()
+    
+    log_system_action('USER_REMOVED_FROM_GROUP', entity_type='Group', entity_id=group_id, description=f"Usuário '{user.username}' removido da equipe.")
+    flash(f'Usuário {user.username} foi removido da equipe.', 'success')
+    return redirect(url_for('main.team_details', group_id=group_id))
+
+@bp.route('/partner_logos/<filename>')
+def serve_partner_logo(filename):
+    """ Serve os logos dos parceiros a partir do volume. """
+    logo_path = current_app.config.get('PARTNER_LOGOS_FULL_PATH')
+    if not logo_path or not os.path.exists(os.path.join(logo_path, filename)):
+        # Se não encontrar, tenta servir de um caminho estático legado como fallback
+        return send_from_directory(os.path.join(current_app.root_path, 'static', 'partner_logos'), filename, as_attachment=False)
+    return send_from_directory(logo_path, filename, as_attachment=False)
