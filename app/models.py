@@ -48,7 +48,7 @@ class Lead(db.Model):
     telefone_2 = db.Column(db.String(20))
     cidade = db.Column(db.String(100))
     rg = db.Column(db.String(100))
-    estado = db.Column(db.String(2), index=True)
+    estado = db.Column(db.String(100), index=True)
     bairro = db.Column(db.String(100))
     cep = db.Column(db.String(10))
     convenio = db.Column(db.String(100))
