@@ -1,0 +1,233 @@
+<!-- app/templates/admin/map_columns.html (VERSÃO FINAL E CORRIGIDA) -->
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Estilos específicos para esta página no tema DARK */
+    body[data-theme="dark"] .table-bordered thead,
+    body[data-theme="dark"] .table-bordered tbody tr {
+        border-color: #495057; /* Borda da tabela */
+    }
+    body[data-theme="dark"] .table-bordered th,
+    body[data-theme="dark"] .table-bordered td {
+        border-color: #495057; /* Borda das células */
+    }
+    body[data-theme="dark"] .table-bordered {
+        --bs-table-bg: #343a40; /* Fundo da tabela */
+        --bs-table-color: #dee2e6; /* Cor do texto da tabela */
+    }
+
+    /* FORÇA O ESTILO DOS SELECTS E INPUTS DENTRO DA TABELA */
+    body[data-theme="dark"] .mapping-select,
+    body[data-theme="dark"] input.form-control[type="text"] { /* Para o input hidden de header_name */
+        background-color: #495057 !important;
+        color: #dee2e6 !important;
+        border-color: #6c757d !important;
+    }
+    body[data-theme="dark"] .mapping-select:focus,
+    body[data-theme="dark"] input.form-control[type="text"]:focus {
+        background-color: #495057 !important;
+        color: #fff !important;
+        border-color: #86b7fe !important;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    }
+    body[data-theme="dark"] .form-select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23dee2e6'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    }
+    /* Estilo para a label do checkbox "Salvar layout" */
+    body[data-theme="dark"] .card-body.bg-light {
+        background-color: #343a40 !important; /* Fundo do card inferior */
+        color: #dee2e6 !important; /* Texto da label */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Passo 2: Mapeamento de Colunas</h2>
+    <p>Associe as colunas do seu arquivo aos campos do sistema. O campo <strong>CPF</strong> é obrigatório.</p>
+    
+    <!-- Alerta para erros de validação -->
+    <div id="validation-alert" class="alert alert-danger" style="display: none;"></div>
+
+    <form action="{{ url_for('main.upload_step2_process') }}" method="POST" id="mapping-form">
+        <input type="hidden" name="temp_filename" value="{{ temp_filename }}">
+        <input type="hidden" name="produto_id" value="{{ produto_id }}">
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <!-- Cabeçalho da tabela com tema escuro -->
+                <thead class="table-secondary">
+                    <tr>
+                        <th style="width: 5%;">Incluir</th>
+                        <th style="width: 5%;">Coluna</th>
+                        <th style="width: 30%;">Nome da Coluna (do Arquivo)</th>
+                        <th style="width: 25%;">Mapear para Campo do Sistema</th>
+                        <th style="width: 25%;">Nome Personalizado (para campos Extra)</th>
+                        <th>Exemplo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for i, header in enumerate(headers) %}
+                    <tr>
+                        <td class="text-center">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input include-toggle" type="checkbox" role="switch" name="include_column_{{ i }}" checked>
+                            </div>
+                        </td>
+                        <td class="text-center">{{ i }}</td>
+                        <td class="fw-bold">
+                            {{ header }}
+                            <input type="hidden" name="header_name_{{ i }}" value="{{ header }}">
+                        </td>
+                        <td>
+                            <select name="mapping_{{ i }}" class="form-select form-select-sm mapping-select" data-row-index="{{ i }}">
+                                <option value="Ignorar">-- Ignorar esta coluna --</option>
+                                {% for field in system_fields %}
+                                    <option value="{{ field }}" 
+                                    {% if existing_mapping and existing_mapping.get(header) == field %}
+                                        selected
+                                    {% elif not existing_mapping and field.lower() in header.lower() %}
+                                        selected
+                                    {% endif %}>
+                                        {{ field | replace('_', ' ') | title }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            {% set mapped_field = existing_mapping.get(header) %}
+                            <input type="text" name="extra_name_{{ i }}" id="extra_name_{{ i }}" 
+                                   class="form-control form-control-sm extra-name-input" 
+                                   placeholder="Nome para exibição"
+                                   style="display: none;"
+                                   value="{{ extra_names.get(mapped_field) if mapped_field and mapped_field.startswith('extra_') else '' }}">
+                        </td>
+                        <td><small class="text-muted">{{ sample_rows[0].get(header, '') if sample_rows else '' }}</small></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card mt-4">
+            <!-- A classe bg-light foi removida do card-body para que o estilo do tema dark seja aplicado -->
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="save_layout" id="save_layout">
+                    <label class="form-check-label" for="save_layout">
+                        <strong>Salvar este mapeamento como um novo Layout para uso futuro</strong>
+                    </label>
+                </div>
+                <div id="layout-name-container" style="display: none;">
+                    <input type="text" name="layout_name" class="form-control" placeholder="Dê um nome para este layout (ex: Mailing Banco X - Consignado)">
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center">
+            <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-secondary btn-lg">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-lg">Validar e Importar Leads</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const saveLayoutCheckbox = document.getElementById('save_layout');
+    const layoutNameContainer = document.getElementById('layout-name-container');
+
+    if (saveLayoutCheckbox) {
+        saveLayoutCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                layoutNameContainer.style.display = 'block';
+                layoutNameContainer.querySelector('input').required = true;
+            } else {
+                layoutNameContainer.style.display = 'none';
+                layoutNameContainer.querySelector('input').required = false;
+            }
+        });
+    }
+
+    document.querySelectorAll('.mapping-select').forEach(select => {
+        const rowIndex = select.dataset.rowIndex;
+        const extraNameInput = document.getElementById('extra_name_' + rowIndex);
+
+        function toggleExtraNameInput() {
+            if (select.value.startsWith('extra_')) {
+                extraNameInput.style.display = 'block';
+            } else {
+                extraNameInput.style.display = 'none';
+                extraNameInput.value = ''; // Limpa o valor se não for um campo extra
+            }
+        }
+
+        select.addEventListener('change', toggleExtraNameInput);
+        
+        // Executa na inicialização para campos pré-selecionados
+        toggleExtraNameInput();
+    });
+
+    const form = document.getElementById('mapping-form');
+    const validationAlert = document.getElementById('validation-alert');
+
+    form.addEventListener('submit', function(event) {
+        validationAlert.style.display = 'none';
+        validationAlert.textContent = '';
+        document.querySelectorAll('.mapping-select').forEach(select => {
+            select.classList.remove('is-invalid');
+        });
+
+        const selectedValues = new Map();
+        let hasError = false;
+        let firstInvalidField = null;
+
+        document.querySelectorAll('.mapping-select').forEach(select => {
+            const selectedValue = select.value;
+            if (selectedValue !== 'Ignorar') {
+                if (selectedValues.has(selectedValue)) {
+                    hasError = true;
+                    const originalSelect = selectedValues.get(selectedValue);
+                    
+                    select.classList.add('is-invalid');
+                    originalSelect.classList.add('is-invalid');
+                    
+                    if (!firstInvalidField) {
+                        firstInvalidField = originalSelect;
+                    }
+
+                    validationAlert.textContent = `Erro: O campo do sistema "${selectedValue.replace(/_/g, ' ').toUpperCase()}" foi mapeado para mais de uma coluna.`;
+                } else {
+                    selectedValues.set(selectedValue, select);
+                }
+            }
+        });
+
+        // Validação dos campos obrigatórios
+        const requiredFields = ['cpf', 'nome']; // Adicionado 'nome' como obrigatório
+        for (const field of requiredFields) {
+            if (!selectedValues.has(field)) {
+                hasError = true;
+                validationAlert.textContent = `Erro: O campo obrigatório "${field.toUpperCase()}" não foi mapeado.`;
+                break;
+            }
+        }
+
+        if (hasError) {
+            event.preventDefault();
+            validationAlert.style.display = 'block';
+            
+            if (firstInvalidField) {
+                firstInvalidField.focus();
+            } else {
+                window.scrollTo(0, 0);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

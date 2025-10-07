@@ -1,0 +1,28 @@
+<!-- app/templates/profile.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Minhas Configurações</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h5 class="mb-0">Preferências de Aparência</h5>
+        </div>
+        <div class="card-body">
+            <p>A sua escolha de tema é salva no seu perfil e será aplicada em todos os dispositivos que você usar para acessar o sistema.</p>
+            <form method="POST" action="{{ url_for('main.profile') }}">
+                <div class="mb-3">
+                    <label for="theme" class="form-label fw-bold">Selecione um Tema para o Sistema</label>
+                    <select name="theme" id="theme" class="form-select">
+                        <option value="default" {% if current_user.theme == 'default' %}selected{% endif %}>Padrão (Claro)</option>
+                        <option value="dark" {% if current_user.theme == 'dark' %}selected{% endif %}>Escuro (Dark)</option>
+                        <option value="ocean" {% if current_user.theme == 'ocean' %}selected{% endif %}>Oceano (Azul)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Salvar Tema</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} - Sistema</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Garante que não haja scroll */
+            background-color: #e9ecef; /* Fundo cinza na página inteira */
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .login-header-nav {
+            background: linear-gradient(90deg, rgba(13,27,42,1) 0%, rgba(27,38,59,1) 100%);
+            color: #fff;
+            padding: 1rem 2rem;
+            flex-shrink: 0;
+            height: 180px; /* Altura generosa para a sobreposição */
+        }
+        
+        .login-header-nav .navbar-brand {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .login-container {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        /* ===== ALTERAÇÕES PRINCIPAIS AQUI ===== */
+        .login-wrapper {
+            width: 100%;
+            max-width: 380px;
+            /* 1. SOMBRA MAIS FORTE */
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.2); 
+            border-radius: 12px;
+            overflow: hidden;
+            text-align: center;
+            background-color: #fff;
+            position: relative;
+            /* 2. EFEITO DE SOBREPOSIÇÃO RESTAURADO */
+            margin-top: -180px; 
+        }
+
+        .logo-header {
+            background-color: #fff; 
+            padding: 2.5rem 1rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .login-logo {
+            max-width: 380px;
+            height: auto;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            padding-right: 10px;
+        }
+
+        .login-card {
+            background: #fff;
+            padding: 2.5rem;
+            padding-top: 1.5rem;
+            text-align: left;
+        }
+
+        .login-card h4 {
+            font-weight: 600;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .alert.alert-info {
+            background-color: #e0f2f7;
+            border-color: #b1ddec;
+            color: #0c5460;
+        }
+        .alert.alert-danger {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .btn-primary {
+            background-color: #0378A6 !important;
+            border-color: #0378A6 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="login-header-nav">
+        <nav class="navbar">
+            <span class="navbar-brand mb-0 h1"></span>
+        </nav>
+    </header>
+
+    <main class="login-container">
+        <div class="login-wrapper">
+
+            <div class="logo-header">
+                <img src="{{ url_for('static', filename='images/Renderlogo.png') }}" alt="Logo da Empresa" class="login-logo">
+            </div>
+
+            <div class="login-card">
+                
+                <h4>Acesso ao Sistema</h4>
+
+                <form method="POST" action="{{ url_for('main.login') }}">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="remember_me" name="remember_me">
+                        <label class="form-check-label" for="remember_me">Lembrar-me</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+                </form>
+
+                <div class="message-container mt-4">
+                  {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                      {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} text-center py-2">
+                          {{ message }}
+                        </div>
+                      {% endfor %}
+                    {% endif %}
+                  {% endwith %}
+                </div>
+
+            </div>
+        </div>
+    </main>
+    
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!-- app/templates/admin/manage_groups.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Gerenciar Grupos (Parceiros)</h2>
+
+    <div class="row">
+        <!-- Coluna para adicionar novo grupo -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Adicionar Novo Grupo</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('main.add_group') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Nome do Grupo/Parceiro</label>
+                            <input type="text" name="name" id="name" class="form-control" placeholder="Ex: Parceiro Vendas ABC" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Adicionar Grupo</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para listar grupos existentes -->
+        <div class="col-md-8 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Grupos Existentes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nome do Grupo</th>
+                                    <!-- Ações futuras podem ser adicionadas aqui -->
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for grupo in grupos %}
+                                <tr>
+                                    <td>{{ grupo.id }}</td>
+                                    <td>{{ grupo.nome }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-3">Nenhum grupo cadastrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

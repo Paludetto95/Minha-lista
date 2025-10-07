@@ -1,0 +1,134 @@
+<!-- app/templates/parceiro/dashboard.html (VERSÃO FINAL COM LOGO DO PARCEIRO) -->
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Estilos para o logo do parceiro no painel */
+    .partner-dashboard-logo {
+        /* MODIFICADO: Aumenta a altura máxima para o logo no painel do parceiro */
+        max-height: 100px;
+        width: auto;
+        margin-right: 15px;
+        vertical-align: middle;
+        object-fit: contain;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .dashboard-title-container {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .dashboard-group-name {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--bs-body-color);
+    }
+    body[data-theme="dark"] .dashboard-group-name {
+        color: #fff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        {# MODIFICADO: Título do painel para exibir logo e nome do grupo #}
+        <div class="dashboard-title-container">
+            {% if current_user.grupo and current_user.grupo.logo_filename %}
+                {# MODIFICADO: URL AGORA APONTA PARA A ROTA DO FLASK 'serve_partner_logo' #}
+                <img src="{{ url_for('main.serve_partner_logo', filename=current_user.grupo.logo_filename) }}" 
+                     alt="Logo {{ current_user.grupo.nome }}" 
+                     class="partner-dashboard-logo">
+                <span class="dashboard-group-name">{{ current_user.grupo.nome }}</span>
+            {% else %}
+                <h2>Painel de Gestão - {{ current_user.grupo.nome }}</h2>
+            {% endif %}
+        </div>
+        {# FIM MODIFICAÇÃO TÍTULO DO PAINEL #}
+    </div>
+
+    <div class="row">
+        <!-- Coluna Esquerda: Consumo Mensal de Leads e Ações Rápidas -->
+        <div class="col-md-6 mb-4">
+            <!-- Card de Consumo Mensal de Leads (Scoreboard) -->
+            <div class="card bg-primary text-white shadow-lg mb-4">
+                <div class="card-body text-center py-3">
+                    <h5 class="card-title mb-1">Consumo Mensal de Leads</h5>
+                    <p class="card-text display-4 fw-bold">{{ monthly_consumption }} / <span class="text-light">{{ grupo.monthly_pull_limit or '∞' }}</span></p>
+                </div>
+            </div>
+
+            <!-- Coluna de Ações Rápidas -->
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0">Ações Rápidas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('main.parceiro_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold">
+                            <i class="fas fa-satellite-dish me-2"></i>Monitorar Minha Equipe
+                        </a>
+                        <a href="{{ url_for('main.parceiro_performance_dashboard') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-tachometer-alt me-2"></i>Dashboard de Desempenho
+                        </a>
+                        <a href="{{ url_for('main.parceiro_manage_users') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-users-cog me-2"></i>Gerir Consultores e Leads
+                        </a>
+                        <a href="{{ url_for('main.export_tabulations') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-file-export me-2"></i>Exportar Relatório de Tabulações
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita: Últimas Atividades -->
+        <div class="col-md-6 mb-4">
+            <!-- Card de Últimas Atividades -->
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Últimas Atividades da Equipe</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openFullscreenActivity()">
+                        <i class="fas fa-expand me-1"></i> Tela Cheia
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                    {% for log_entry in recent_activity %}
+                        <li class="list-group-item">
+                            <!-- Mostra o nome do cliente e a tabulação escolhida -->
+                            {{ log_entry.lead.nome if log_entry.lead else 'Lead Apagado' }} - 
+                            <strong style="color: {{ log_entry.tabulation.color }};">
+                                {% if log_entry.action_type == 'Reciclagem' %}
+                                    <i class="fas fa-recycle me-1" title="Reciclagem"></i>
+                                {% endif %}
+                                {{ log_entry.tabulation.name if log_entry.tabulation else 'Sem Tabulação' }}
+                            </strong>
+                            <!-- Mostra quem fez e quando -->
+                            <small class="text-muted d-block">
+                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp.strftime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
+                            </small>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-center text-muted py-4">Nenhuma atividade registrada pela equipe recentemente.</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openFullscreenActivity() {
+        const userTheme = "{{ current_user.theme }}"; // Get the current user's theme
+        const url = "{{ url_for('main.parceiro_atividades_fullscreen') }}?theme=" + userTheme;
+        const newWindow = window.open(url, "_blank", "fullscreen=yes");
+        // No automatic fullscreen on load, user will trigger it from the new window
+    }
+</script>
+{% endblock %}
