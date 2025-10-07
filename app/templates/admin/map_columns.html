@@ -54,6 +54,7 @@
     <form action="{{ url_for('main.upload_step2_process') }}" method="POST" id="mapping-form">
         <input type="hidden" name="temp_filename" value="{{ temp_filename }}">
         <input type="hidden" name="produto_id" value="{{ produto_id }}">
+        <input type="hidden" name="layout_id" value="{{ layout_id }}">
 
         <div class="table-responsive">
             <table class="table table-bordered table-hover align-middle">

@@ -389,6 +389,8 @@ def upload_step2_process():
     form_data = request.form
     temp_filename = form_data.get('temp_filename')
     produto_id = form_data.get('produto_id')
+    layout_id = form_data.get('layout_id')
+
     if not all([temp_filename, produto_id]):
         flash('Erro: informações da importação foram perdidas.', 'danger')
         return redirect(url_for('main.admin_dashboard'))
@@ -405,6 +407,14 @@ def upload_step2_process():
         layout_mapping_to_save = {}
         extra_field_names = {} # Para armazenar os nomes personalizados dos campos extra
         ignored_columns_headers = []
+
+        layout_extra_names = {}
+        if layout_id:
+            layout = LayoutMailing.query.get(layout_id)
+            if layout and layout.mapping:
+                for field, value in layout.mapping.items():
+                    if isinstance(value, dict):
+                        layout_extra_names[field] = value.get('name', '')
         
         df_headers = pd.read_excel(temp_filepath, nrows=0) if temp_filepath.endswith('.xlsx') else pd.read_csv(temp_filepath, nrows=0, sep=None, engine='python', encoding='latin1', dtype=str)
         
@@ -481,7 +491,7 @@ def upload_step2_process():
                 for system_field, original_header in mapping.items():
                     valor = row.get(original_header)
                     if pd.notna(valor):
-                        display_name = extra_field_names.get(system_field, system_field)
+                        display_name = extra_field_names.get(system_field, layout_extra_names.get(system_field, system_field))
                         
                         if system_field.startswith('extra_'):
                             additional_data[display_name] = str(valor).strip()
