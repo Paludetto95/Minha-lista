@@ -491,7 +491,7 @@ def upload_step2_process():
                 for system_field, original_header in mapping.items():
                     valor = row.get(original_header)
                     if pd.notna(valor):
-                        display_name = extra_field_names.get(system_field, layout_extra_names.get(system_field, system_field))
+                        display_name = extra_field_names.get(system_field) or layout_extra_names.get(system_field) or system_field
                         
                         if system_field.startswith('extra_'):
                             additional_data[display_name] = str(valor).strip()
