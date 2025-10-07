@@ -2139,12 +2139,15 @@ def consultor_dashboard():
     ).count()
     vagas_na_puxada_diaria = current_user.daily_pull_limit - leads_consumidos_hoje
 
+    # Filter mailings based on user's group
+    produtos_permitidos_ids = [p.id for p in current_user.grupo.produtos]
     mailings_disponiveis = db.session.query(
         Lead.produto_id,
         Produto.name.label('produto_nome'),
         Lead.estado,
         func.count(Lead.id).label('leads_disponiveis')
     ).join(Produto, Lead.produto_id == Produto.id).filter(
+        Lead.produto_id.in_(produtos_permitidos_ids),
         Lead.status == 'Novo',
         or_(Lead.available_after.is_(None), Lead.available_after <= get_brasilia_time())
     ).group_by(Lead.produto_id, Produto.name, Lead.estado).order_by(Produto.name, Lead.estado).all()
@@ -2189,7 +2192,7 @@ def consultor_dashboard():
                            tabulated_history=tabulated_history,
                            search_history=search_history,
                            all_tabulations=all_tabulations,
-                           available_products=Produto.query.all(),
+                           available_products=current_user.grupo.produtos,
                            produtos_em_atendimento=produtos_em_atendimento)
 
 @bp.route('/consultor/get_lead', methods=['POST'])
