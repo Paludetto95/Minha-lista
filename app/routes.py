@@ -481,14 +481,12 @@ def upload_step2_process():
                 for system_field, original_header in mapping.items():
                     valor = row.get(original_header)
                     if pd.notna(valor):
-                        # Se for um campo extra, usa o nome personalizado (se houver), senão o nome do campo
                         display_name = extra_field_names.get(system_field, system_field)
                         
-                        if system_field in campos_do_modelo_lead:
-                            row_data[system_field] = str(valor).strip()
-                        else:
-                            # Garante que campos extra usem o nome personalizado no additional_data
+                        if system_field.startswith('extra_'):
                             additional_data[display_name] = str(valor).strip()
+                        elif system_field in campos_do_modelo_lead:
+                            row_data[system_field] = str(valor).strip()
                 
                 final_lead_data = {
                     'produto_id': produto_id,
@@ -2484,7 +2482,8 @@ def atendimento():
     exclude_fields = [
         'id', 'consultor_id', 'produto_id', 'tabulation_id', 'additional_data', 
         'consultor', 'produto', 'tabulation', 'activities', 'consumptions',
-        'available_after', 'data_tabulacao'
+        'available_after', 'data_tabulacao',
+        'extra_1', 'extra_2', 'extra_3', 'extra_4', 'extra_5', 'extra_6', 'extra_7', 'extra_8', 'extra_9', 'extra_10'
     ]
 
     field_labels = {
