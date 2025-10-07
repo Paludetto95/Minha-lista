@@ -602,8 +602,10 @@ def manage_teams():
     .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
     .order_by(Grupo.nome)\
     .all()
+    
+    all_products = Produto.query.order_by(Produto.name).all()
 
-    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts)
+    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts, all_products=all_products)
 
 @bp.route('/admin/teams/<int:group_id>')
 @login_required
@@ -633,6 +635,8 @@ def team_details(group_id):
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month)\
             .scalar() or 0
+            
+    all_products = Produto.query.order_by(Produto.name).all()
 
     return render_template(
         'admin/team_details.html', 
@@ -642,7 +646,8 @@ def team_details(group_id):
         consultores=consultores,
         total_logins_group=total_logins_group,
         available_users=available_users,
-        monthly_consumption=monthly_consumption 
+        monthly_consumption=monthly_consumption, 
+        all_products=all_products
     )
 
 @bp.route('/admin/groups/add', methods=['POST'])
@@ -676,6 +681,11 @@ def add_group():
                 logo_filename=logo_filename,
                 monthly_pull_limit=monthly_pull_limit
             )
+            produto_ids = request.form.getlist('produtos')
+            if produto_ids:
+                produtos = Produto.query.filter(Produto.id.in_(produto_ids)).all()
+                new_group.produtos.extend(produtos)
+
             db.session.add(new_group)
             db.session.commit()
             flash('Equipe adicionada com sucesso!', 'success')
@@ -695,7 +705,7 @@ def add_group():
 @bp.route('/admin/groups/edit/<int:group_id>', methods=['POST'])
 @login_required
 @require_role('super_admin')
-def edit_group_name_color(group_id):
+def edit_group(group_id):
     grupo = Grupo.query.get_or_404(group_id)
     old_details = {
         'name': grupo.nome, 'color': grupo.color, 'logo': grupo.logo_filename,
@@ -738,8 +748,13 @@ def edit_group_name_color(group_id):
                 delete_partner_logo(grupo.logo_filename)
             changes['logo'] = {'old': old_details['logo'], 'new': saved_filename}
             grupo.logo_filename = saved_filename
+            
+    produto_ids = request.form.getlist('produtos')
+    
+    selected_produtos = Produto.query.filter(Produto.id.in_(produto_ids)).all()
+    grupo.produtos = selected_produtos
 
-    if changes:
+    if changes or set(grupo.produtos) != set(selected_produtos):
         db.session.commit()
         flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
         log_system_action('GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
@@ -1083,6 +1098,29 @@ def delete_product(id):
                       details={'task_id': task_id})
     return jsonify({'status': 'processing', 'task_id': task_id, 'message': f"A exclusão do produto '{product_name}' e seus leads associados foi iniciada em segundo plano."})
 
+@bp.route('/admin/products/edit/<int:product_id>', methods=['GET', 'POST'])
+@login_required
+@require_role('super_admin')
+def edit_product(product_id):
+    product = Produto.query.get_or_404(product_id)
+    if request.method == 'POST':
+        new_name = request.form.get('name')
+        if new_name:
+            product.name = new_name
+
+        group_ids = request.form.getlist('groups')
+        selected_groups = Grupo.query.filter(Grupo.id.in_(group_ids)).all()
+        product.grupos = selected_groups
+        
+        db.session.commit()
+        flash('Produto atualizado com sucesso!', 'success')
+        log_system_action('PRODUCT_UPDATED', entity_type='Product', entity_id=product.id,
+                          description=f"Produto '{product.name}' atualizado.",
+                          details={'name': product.name, 'assigned_groups': [g.name for g in product.grupos]})
+        return redirect(url_for('main.manage_products'))
+
+    all_groups = Grupo.query.order_by(Grupo.nome).all()
+    return render_template('admin/edit_product.html', title="Editar Produto", product=product, all_groups=all_groups)
 @bp.route('/admin/layouts')
 @login_required
 @require_role('super_admin')
@@ -2163,6 +2201,14 @@ def get_lead():
         flash('Selecione um produto para puxar o lead.', 'warning')
         return redirect(url_for('main.consultor_dashboard'))
 
+    # VERIFICA SE O GRUPO DO USUÁRIO TEM ACESSO AO PRODUTO
+    produto = Produto.query.get(produto_id)
+    if not produto or produto not in current_user.grupo.produtos:
+        flash('Você não tem permissão para puxar leads deste produto.', 'danger')
+        log_system_action('LEAD_PULL_FAILED', entity_type='Lead',
+                          description=f"Usuário '{current_user.username}' tentou puxar lead do produto '{produto.name if produto else produto_id}' sem permissão.")
+        return redirect(url_for('main.consultor_dashboard'))
+
     current_wallet_size = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').count()
     if current_wallet_size >= current_user.wallet_limit:
         flash(f'Você atingiu o limite de {current_user.wallet_limit} leads na sua carteira.', 'danger')
@@ -2212,12 +2258,22 @@ def pegar_leads_selecionados():
     form_data = request.form
     total_leads_a_pegar = 0
     leads_a_pegar_por_lote = {}
+    
+    # VERIFICA AS PERMISSÕES ANTES DE PROCESSAR
+    produtos_permitidos_ids = {p.id for p in current_user.grupo.produtos}
 
     for key, value in form_data.items():
         if key.startswith('leads_') and value.isdigit() and int(value) > 0:
             try:
                 produto_id_str, estado = key.split('_')[1].split('-', 1)
                 produto_id = int(produto_id_str)
+                
+                if produto_id not in produtos_permitidos_ids:
+                    flash(f'Você não tem permissão para puxar leads do produto selecionado (ID: {produto_id}).', 'danger')
+                    log_system_action('LEAD_PULL_FAILED', entity_type='Lead',
+                                      description=f"Usuário '{current_user.username}' tentou puxar leads em lote de produto não permitido (ID: {produto_id}).")
+                    return redirect(url_for('main.consultor_dashboard'))
+
                 quantidade = int(value)
                 total_leads_a_pegar += quantidade
                 if (produto_id, estado) not in leads_a_pegar_por_lote:

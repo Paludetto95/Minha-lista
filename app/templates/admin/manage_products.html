@@ -46,6 +46,9 @@
                                     <td>{{ product.id }}</td>
                                     <td>{{ product.name }}</td>
                                     <td class="text-end">
+                                        <a href="{{ url_for('main.edit_product', product_id=product.id) }}" class="btn btn-sm btn-outline-primary" title="Gerenciar Produto">
+                                            <i class="fas fa-cogs"></i> Gerenciar
+                                        </a>
                                         <!-- MODIFICADO: Botão de exclusão para acionar o modal de progresso -->
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-danger btn-delete-product" 

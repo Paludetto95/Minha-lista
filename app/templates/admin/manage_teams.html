@@ -110,6 +110,14 @@
             <div class="mb-3"><label for="monthly_pull_limit" class="form-label">Limite Mensal de Puxada</label><input type="number" name="monthly_pull_limit" class="form-control" placeholder="Deixe em branco para ilimitado"></div>
             <div class="mb-3"><label for="color" class="form-label">Cor da Equipe</label><input type="color" name="color" class="form-control form-control-color" value="#6c757d" title="Escolha uma cor"></div>
             <div class="mb-3"><label for="logo_file" class="form-label">Logo da Equipe (Opcional)</label><input class="form-control" type="file" name="logo_file" accept="image/png, image/jpeg, image/gif"></div>
+            <div class="mb-3">
+                <label for="produtos" class="form-label">Produtos Ativos para a Equipe</label>
+                <select name="produtos" class="form-select" multiple aria-label="Selecione os produtos">
+                    {% for product in all_products %}
+                        <option value="{{ product.id }}">{{ product.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar Equipe</button></div>
       </form>

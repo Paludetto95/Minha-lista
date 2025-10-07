@@ -112,7 +112,7 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="editTeamModalLabel">Editar Equipe: {{ grupo.nome }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-      <form action="{{ url_for('main.edit_group_name_color', group_id=grupo.id) }}" method="POST" enctype="multipart/form-data">
+      <form action="{{ url_for('main.edit_group', group_id=grupo.id) }}" method="POST" enctype="multipart/form-data">
         <div class="modal-body">
             <div class="mb-3"><label for="name" class="form-label">Nome da Equipe</label><input type="text" name="name" class="form-control" value="{{ grupo.nome }}" required></div>
             <div class="mb-3"><label for="color" class="form-label">Cor do Grupo</label><input type="color" class="form-control form-control-color" name="color" value="{{ grupo.color }}" title="Escolha uma cor"></div>
@@ -131,6 +131,14 @@
                 {% endif %}
                 <input class="form-control" type="file" name="logo_file" accept="image/png, image/jpeg, image/gif">
                 <small class="form-text text-muted">Enviar novo arquivo substituirá o atual.</small>
+            </div>
+            <div class="mb-3">
+                <label for="produtos" class="form-label">Produtos Ativos para a Equipe</label>
+                <select name="produtos" class="form-select" multiple aria-label="Selecione os produtos">
+                    {% for product in all_products %}
+                        <option value="{{ product.id }}" {% if product in grupo.produtos %}selected{% endif %}>{{ product.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Salvar Alterações</button></div>

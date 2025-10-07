@@ -146,6 +146,12 @@ class Tabulation(db.Model):
     leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')
     activity_logs = db.relationship('ActivityLog', back_populates='tabulation', lazy='dynamic')
 
+# Tabela de associação entre Grupo e Produto
+grupo_produto = db.Table('grupo_produto',
+    db.Column('grupo_id', db.Integer, db.ForeignKey('grupo.id'), primary_key=True),
+    db.Column('produto_id', db.Integer, db.ForeignKey('produto.id'), primary_key=True)
+)
+
 class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -153,6 +159,8 @@ class Produto(db.Model):
     # Relacionamentos
     leads = db.relationship('Lead', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
     layouts = db.relationship('LayoutMailing', back_populates='produto', cascade="all, delete-orphan", lazy='dynamic')
+    grupos = db.relationship('Grupo', secondary=grupo_produto, back_populates='produtos')
+
 
 class LayoutMailing(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -185,6 +193,7 @@ class Grupo(db.Model):
     
     # Relacionamento
     users = db.relationship('User', backref='grupo', lazy='dynamic')
+    produtos = db.relationship('Produto', secondary=grupo_produto, back_populates='grupos')
 
 class BackgroundTask(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
