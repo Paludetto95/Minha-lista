@@ -1116,7 +1116,7 @@ def edit_product(product_id):
         flash('Produto atualizado com sucesso!', 'success')
         log_system_action('PRODUCT_UPDATED', entity_type='Product', entity_id=product.id,
                           description=f"Produto '{product.name}' atualizado.",
-                          details={'name': product.name, 'assigned_groups': [g.name for g in product.grupos]})
+                          details={'name': product.name, 'assigned_groups': [g.nome for g in product.grupos]})
         return redirect(url_for('main.manage_products'))
 
     all_groups = Grupo.query.order_by(Grupo.nome).all()
