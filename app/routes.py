@@ -225,7 +225,7 @@ def profile():
 @login_required
 @require_role('super_admin')
 def admin_dashboard():
-    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
+    all_products = Produto.query.order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     page = request.args.get('page', 1, type=int)
     recent_activity = ActivityLog.query.options(
@@ -235,7 +235,7 @@ def admin_dashboard():
     ).order_by(ActivityLog.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
     
     return render_template('admin/admin_dashboard.html', 
-                           all_products=active_products, 
+                           all_products=all_products, 
                            all_layouts=all_layouts, 
                            recent_activity=recent_activity)
 
@@ -655,7 +655,7 @@ def team_details(group_id):
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month).scalar()
     # Get IDs of active products (those with new leads)
-    active_product_ids = {row.id for row in db.session.query(Produto.id).join(Lead).filter(Lead.status == 'Novo').distinct().all()}
+    active_product_ids = {row.id for row in db.session.query(Produto.id).join(Lead).filter(Lead.status.ilike('novo')).distinct().all()}
     
     # Get IDs of products already associated with the group
     group_product_ids = {p.id for p in grupo.produtos}
