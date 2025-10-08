@@ -654,7 +654,7 @@ def team_details(group_id):
         monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month).scalar()
-    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
+    all_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
 
     return render_template(
         'admin/team_details.html', 
