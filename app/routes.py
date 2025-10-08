@@ -622,9 +622,9 @@ def manage_teams():
     .order_by(Grupo.nome)\
     .all()
     
-    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
+    all_products = Produto.query.order_by(Produto.name).all()
 
-    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts, all_products=active_products)
+    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts, all_products=all_products)
 
 @bp.route('/admin/teams/<int:group_id>')
 @login_required
