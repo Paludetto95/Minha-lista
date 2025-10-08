@@ -607,6 +607,7 @@ def manage_teams():
         func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
     ).outerjoin(User, Grupo.id == User.grupo_id)\
     .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
+    .options(joinedload(Grupo.produtos))\
     .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
     .order_by(Grupo.nome)\
     .all()
@@ -1064,8 +1065,13 @@ def serve_partner_logo(filename):
 @login_required
 @require_role('super_admin')
 def manage_products():
-    products = Produto.query.order_by(Produto.name).all()
-    return render_template('admin/manage_products.html', title="Gerir Produtos", products=products)
+    search_query = request.args.get('search_query', '').strip()
+    if search_query:
+        search_pattern = f"%{search_query}%"
+        products = Produto.query.filter(Produto.name.ilike(search_pattern)).order_by(Produto.name).all()
+    else:
+        products = Produto.query.order_by(Produto.name).all()
+    return render_template('admin/manage_products.html', title="Gerir Produtos", products=products, search_query=search_query)
 
 @bp.route('/admin/products/add', methods=['POST'])
 @login_required

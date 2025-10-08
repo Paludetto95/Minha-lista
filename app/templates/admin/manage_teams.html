@@ -60,6 +60,17 @@
                             <h5 class="card-title mb-2">{{ grupo.nome }}</h5>
                             <p class="card-text text-muted mb-auto">{{ user_count }} Membro(s)</p>
 
+                            <div class="mt-3">
+                                <small class="text-muted d-block mb-1">Produtos Ativos</small>
+                                {% if grupo.produtos %}
+                                    {% for product in grupo.produtos %}
+                                        <span class="badge bg-info text-dark">{{ product.name }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted small">Nenhum</p>
+                                {% endif %}
+                            </div>
+
                             <!-- INÍCIO DA BARRA DE PROGRESSO VISUAL -->
                             <div class="mt-3">
                                 <small class="text-muted d-block mb-1">Consumo Mensal</small>
