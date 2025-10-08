@@ -225,7 +225,7 @@ def profile():
 @login_required
 @require_role('super_admin')
 def admin_dashboard():
-    all_products = Produto.query.order_by(Produto.name).all()
+    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
     all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
     page = request.args.get('page', 1, type=int)
     recent_activity = ActivityLog.query.options(
@@ -235,8 +235,7 @@ def admin_dashboard():
     ).order_by(ActivityLog.timestamp.desc()).paginate(page=page, per_page=10, error_out=False)
     
     return render_template('admin/admin_dashboard.html', 
-                           title='Dashboard do Admin', 
-                           all_products=all_products, 
+                           all_products=active_products, 
                            all_layouts=all_layouts, 
                            recent_activity=recent_activity)
 
@@ -563,10 +562,22 @@ def manage_users():
         except ValueError:
             flash("ID de grupo inválido para filtro.", "warning")
 
-    order_expression = text(f'{sort_by} {sort_order}')
+    sort_map = {
+        'username': User.username,
+        'email': User.email,
+        'role': User.role,
+        'group': Grupo.nome
+    }
+    
+    order_column = sort_map.get(sort_by, User.username)
+    
+    if sort_order.lower() == 'desc':
+        order_expression = order_column.desc()
+    else:
+        order_expression = order_column.asc()
+
     if sort_by == 'group':
         users_query = users_query.outerjoin(Grupo)
-        order_expression = text(f'grupo.nome {sort_order}')
 
     pagination = users_query.order_by(order_expression).paginate(page=page, per_page=25, error_out=False)
     users = pagination.items
@@ -612,9 +623,9 @@ def manage_teams():
     .order_by(Grupo.nome)\
     .all()
     
-    all_products = Produto.query.order_by(Produto.name).all()
+    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
 
-    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts, all_products=all_products)
+    return render_template('admin/manage_teams.html', title="Gerenciar Equipes", teams_data=teams_with_counts, all_products=active_products)
 
 @bp.route('/admin/teams/<int:group_id>')
 @login_required
@@ -643,9 +654,7 @@ def team_details(group_id):
         monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month)\
-            .scalar() or 0
-            
-    all_products = Produto.query.order_by(Produto.name).all()
+    active_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
 
     return render_template(
         'admin/team_details.html', 
