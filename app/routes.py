@@ -631,6 +631,7 @@ def manage_teams():
 @require_role('super_admin')
 def team_details(group_id):
     grupo = Grupo.query.get_or_404(group_id)
+    db.session.refresh(grupo)
     
     users_in_group = User.query.filter_by(grupo_id=grupo.id).order_by(User.username).all()
 
