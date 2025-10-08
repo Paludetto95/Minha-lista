@@ -653,7 +653,17 @@ def team_details(group_id):
         monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month).scalar()
-    all_products = Produto.query.order_by(Produto.name).all()
+    # Get IDs of active products (those with new leads)
+    active_product_ids = {row.id for row in db.session.query(Produto.id).join(Lead).filter(Lead.status == 'Novo').distinct().all()}
+    
+    # Get IDs of products already associated with the group
+    group_product_ids = {p.id for p in grupo.produtos}
+    
+    # Combine IDs
+    combined_product_ids = active_product_ids.union(group_product_ids)
+    
+    # Fetch all relevant product objects at once, ordered by name
+    all_products = Produto.query.filter(Produto.id.in_(combined_product_ids)).order_by(Produto.name).all() if combined_product_ids else []
 
     return render_template(
         'admin/team_details.html', 
