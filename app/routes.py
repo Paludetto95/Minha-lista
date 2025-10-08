@@ -618,7 +618,7 @@ def manage_teams():
         func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
     ).outerjoin(User, Grupo.id == User.grupo_id)\
     .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
-    .options(joinedload(Grupo.produtos))\
+    
     .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
     .order_by(Grupo.nome)\
     .all()
@@ -654,7 +654,7 @@ def team_details(group_id):
         monthly_consumption = db.session.query(func.count(LeadConsumption.id))\
             .filter(LeadConsumption.user_id.in_(user_ids_in_group))\
             .filter(LeadConsumption.timestamp >= start_of_month).scalar()
-    all_products = db.session.query(Produto).join(Lead).filter(Lead.status == 'Novo').distinct().order_by(Produto.name).all()
+    all_products = Produto.query.order_by(Produto.name).all()
 
     return render_template(
         'admin/team_details.html', 
@@ -729,6 +729,7 @@ def edit_group(group_id):
         'name': grupo.nome, 'color': grupo.color, 'logo': grupo.logo_filename,
         'monthly_pull_limit': grupo.monthly_pull_limit
     }
+    old_produtos = set(grupo.produtos)
 
     new_name = request.form.get('name')
     new_color = request.form.get('color')
@@ -772,7 +773,7 @@ def edit_group(group_id):
     selected_produtos = Produto.query.filter(Produto.id.in_(produto_ids)).all()
     grupo.produtos = selected_produtos
 
-    if changes or set(grupo.produtos) != set(selected_produtos):
+    if changes or old_produtos != set(selected_produtos):
         db.session.commit()
         flash(f'Equipe "{grupo.nome}" atualizada com sucesso!', 'success')
         log_system_action('GROUP_UPDATED', entity_type='Group', entity_id=grupo.id, 
