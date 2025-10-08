@@ -617,7 +617,7 @@ def manage_teams():
         func.count(User.id),
         func.coalesce(monthly_consumption_subquery.c.monthly_consumption, 0).label('monthly_consumption')
     ).outerjoin(User, Grupo.id == User.grupo_id)\
-    .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)\
+    .outerjoin(monthly_consumption_subquery, Grupo.id == monthly_consumption_subquery.c.grupo_id)
     
     .group_by(Grupo.id, monthly_consumption_subquery.c.monthly_consumption)\
     .order_by(Grupo.nome)\
