@@ -721,33 +721,81 @@ def atendimento():
         db.session.commit()
 
         flash(f'Lead {lead.nome} tabulado com sucesso como "{tabulation.name}".', 'success')
-        return redirect(url_for('main.atendimento'))
+        
+        # --- MODIFICATION START ---
+        # After tabulation, redirect back to atendimento, preserving the product_id
+        current_product_id = session.get('current_product_id')
+        if current_product_id:
+            return redirect(url_for('main.atendimento', produto_id=current_product_id))
+        else:
+            return redirect(url_for('main.atendimento'))
+        # --- MODIFICATION END ---
 
     # GET request logic
-    produto_id = request.args.get('produto_id', type=int)
+    requested_produto_id = request.args.get('produto_id', type=int)
     lead_id = request.args.get('lead_id', type=int)    
+
+    # --- MODIFICATION START ---
+    # Determine the product_id to use for filtering
+    if requested_produto_id:
+        session['current_product_id'] = requested_produto_id
+        product_id_filter = requested_produto_id
+    else:
+        product_id_filter = session.get('current_product_id')
+    # --- MODIFICATION END ---
+
     # If no lead_id is provided, find the next available lead
     if not lead_id:
-        if produto_id:
-            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento', produto_id=produto_id).order_by(Lead.data_criacao).first()
-        else:
-            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        lead_query = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento')
+        # --- MODIFICATION START ---
+        if product_id_filter:
+            lead_query = lead_query.filter_by(produto_id=product_id_filter)
+        # --- MODIFICATION END ---
+        lead = lead_query.order_by(Lead.data_criacao).first()
         
         if lead:
-            return redirect(url_for('main.atendimento', lead_id=lead.id))
+            # --- MODIFICATION START ---
+            # Ensure product_id is passed in the redirect if it's set
+            if product_id_filter:
+                return redirect(url_for('main.atendimento', lead_id=lead.id, produto_id=product_id_filter))
+            else:
+                return redirect(url_for('main.atendimento', lead_id=lead.id))
+            # --- MODIFICATION END ---
         else:
             flash('Nenhum lead em atendimento no momento para este produto.', 'info')
+            # --- MODIFICATION START ---
+            # Clear the session product_id if no leads are found for it
+            if 'current_product_id' in session:
+                session.pop('current_product_id')
+            # --- MODIFICATION END ---
             return redirect(url_for('main.consultor_dashboard'))
 
     # If a lead_id is provided, display the lead
     lead = Lead.query.get(lead_id)
-    if not lead or lead.consultor_id != current_user.id or lead.status != 'Em Atendimento':
+    # --- MODIFICATION START ---
+    # Add product_id_filter to the lead validation
+    if not lead or lead.consultor_id != current_user.id or lead.status != 'Em Atendimento' or (product_id_filter and lead.produto_id != product_id_filter):
+    # --- MODIFICATION END ---
         flash('Lead não encontrado ou não está mais em atendimento.', 'warning')
         # Try to find the next one
-        next_lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        next_lead_query = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento')
+        # --- MODIFICATION START ---
+        if product_id_filter:
+            next_lead_query = next_lead_query.filter_by(produto_id=product_id_filter)
+        # --- MODIFICATION END ---
+        next_lead = next_lead_query.order_by(Lead.data_criacao).first()
         if next_lead:
-            return redirect(url_for('main.atendimento', lead_id=next_lead.id))
+            # --- MODIFICATION START ---
+            if product_id_filter:
+                return redirect(url_for('main.atendimento', lead_id=next_lead.id, produto_id=product_id_filter))
+            else:
+                return redirect(url_for('main.atendimento', lead_id=next_lead.id))
+            # --- MODIFICATION END ---
         else:
+            # --- MODIFICATION START ---
+            if 'current_product_id' in session:
+                session.pop('current_product_id')
+            # --- MODIFICATION END ---
             return redirect(url_for('main.consultor_dashboard'))
 
     # Calculations for the template
