@@ -2462,32 +2462,44 @@ def atendimento():
         db.session.commit()
 
         flash(f'Lead {lead.nome} tabulado com sucesso como "{tabulation.name}".', 'success')
-        return redirect(url_for('main.atendimento'))
+        return redirect(url_for('main.atendimento', produto_id=lead.produto_id))
 
     # GET request logic
     produto_id = request.args.get('produto_id', type=int)
     lead_id = request.args.get('lead_id', type=int)    
     # If no lead_id is provided, find the next available lead
     if not lead_id:
-        if produto_id:
-            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento', produto_id=produto_id).order_by(Lead.data_criacao).first()
-        else:
-            lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        # Se produto_id não foi especificado na URL, tentar encontrar um produto ativo
+        if not produto_id:
+            # Buscar o produto do primeiro lead em atendimento para o consultor
+            first_lead_in_service = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+            if first_lead_in_service:
+                produto_id = first_lead_in_service.produto_id
+            else:
+                flash('Nenhum lead em atendimento no momento.', 'info')
+                return redirect(url_for('main.consultor_dashboard'))
+
+        # Agora que temos um produto_id (seja da URL ou do primeiro lead), buscar o próximo lead
+        lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento', produto_id=produto_id).order_by(Lead.data_criacao).first()
         
         if lead:
-            return redirect(url_for('main.atendimento', lead_id=lead.id))
+            return redirect(url_for('main.atendimento', lead_id=lead.id, produto_id=produto_id)) # Passar produto_id aqui também
         else:
-            flash('Nenhum lead em atendimento no momento para este produto.', 'info')
+            flash(f'Nenhum lead em atendimento no momento para o produto selecionado.', 'info')
             return redirect(url_for('main.consultor_dashboard'))
 
     # If a lead_id is provided, display the lead
     lead = Lead.query.get(lead_id)
     if not lead or lead.consultor_id != current_user.id or lead.status != 'Em Atendimento':
         flash('Lead não encontrado ou não está mais em atendimento.', 'warning')
-        # Try to find the next one
-        next_lead = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento').order_by(Lead.data_criacao).first()
+        # Tentar encontrar o próximo lead, respeitando o produto_id se presente na URL
+        next_lead_query = Lead.query.filter_by(consultor_id=current_user.id, status='Em Atendimento')
+        if produto_id: # Usar o produto_id da URL se disponível
+            next_lead_query = next_lead_query.filter_by(produto_id=produto_id)
+        next_lead = next_lead_query.order_by(Lead.data_criacao).first()
+        
         if next_lead:
-            return redirect(url_for('main.atendimento', lead_id=next_lead.id))
+            return redirect(url_for('main.atendimento', lead_id=next_lead.id, produto_id=next_lead.produto_id)) # Passar produto_id
         else:
             return redirect(url_for('main.consultor_dashboard'))
 
