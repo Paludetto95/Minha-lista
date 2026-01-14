@@ -2611,6 +2611,7 @@ def get_next_whatsapp_contact():
 @login_required
 @require_role('consultor')
 def visualizar_lead(lead_id):
+    from_history = request.args.get('from_history', '0') == '1'
     lead = Lead.query.get(lead_id)
     if not lead or lead.consultor_id != current_user.id:
         flash('Lead não encontrado ou não autorizado.', 'danger')
@@ -2675,4 +2676,5 @@ def visualizar_lead(lead_id):
                            lead=lead,
                            cleaned_telefone=cleaned_telefone,
                            cleaned_telefone_2=cleaned_telefone_2,
-                           lead_details=lead_details)
+                           lead_details=lead_details,
+                           from_history=from_history)

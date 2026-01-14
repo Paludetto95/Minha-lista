@@ -47,9 +47,15 @@
             <div class="card-header table-secondary d-flex justify-content-between align-items-center">
                 <h3 class="mb-0">Visualizar Lead: {{ lead.nome or 'Lead sem nome' }}</h3>
                 <!-- BOTÃO DE VOLTAR ADICIONADO AQUI -->
+                {% if from_history %}
+                <a href="{{ url_for('main.consultor_dashboard', tab='historico') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i> Voltar ao Histórico
+                </a>
+                {% else %}
                 <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-2"></i> Voltar ao Painel
                 </a>
+                {% endif %}
             </div>
             <div class="card-body">
                 
