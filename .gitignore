@@ -31,3 +31,10 @@ Thumbs.db
 # Pasta de build do Flask-Migrate
 # (A pasta 'migrations' DEVE ser enviada, mas a 'build' não)
 migrations/versions/build/
+
+# Backups and SQL dumps — don't commit binary DB dumps
+*.sql.gz
+backup-*.sql.gz
+# optionally ignore plain SQL dumps produced during manual exports
+*.sql
+# If you keep a pending generated SQL migration for review, commit it explicitly (e.g. pending_migration.sql)
