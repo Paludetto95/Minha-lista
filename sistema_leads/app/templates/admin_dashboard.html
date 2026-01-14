@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Painel do Administrador</h2>
+
+    <div class="row">
+        <!-- Coluna para Upload de Leads -->
+        <div class="col-md-5 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Importar Nova Lista de Leads</h5>
+                    <p class="card-text">Envie um ficheiro .csv ou .xlsx.</p>
+                    <form action="{{ url_for('main.upload_step1') }}" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">1. Selecione o Arquivo</label>
+                            <input class="form-control" type="file" name="file" id="file" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="produto_id" class="form-label">2. Selecione o Produto</label>
+                            <select name="produto_id" id="produto_id" class="form-select" required>
+                                <option value="" disabled selected>-- Escolha um produto --</option>
+                                {% for product in all_products %}
+                                <option value="{{ product.id }}">{{ product.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                             <label for="estado" class="form-label">3. Informe o Estado (UF)</label>
+                             <input type="text" name="estado" class="form-control" placeholder="Ex: SP, RJ, MG..." maxlength="2" required style="text-transform:uppercase;">
+                        </div>
+                        <div class="mb-3">
+                            <label for="layout_id" class="form-label">4. Usar Layout Salvo (Opcional)</label>
+                            <select name="layout_id" id="layout_id" class="form-select">
+                                <option value="">-- Mapear colunas manualmente --</option>
+                                {% for layout in all_layouts %}
+                                <option value="{{ layout.id }}">{{ layout.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Próximo: Mapear Colunas</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Gerir (Produtos, Layouts, Utilizadores, etc) -->
+        <div class="col-md-7 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    Área de Gestão
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action">Gerir Produtos</a>
+                        <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action">Gerir Layouts Salvos</a>
+                        <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action">Gerir Utilizadores</a>
+                        <a href="{{ url_for('main.manage_tabulations') }}" class="list-group-item list-group-item-action">Gerir Tabulações</a>
+                    </div>
+                </div>
+            </div>
+             <div class="card mt-4">
+                <div class="card-header">
+                    Últimos Leads Tabulados
+                </div>
+                 <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                    {% for lead in tabulated_leads %}
+                        <li class="list-group-item">
+                            {{ lead.nome_cliente }} - <strong>{{ lead.tabulation.name if lead.tabulation }}</strong> por {{ lead.consultor.username if lead.consultor }}
+                        </li>
+                    {% else %}
+                        <li class="list-group-item">Nenhum lead tabulado recentemente.</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Otimização para evitar a rolagem da página principal */
+    .atendimento-wrapper {
+        /* Calcula a altura disponível subtraindo a altura da barra de navegação e margens */
+        height: calc(100vh - 90px); 
+        display: flex;
+        flex-direction: column;
+    }
+
+    .atendimento-wrapper .card {
+        flex-grow: 1; /* Faz o card preencher o wrapper */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Evita que o card cause rolagem */
+    }
+
+    .atendimento-wrapper .card-body {
+        flex-grow: 1; /* Faz o corpo do card preencher o card */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Evita que o corpo do card cause rolagem */
+    }
+
+    .details-table-container {
+        /* Alteração principal: remove altura fixa e permite que o container cresça */
+        flex-grow: 1;
+        overflow-y: auto; /* A rolagem acontecerá apenas aqui dentro, se necessário */
+    }
+    
+    /* Estilo original para o botão de copiar */
+    #copy-lead-data-btn {
+        transition: background-color 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {% if lead %}
+    <!-- Div wrapper para controlar o layout de altura total -->
+    <div class="atendimento-wrapper">
+        <div class="card shadow-sm">
+            <div class="card-header table-secondary d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">Visualizar Lead: {{ lead.nome or 'Lead sem nome' }}</h3>
+                <!-- BOTÃO DE VOLTAR ADICIONADO AQUI -->
+                <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i> Voltar ao Painel
+                </a>
+            </div>
+            <div class="card-body">
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5><i class="fas fa-info-circle me-2"></i> Detalhes do Lead</h5>
+                </div>
+                
+                <!-- Este container agora cresce e rola internamente -->
+                <div class="table-responsive details-table-container mb-4">
+                    <table class="table table-bordered table-striped table-sm" id="lead-details-table">
+                        <tbody>
+                            {% for key, value in lead_details.items() %}
+                                <tr>
+                                    <td style="width: 30%;" class="fw-bold">{{ key }}</td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- BOTÃO DE COPIAR ADICIONADO AQUI -->
+                <div class="d-grid gap-2 mb-4">
+                    <button class="btn btn-primary btn-lg" type="button" id="copy-lead-data-btn">
+                        <i class="fas fa-copy me-2"></i> Copiar Dados do Lead
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div> <!-- Fim do atendimento-wrapper -->
+    {% else %}
+    <div class="alert alert-warning" role="alert">
+        Lead não encontrado.
+    </div>
+    {% endif %}
+</div>
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Script para copiar dados do lead
+    document.getElementById('copy-lead-data-btn').addEventListener('click', function() {
+        const table = document.getElementById('lead-details-table');
+        let text = '';
+        for (let row of table.rows) {
+            const cells = row.cells;
+            if (cells.length >= 2) {
+                text += cells[0].textContent.trim() + ': ' + cells[1].textContent.trim() + '\n';
+            }
+        }
+        
+        navigator.clipboard.writeText(text).then(function() {
+            const btn = document.getElementById('copy-lead-data-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check me-2"></i> Dados Copiados!';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+            setTimeout(function() {
+                btn.innerHTML = originalText;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-primary');
+            }, 2000);
+        }).catch(function(err) {
+            console.error('Erro ao copiar: ', err);
+        });
+    });
+</script>
+{% endblock %}

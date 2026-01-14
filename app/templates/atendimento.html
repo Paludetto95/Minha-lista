@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block styles %}
+{{ super() }}
+<style>
+    /* Otimização para evitar a rolagem da página principal */
+    .atendimento-wrapper {
+        /* Calcula a altura disponível subtraindo a altura da barra de navegação e margens */
+        height: calc(100vh - 90px); 
+        display: flex;
+        flex-direction: column;
+    }
+
+    .atendimento-wrapper .card {
+        flex-grow: 1; /* Faz o card preencher o wrapper */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Evita que o card cause rolagem */
+    }
+
+    .atendimento-wrapper .card-body {
+        flex-grow: 1; /* Faz o corpo do card preencher o card */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Evita que o corpo do card cause rolagem */
+    }
+
+    .details-table-container {
+        /* Alteração principal: remove altura fixa e permite que o container cresça */
+        flex-grow: 1;
+        overflow-y: auto; /* A rolagem acontecerá apenas aqui dentro, se necessário */
+    }
+    
+    /* Estilo original para o botão de copiar */
+    #copy-lead-data-btn {
+        transition: background-color 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    {% if lead %}
+    <!-- Div wrapper para controlar o layout de altura total -->
+    <div class="atendimento-wrapper">
+        <div class="card shadow-sm">
+            <div class="card-header table-secondary d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">Atendimento: {{ lead.nome or 'Lead sem nome' }}</h3>
+                <!-- BOTÃO DE VOLTAR ADICIONADO AQUI -->
+                <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i> Voltar ao Painel
+                </a>
+            </div>
+            <div class="card-body">
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5><i class="fas fa-info-circle me-2"></i> Detalhes do Lead</h5>
+                </div>
+                
+                <!-- Este container agora cresce e rola internamente -->
+                <div class="table-responsive details-table-container mb-4">
+                    <table class="table table-bordered table-striped table-sm" id="lead-details-table">
+                        <tbody>
+                            {% for key, value in lead_details.items() %}
+                                <tr>
+                                    <td style="width: 30%;" class="fw-bold">{{ key }}</td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- BOTÃO DE COPIAR ADICIONADO AQUI -->
+                <div class="d-grid gap-2 mb-4">
+                    <button class="btn btn-primary btn-lg" type="button" id="copy-lead-data-btn">
+                        <i class="fas fa-copy me-2"></i> Copiar Dados do Lead
+                    </button>
+                </div>
+
+
+                <hr class="my-4">
+
+                <form action="{{ url_for('main.atendimento') }}" method="POST" id="tabulation-form">
+                    <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                    <h5 class="mb-3">Tabular Atendimento:</h5>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for tab in all_tabulations %}
+                            <button type="submit" class="btn text-white" 
+                                    style="background-color: {{ tab.color }};" 
+                                    name="tabulation_id" 
+                                    value="{{ tab.id }}">
+                                {{ tab.name }}
+                            </button>
+                        {% endfor %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div> <!-- Fim do atendimento-wrapper -->
+    {% else %}
+    <div class="alert alert-success text-center">
+        <h4 class="alert-heading">Parabéns!</h4>
+        <p>Você não tem mais leads pendentes na sua carteira.</p>
+        <hr>
+        <p class="mb-0">Volte para o seu painel para pegar novos leads.</p>
+        <a href="{{ url_for('main.consultor_dashboard') }}" class="btn btn-primary mt-3">Voltar ao Painel</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const copyButton = document.getElementById('copy-lead-data-btn');
+
+    if (copyButton) {
+        copyButton.addEventListener('click', function() {
+            const leadDetailsTable = document.getElementById('lead-details-table');
+            let textToCopy = '';
+
+            // Itera sobre as linhas da tabela para extrair os dados
+            leadDetailsTable.querySelectorAll('tbody tr').forEach(row => {
+                const key = row.cells[0].innerText.trim();
+                const value = row.cells[1].innerText.trim();
+                if (key && value) {
+                    textToCopy += `${key}: ${value}\n`;
+                }
+            });
+
+            // Cria uma área de texto temporária para copiar o conteúdo
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            
+            try {
+                // Tenta copiar o texto para a área de transferência
+                document.execCommand('copy');
+                
+                // Feedback visual para o usuário
+                const originalHtml = copyButton.innerHTML;
+                copyButton.innerHTML = '<i class="fas fa-check me-2"></i> Copiado!';
+                copyButton.classList.remove('btn-primary');
+                copyButton.classList.add('btn-success');
+
+                setTimeout(() => {
+                    copyButton.innerHTML = originalHtml;
+                    copyButton.classList.remove('btn-success');
+                    copyButton.classList.add('btn-primary');
+                }, 2000); // Volta ao normal após 2 segundos
+
+            } catch (err) {
+                console.error('Falha ao copiar texto: ', err);
+                // Você pode adicionar um alerta ou outra forma de notificação de erro aqui
+            }
+
+            // Remove a área de texto temporária
+            document.body.removeChild(tempTextArea);
+        });
+    }
+});
+</script>
+{% endblock %}

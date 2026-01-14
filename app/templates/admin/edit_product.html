@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0">Gerenciar Produto: {{ product.name }}</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('main.edit_product', product_id=product.id) }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Nome do Produto</label>
+                            <input type="text" class="form-control" id="name" name="name" value="{{ product.name }}" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Grupos com Acesso</label>
+                            <div class="card p-3" style="max-height: 300px; overflow-y: auto;">
+                                {% for group in all_groups %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="groups" value="{{ group.id }}" id="group_{{ group.id }}"
+                                        {% if group in product.grupos %}checked{% endif %}>
+                                    <label class="form-check-label" for="group_{{ group.id }}">
+                                        {{ group.nome }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
+                            <a href="{{ url_for('main.manage_products') }}" class="btn btn-secondary me-2">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

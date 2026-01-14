@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">Painel do Administrador</h2>
+
+    <div class="row">
+        <!-- Coluna para Gerir (Área de Gestão) - agora na esquerda -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    Área de Gestão
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('main.admin_monitor') }}" class="list-group-item list-group-item-action list-group-item-warning fw-bold"><i class="fas fa-satellite-dish me-2"></i>Monitor em Tempo Real</a>
+                        
+                        <a href="{{ url_for('main.manage_teams') }}" class="list-group-item list-group-item-action"><i class="fas fa-users-cog me-2"></i>Gerir Equipes</a>
+                        
+                        <a href="{{ url_for('main.manage_mailings') }}" class="list-group-item list-group-item-action fw-bold"><i class="fas fa-mail-bulk me-2"></i>Gerir Mailings</a>
+                        <a href="{{ url_for('main.manage_products') }}" class="list-group-item list-group-item-action"><i class="fas fa-box-open me-2"></i>Gerir Produtos</a>
+                        <a href="{{ url_for('main.manage_layouts') }}" class="list-group-item list-group-item-action"><i class="fas fa-drafting-compass me-2"></i>Gerir Layouts Salvos</a>
+                        <a href="{{ url_for('main.manage_users') }}" class="list-group-item list-group-item-action"><i class="fas fa-user-friends me-2"></i>Gerir Utilizadores (Lista)</a>
+                        <a href="{{ url_for('main.manage_tabulations') }}" class="list-group-item list-group-item-action"><i class="fas fa-tags me-2"></i>Gerir Tabulações</a>
+                        <a href="{{ url_for('main.admin_export_reports_page') }}" class="list-group-item list-group-item-action"><i class="fas fa-file-export me-2"></i>Exportar Relatórios de Leads</a>
+                        <a href="{{ url_for('main.hygiene_upload_page') }}" class="list-group-item list-group-item-action"><i class="fas fa-broom me-2"></i>Higienizar Leads</a>
+                        <a href="{{ url_for('main.admin_system_logs_page') }}" class="list-group-item list-group-item-action"><i class="fas fa-history me-2"></i>Ver Logs do Sistema</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para Upload de Leads (menor e discreto) e Últimas Atividades - agora na direita -->
+        <div class="col-md-6 mb-4">
+            <!-- Card de Upload de Leads (menor e discreto) -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Importar Nova Lista de Leads</h5>
+                    <button class="btn btn-link btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseImportLeads" aria-expanded="false" aria-controls="collapseImportLeads">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="collapse" id="collapseImportLeads">
+                    <div class="card-body p-2">
+                        <form action="{{ url_for('main.upload_step1') }}" method="post" enctype="multipart/form-data">
+                            <div class="mb-2">
+                                <label for="file" class="form-label fw-bold small">1. Selecione o Arquivo</label>
+                                <input class="form-control form-control-sm" type="file" name="file" id="file" required>
+                            </div>
+                            <div class="mb-2">
+                                <label for="produto_id" class="form-label fw-bold small">2. Selecione o Produto</label>
+                                <select name="produto_id" id="produto_id" class="form-select form-select-sm" required>
+                                    <option value="" disabled selected>-- Escolha um produto --</option>
+                                    {% for product in all_products %}
+                                    <option value="{{ product.id }}">{{ product.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label for="layout_id" class="form-label small">3. Usar Layout Salvo (Opcional)</label>
+                                <select name="layout_id" id="layout_id" class="form-select form-select-sm">
+                                    <option value="">-- Mapear colunas manualmente --</option>
+                                    {% for layout in all_layouts %}
+                                    <option value="{{ layout.id }}">{{ layout.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm w-100 mt-2">Próximo: Mapear Colunas</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card de Últimas Atividades -->
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    Últimas Atividades (Tabulações e Reciclagens)
+                </div>
+                 <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                    {% for log_entry in recent_activity.items %}
+                        <li class="list-group-item">
+                            <!-- Mostra o nome do cliente e a tabulação escolhida -->
+                            {{ log_entry.lead.nome if log_entry.lead else 'Lead Apagado' }} - 
+                            <strong style="color: {{ log_entry.tabulation.color }};">
+                                {% if log_entry.action_type == 'Reciclagem' %}<i class="fas fa-recycle me-1" title="Reciclagem"></i>{% endif %}
+                                {{ log_entry.tabulation.name if log_entry.tabulation else 'Sem Tabulação' }}
+                            </strong>
+                            <!-- Mostra quem fez e quando -->
+                            <small class="text-muted d-block">
+                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp.strftime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
+                            </small>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-center text-muted py-4">Nenhuma atividade registrada recentemente.</li>
+                    {% endfor %}
+                    </ul>
+                 </div>
+                 <!-- Paginação para as Atividades -->
+                 {% if recent_activity.pages > 1 %}
+                 <div class="card-footer bg-light">
+                    <nav aria-label="Paginação de atividades">
+                        <ul class="pagination justify-content-center mb-0">
+                            <li class="page-item {% if not recent_activity.has_prev %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=recent_activity.prev_num) }}">Anterior</a>
+                            </li>
+
+                            {% for page_num in recent_activity.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                                {% if page_num %}
+                                    {% if recent_activity.page == page_num %}
+                                        <li class="page-item active" aria-current="page"><span class="page-link">{{ page_num }}</span></li>
+                                    {% else %}
+                                        <li class="page-item"><a class="page-link" href="{{ url_for('main.admin_dashboard', page=page_num) }}">{{ page_num }}</a></li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            <li class="page-item {% if not recent_activity.has_next %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('main.admin_dashboard', page=recent_activity.next_num) }}">Próximo</a>
+                            </li>
+                        </ul>
+                    </nav>
+                 </div>
+                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

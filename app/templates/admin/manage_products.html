@@ -1,0 +1,132 @@
+<!-- app/templates/admin/manage_products.html (VERSÃO COM BOTÃO DE EXCLUIR AJUSTADO PARA BACKGROUND TASK) -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Gerenciar Produtos</h2>
+
+    <div class="row">
+        <!-- Coluna para adicionar novo produto -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Adicionar Novo Produto</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('main.add_product') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Nome do Produto</label>
+                            <input type="text" name="name" id="name" class="form-control" placeholder="Ex: Consignado INSS" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Adicionar</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna para listar produtos existentes -->
+        <div class="col-md-8 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5>Produtos Existentes</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('main.manage_products') }}" class="mb-3">
+                        <div class="input-group">
+                            <input type="text" name="search_query" class="form-control" placeholder="Buscar por nome..." value="{{ search_query or '' }}">
+                            <button class="btn btn-outline-secondary" type="submit"><i class="fas fa-search"></i></button>
+                        </div>
+                    </form>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-secondary">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nome do Produto</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in products %}
+                                <tr>
+                                    <td>{{ product.id }}</td>
+                                    <td>{{ product.name }}</td>
+                                    <td class="text-end">
+                                        <a href="{{ url_for('main.edit_product', product_id=product.id) }}" class="btn btn-sm btn-outline-primary" title="Gerenciar Produto">
+                                            <i class="fas fa-cogs"></i> Gerenciar
+                                        </a>
+                                        <!-- MODIFICADO: Botão de exclusão para acionar o modal de progresso -->
+                                        <button type="button" 
+                                                class="btn btn-sm btn-outline-danger btn-delete-product" 
+                                                data-product-id="{{ product.id }}" 
+                                                data-product-name="{{ product.name }}"
+                                                title="Apagar Produto">
+                                            <i class="fas fa-trash"></i> Apagar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-3">Nenhum produto cadastrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Seleciona todos os botões de exclusão de produto
+    const deleteButtons = document.querySelectorAll('.btn-delete-product');
+
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const productId = this.dataset.productId;
+            const productName = this.dataset.productName;
+
+            // Pergunta de confirmação mais detalhada
+            const confirmMessage = `ATENÇÃO! Isso iniciará a exclusão em segundo plano do produto '${productName}' e de TODOS os leads associados a ele. Deseja continuar?`;
+
+            if (confirm(confirmMessage)) {
+                // Desabilita o botão para evitar cliques múltiplos
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Apagando...';
+
+                fetch(`{{ url_for('main.delete_product', id=0) }}`.replace('0', productId), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        // Exibir flash message imediatamente
+                        flashMessage('info', data.message);
+                        window.startPollingProgress(data.task_id);
+                    } else {
+                        flashMessage('danger', data.message || 'Erro ao iniciar a exclusão.');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="fas fa-trash"></i> Apagar';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro na requisição AJAX:', error);
+                    flashMessage('danger', 'Erro na comunicação com o servidor ao tentar apagar o produto.');
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-trash"></i> Apagar';
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
