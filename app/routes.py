@@ -339,6 +339,31 @@ def admin_system_logs_page():
         all_users_for_filter=all_users_for_filter
     )
 
+@bp.route('/admin/export-reports')
+@login_required
+@require_role('super_admin')
+def admin_export_reports_page():
+    """Rota para carregar a página de exportação de relatórios (interface).
+    Implementa apenas a renderização da página para evitar erros de template
+    quando o link aparece no dashboard. A exportação real é feita em outra rota
+    (`admin_export_filtered_leads`) e pode ser implementada separadamente.
+    """
+    all_products = Produto.query.order_by(Produto.name).all()
+    all_layouts = LayoutMailing.query.order_by(LayoutMailing.name).all()
+    return render_template('admin/export_reports.html', title='Exportar Relatórios de Leads', all_products=all_products, all_layouts=all_layouts)
+
+@bp.route('/admin/export-filtered-leads', methods=['GET'])
+@login_required
+@require_role('super_admin')
+def admin_export_filtered_leads():
+    """Endpoint placeholder para exportação filtrada de leads.
+
+    Atualmente apenas notifica que a funcionalidade não está completa
+    e retorna para a página de exportação (evita 404/erro ao submeter o formulário).
+    """
+    flash('Exportação ainda não implementada. Em breve será disponibilizada.', 'info')
+    return redirect(url_for('main.admin_export_reports_page'))
+
 @bp.route('/upload_step1', methods=['POST'])
 @login_required
 @require_role('super_admin')
