@@ -1521,13 +1521,13 @@ def export_tabulations():
             return redirect(url_for('main.admin_dashboard'))
     
     if current_user.role == 'admin_parceiro':
-        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A'} for log in results]
     else:
         data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
     
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='latin1')
+    df.to_csv(output, index=False, sep=';', encoding='cp1252')
     csv_data = output.getvalue()
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename=relatorio_completo_atividades.csv"})
 
