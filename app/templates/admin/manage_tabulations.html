@@ -41,6 +41,12 @@
                                 Conversão Positiva
                             </label>
                         </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" name="is_deceased" id="is_deceased_check">
+                            <label class="form-check-label" for="is_deceased_check">
+                                Falecido
+                            </label>
+                        </div>
                         <button type="submit" class="btn btn-success w-100">Adicionar</button>
                     </div>
                 </div>
@@ -67,6 +73,9 @@
                         {% endif %}
                         {% if tab.is_positive_conversion %}
                             <small class="text-success d-block ms-4 ps-2"><i class="fas fa-check-circle"></i> Conversão Positiva</small>
+                        {% endif %}
+                        {% if tab.is_deceased %}
+                            <small class="text-danger d-block ms-4 ps-2"><i class="fas fa-cross"></i> Falecido</small>
                         {% endif %}
                     </div>
                     <div>

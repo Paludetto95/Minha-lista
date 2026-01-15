@@ -173,7 +173,7 @@
                                         {{ log_entry.tabulation.name }}
                                     </span>
                                     {% endif %}
-                                    {% if log_entry.tabulation and log_entry.tabulation.name.lower() not in ['falecido', 'óbito'] %}
+                                    {% if log_entry.tabulation and not log_entry.tabulation.is_deceased %}
                                     <a href="{{ url_for('main.visualizar_lead', lead_id=log_entry.lead.id, from_history=1) }}" class="btn btn-sm btn-outline-primary me-2">Visualizar</a>
                                     {% endif %}
                                     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editTabulationModal" data-log-id="{{ log_entry.id }}" data-lead-name="{{ log_entry.lead.nome }}">Editar</button>

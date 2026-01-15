@@ -141,6 +141,7 @@ class Tabulation(db.Model):
     is_recyclable = db.Column(db.Boolean, default=False)
     recycle_in_days = db.Column(db.Integer, nullable=True)
     is_positive_conversion = db.Column(db.Boolean, default=False)
+    is_deceased = db.Column(db.Boolean, default=False, nullable=True)
     
     # Relacionamentos
     leads = db.relationship('Lead', back_populates='tabulation', lazy='dynamic')

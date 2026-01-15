@@ -32,6 +32,12 @@
                         Conversão Positiva
                     </label>
                 </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="is_deceased" id="is_deceased_check" {% if tabulation.is_deceased %}checked{% endif %}>
+                    <label class="form-check-label" for="is_deceased_check">
+                        Falecido
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary">Salvar Alterações</button>
                 <a href="{{ url_for('main.manage_tabulations') }}" class="btn btn-secondary">Cancelar</a>
             </form>

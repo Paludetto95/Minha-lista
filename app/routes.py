@@ -1435,9 +1435,10 @@ def add_tabulation():
     color = request.form.get('color')
     is_recyclable = request.form.get('is_recyclable') == 'on'
     is_positive_conversion = request.form.get('is_positive_conversion') == 'on'
+    is_deceased = request.form.get('is_deceased') == 'on'
     recycle_in_days = int(request.form.get('recycle_in_days', 0)) if is_recyclable else None
     if name and color:
-        new_tabulation = Tabulation(name=name, color=color, is_recyclable=is_recyclable, recycle_in_days=recycle_in_days, is_positive_conversion=is_positive_conversion)
+        new_tabulation = Tabulation(name=name, color=color, is_recyclable=is_recyclable, recycle_in_days=recycle_in_days, is_positive_conversion=is_positive_conversion, is_deceased=is_deceased)
         db.session.add(new_tabulation)
         try:
             db.session.commit()
@@ -1445,7 +1446,7 @@ def add_tabulation():
             log_system_action(action_type='TABULATION_CREATED', entity_type='Tabulation', entity_id=new_tabulation.id, 
                               description=f"Tabulação '{new_tabulation.name}' criada.",
                               details={'color': new_tabulation.color, 'is_recyclable': new_tabulation.is_recyclable, 
-                                       'recycle_in_days': new_tabulation.recycle_in_days, 'is_positive_conversion': new_tabulation.is_positive_conversion})
+                                       'recycle_in_days': new_tabulation.recycle_in_days, 'is_positive_conversion': new_tabulation.is_positive_conversion, 'is_deceased': new_tabulation.is_deceased})
         except IntegrityError:
             db.session.rollback()
             flash('Essa tabulação já existe.', 'danger')
@@ -1483,6 +1484,7 @@ def edit_tabulation(id):
         tabulation.color = request.form.get('color')
         tabulation.is_recyclable = request.form.get('is_recyclable') == 'on'
         tabulation.is_positive_conversion = request.form.get('is_positive_conversion') == 'on'
+        tabulation.is_deceased = request.form.get('is_deceased') == 'on'
         tabulation.recycle_in_days = int(request.form.get('recycle_in_days', 0)) if tabulation.is_recyclable else None
         db.session.commit()
         flash('Tabulação atualizada com sucesso!', 'success')
@@ -1517,10 +1519,15 @@ def export_tabulations():
             return redirect(url_for('main.parceiro_dashboard'))
         else:
             return redirect(url_for('main.admin_dashboard'))
-    data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+    
+    if current_user.role == 'admin_parceiro':
+        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+    else:
+        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+    
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='latin1')
     csv_data = output.getvalue()
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename=relatorio_completo_atividades.csv"})
 
@@ -2617,8 +2624,8 @@ def visualizar_lead(lead_id):
         flash('Lead não encontrado ou não autorizado.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
     
-    # Verificar se a tabulação é "Falecido" ou similar
-    if lead.tabulation and lead.tabulation.name.lower() in ['falecido', 'óbito', 'morto']:
+    # Verificar se a tabulação indica falecimento
+    if lead.tabulation and lead.tabulation.is_deceased:
         flash('Acesso negado: informações do lead não podem ser visualizadas.', 'danger')
         return redirect(url_for('main.consultor_dashboard'))
     
