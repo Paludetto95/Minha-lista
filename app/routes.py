@@ -695,6 +695,44 @@ def team_details(group_id):
         all_products=all_products
     )
 
+@bp.route('/admin/teams/<int:group_id>/set_daily_limit', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def set_group_daily_limit(group_id):
+    """Define um limite diário de puxadas para todos os usuários do grupo."""
+    grupo = Grupo.query.get_or_404(group_id)
+    limit_str = request.form.get('daily_pull_limit')
+
+    limit_value = None
+    if limit_str is not None and limit_str.strip() != '':
+        try:
+            parsed = int(limit_str)
+            if parsed < 0:
+                raise ValueError('O limite diário não pode ser negativo.')
+            limit_value = parsed
+        except ValueError:
+            flash('Informe um número inteiro válido (0 ou maior) para o limite diário.', 'warning')
+            return redirect(url_for('main.team_details', group_id=group_id))
+
+    users = User.query.filter_by(grupo_id=group_id).all()
+    for user in users:
+        user.daily_pull_limit = limit_value
+
+    db.session.commit()
+
+    flash_message = 'Limite diário removido (ilimitado) para todos da equipe.' if limit_value is None else f'Limite diário definido como {limit_value} para todos da equipe.'
+    flash(flash_message, 'success')
+
+    log_system_action(
+        action_type='GROUP_DAILY_LIMIT_SET',
+        entity_type='Group',
+        entity_id=grupo.id,
+        description=f"Limite diário atualizado para o grupo '{grupo.nome}'.",
+        details={'daily_pull_limit': limit_value, 'users_updated': len(users)}
+    )
+
+    return redirect(url_for('main.team_details', group_id=group_id))
+
 @bp.route('/admin/groups/add', methods=['POST'])
 @login_required
 @require_role('super_admin')
