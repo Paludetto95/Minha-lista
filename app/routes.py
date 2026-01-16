@@ -39,6 +39,20 @@ def get_brasilia_time():
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     return utc_now.astimezone(brasilia_tz)
 
+def to_brasilia(dt):
+    if dt is None:
+        return None
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            dt = pytz.utc.localize(dt)
+        return dt.astimezone(brasilia_tz)
+    return dt
+
+def fmt_brasilia(dt, fmt='%d/%m/%Y %H:%M'):
+    localized = to_brasilia(dt)
+    return localized.strftime(fmt) if localized else ''
+
 def dataframe_csv_response(df, filename, sep=';'):
     """Gera uma Response CSV em UTF-8 com BOM para compatibilidade com Excel no Windows.
     Sempre inclui aspas em todos os campos para evitar quebras e problemas de separador.
@@ -1460,7 +1474,7 @@ def export_mailing():
     if not leads:
         flash('Nenhum lead encontrado para este grupo.', 'warning')
         return redirect(url_for('main.manage_mailings'))
-    data_for_df = [{'ID do Lead': lead.id, 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado, 'Produto': lead.produto.name if lead.produto else 'N/A', 'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Data Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '', **(lead.additional_data or {})} for lead in leads]
+    data_for_df = [{'ID do Lead': lead.id, 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado, 'Produto': lead.produto.name if lead.produto else 'N/A', 'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Data Tabulação': fmt_brasilia(lead.data_tabulacao, '%d/%m/%Y %H:%M') if lead.data_tabulacao else '', **(lead.additional_data or {})} for lead in leads]
     df = pd.DataFrame(data_for_df)
     df = normalize_df_text(df)
     filename = f"mailing_{leads[0].produto.name}_{leads[0].estado}.csv".replace(" ", "_")
@@ -1581,9 +1595,9 @@ def export_tabulations():
             return redirect(url_for('main.admin_dashboard'))
     
     if current_user.role == 'admin_parceiro':
-        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+        data_for_df = [{'Data da Ação': fmt_brasilia(log.timestamp, '%d/%m/%Y %H:%M:%S'), 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
     else:
-        data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
+        data_for_df = [{'Data da Ação': fmt_brasilia(log.timestamp, '%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
     
     df = pd.DataFrame(data_for_df)
     df = normalize_df_text(df)
@@ -1606,7 +1620,7 @@ def get_task_status(task_id):
         'message': task.message,
         'total_items': task.total_items,
         'items_processed': task.items_processed,
-        'end_time': task.end_time.strftime('%Y-%m-%d %H:%M:%S') if task.end_time else None,
+        'end_time': fmt_brasilia(task.end_time, '%Y-%m-%d %H:%M:%S') if task.end_time else None,
         'details': task.details
     })
 
@@ -1952,9 +1966,9 @@ def admin_export_filtered_leads():
             'Status Atual': lead.status,
             'Consultor Responsável': lead.consultor.username if lead.consultor else 'N/A',
             'Tabulação Final': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO',
-            'Data de Criação': lead.data_criacao.strftime('%d/%m/%Y %H:%M') if lead.data_criacao else '',
-            'Data de Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '',
-            'Disponível Após (Reciclagem)': lead.available_after.strftime('%d/%m/%Y %H:%M') if lead.available_after else '',
+            'Data de Criação': fmt_brasilia(lead.data_criacao, '%d/%m/%Y %H:%M') if lead.data_criacao else '',
+            'Data de Tabulação': fmt_brasilia(lead.data_tabulacao, '%d/%m/%Y %H:%M') if lead.data_tabulacao else '',
+            'Disponível Após (Reciclagem)': fmt_brasilia(lead.available_after, '%d/%m/%Y %H:%M') if lead.available_after else '',
         }
         if lead.additional_data:
             for k, v in lead.additional_data.items():
@@ -2603,7 +2617,7 @@ def atendimento():
                 label = field_labels.get(column.name, column.name.replace('_', ' ').title())
                 
                 if isinstance(value, datetime):
-                    lead_details[label] = value.strftime('%d/%m/%Y %H:%M')
+                    lead_details[label] = fmt_brasilia(value, '%d/%m/%Y %H:%M')
                 elif isinstance(value, date):
                     lead_details[label] = value.strftime('%d/%m/%Y')
                 else:
@@ -2713,7 +2727,7 @@ def visualizar_lead(lead_id):
                 label = field_labels.get(column.name, column.name.replace('_', ' ').title())
                 
                 if isinstance(value, datetime):
-                    lead_details[label] = value.strftime('%d/%m/%Y %H:%M')
+                    lead_details[label] = fmt_brasilia(value, '%d/%m/%Y %H:%M')
                 elif isinstance(value, date):
                     lead_details[label] = value.strftime('%d/%m/%Y')
                 else:

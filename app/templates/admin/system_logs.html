@@ -56,7 +56,7 @@
                     <tbody>
                         {% for log in logs %}
                         <tr>
-                            <td>{{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                            <td>{{ log.timestamp | br_datetime('%d/%m/%Y %H:%M:%S') }}</td>
                             <td><span class="badge bg-primary">{{ log.action_type | replace('_', ' ') | title }}</span></td>
                             <td>{{ log.user_performer.username if log.user_performer else 'Sistema / N/A' }}</td>
                             <td>

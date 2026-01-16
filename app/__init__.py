@@ -2,6 +2,8 @@
 
 import os
 from flask import Flask
+from datetime import datetime
+import pytz
 from config import Config
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -41,6 +43,25 @@ def create_app(config_class=Config):
         print(f"DEBUG: Pasta de logos no Volume já existe: {app.config['PARTNER_LOGOS_FULL_PATH']}")
 
     app.jinja_env.globals.update(enumerate=enumerate)
+
+    # Filtro Jinja para converter e formatar datas no fuso de Brasília
+    def br_datetime(value, fmt='%d/%m/%Y %H:%M'):
+        if value is None:
+            return ''
+        try:
+            br_tz = pytz.timezone('America/Sao_Paulo')
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    # assume armazenado em UTC quando ingênuo
+                    value = pytz.utc.localize(value)
+                value = value.astimezone(br_tz)
+                return value.strftime(fmt)
+            # para strings ou outros tipos, devolve como está
+            return str(value)
+        except Exception:
+            return str(value)
+
+    app.jinja_env.filters['br_datetime'] = br_datetime
 
     db.init_app(app)
     migrate.init_app(app, db) 

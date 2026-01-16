@@ -110,7 +110,7 @@
                             </strong>
                             <!-- Mostra quem fez e quando -->
                             <small class="text-muted d-block">
-                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp.strftime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
+                                por {{ log_entry.user.username if log_entry.user else 'N/A' }} em {{ log_entry.timestamp | br_datetime('%d/%m/%Y %H:%M') if log_entry.timestamp }}
                             </small>
                         </li>
                     {% else %}

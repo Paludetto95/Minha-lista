@@ -159,7 +159,7 @@
                                 <div>
                                     <strong>{{ log_entry.lead.nome }}</strong>
                                     <small class="text-muted d-block">
-                                        {{ log_entry.lead.cpf }} - {{ log_entry.action_type }} em {{ log_entry.timestamp.strftime('%d/%m/%Y às %H:%M') }}
+                                        {{ log_entry.lead.cpf }} - {{ log_entry.action_type }} em {{ log_entry.timestamp | br_datetime('%d/%m/%Y às %H:%M') }}
                                     </small>
                                 </div>
                                 <div class="d-flex align-items-center">

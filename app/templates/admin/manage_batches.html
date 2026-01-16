@@ -32,7 +32,7 @@
                     <tbody>
                         {% for batch in batches %}
                         <tr>
-                            <td>{{ batch.timestamp.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>{{ batch.timestamp | br_datetime('%d/%m/%Y %H:%M') }}</td>
                             <td><i class="fas fa-file me-2 text-muted"></i>{{ batch.filename }}</td>
                             <td><span class="badge bg-info text-dark">{{ batch.produto_nome }}</span></td>
                             <td>{{ batch.importer_name }}</td>
