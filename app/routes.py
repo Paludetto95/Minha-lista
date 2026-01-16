@@ -1914,16 +1914,15 @@ def admin_export_filtered_leads():
     ordered_columns = base_columns_order + [col for col in all_df_columns if col not in base_columns_order]    
     df = df[ordered_columns]  
 
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Relatorio_Leads_Filtrado')
+    output = io.StringIO()
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
     output.seek(0)
 
-    filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.xlsx"
+    filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
     log_system_action('LEAD_EXPORT_FILTERED', entity_type='Lead', 
                       description=f"Exportação de relatório de leads filtrado com {len(leads_to_export)} leads.",
                       details={'filters': request.args.to_dict(), 'total_exported': len(leads_to_export)})
-    return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
+    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={filename}"})
 
 # --- ROTAS DO PARCEIRO ---
 @bp.route('/parceiro/dashboard')
@@ -2093,13 +2092,12 @@ def parceiro_performance_dashboard_export():
     
     df = pd.DataFrame(performance_data)
     
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Desempenho_Equipe')
+    output = io.StringIO()
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
     output.seek(0)
 
-    filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.xlsx"
-    return Response(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment;filename={filename}"})
+    filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.csv"
+    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={filename}"})
 
 @bp.route('/parceiro/manage_users', methods=['GET', 'POST'])
 @login_required
