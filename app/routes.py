@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import pytz
 import random
+import csv
 from collections import defaultdict
 from functools import wraps
 from flask import render_template, flash, redirect, url_for, request, Blueprint, jsonify, Response, current_app, abort, send_from_directory
@@ -1399,7 +1400,7 @@ def export_mailing():
     data_for_df = [{'ID do Lead': lead.id, 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado, 'Produto': lead.produto.name if lead.produto else 'N/A', 'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Data Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '', **(lead.additional_data or {})} for lead in leads]
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
     csv_data = output.getvalue()
     filename = f"mailing_{leads[0].produto.name}_{leads[0].estado}.csv".replace(" ", "_")
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
@@ -1415,7 +1416,7 @@ def export_all_mailings():
     data_for_df = [{'Produto': lead.produto.name if lead.produto else 'N/A', 'Estado': lead.estado, 'Status': lead.status, 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, **(lead.additional_data or {})} for lead in leads]
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
     csv_data = output.getvalue()
     filename = f"relatorio_completo_mailings_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
@@ -1527,7 +1528,7 @@ def export_tabulations():
     
     df = pd.DataFrame(data_for_df)
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
     csv_data = output.getvalue()
     return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename=relatorio_completo_atividades.csv"})
 
@@ -1915,7 +1916,7 @@ def admin_export_filtered_leads():
     df = df[ordered_columns]  
 
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
     output.seek(0)
 
     filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
@@ -2093,7 +2094,7 @@ def parceiro_performance_dashboard_export():
     df = pd.DataFrame(performance_data)
     
     output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig')
+    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
     output.seek(0)
 
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.csv"
