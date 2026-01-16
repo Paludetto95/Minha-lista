@@ -4,6 +4,7 @@ import re
 import os
 import uuid
 import threading
+import unicodedata
 import plotly.graph_objects as go
 import plotly.io as pio
 import pytz
@@ -37,6 +38,30 @@ def get_brasilia_time():
     utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     return utc_now.astimezone(brasilia_tz)
+
+def dataframe_csv_response(df, filename, sep=';'):
+    """Gera uma Response CSV em UTF-8 com BOM para compatibilidade com Excel no Windows.
+    Sempre inclui aspas em todos os campos para evitar quebras e problemas de separador.
+    """
+    buffer = io.BytesIO()
+    # Escreve CSV como bytes com BOM para que Excel reconheça UTF-8
+    df.to_csv(buffer, index=False, sep=sep, encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
+    csv_bytes = buffer.getvalue()
+    headers = {
+        "Content-Disposition": f"attachment; filename={filename}",
+        # Inclui charset explícito
+        "Content-Type": "text/csv; charset=utf-8"
+    }
+    return Response(csv_bytes, headers=headers)
+
+def normalize_df_text(df):
+    """Normaliza texto para NFC em colunas de string, mantendo None e tipos não-string.
+    Ajuda a evitar caracteres quebrados (ex.: 'ç', acentuação) em algumas ferramentas.
+    """
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].map(lambda v: unicodedata.normalize('NFC', v) if isinstance(v, str) else v)
+    return df
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'csv', 'xlsx'}
 
@@ -1399,11 +1424,9 @@ def export_mailing():
         return redirect(url_for('main.manage_mailings'))
     data_for_df = [{'ID do Lead': lead.id, 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, 'Estado': lead.estado, 'Produto': lead.produto.name if lead.produto else 'N/A', 'Status': lead.status, 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Data Tabulação': lead.data_tabulacao.strftime('%d/%m/%Y %H:%M') if lead.data_tabulacao else '', **(lead.additional_data or {})} for lead in leads]
     df = pd.DataFrame(data_for_df)
-    output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
-    csv_data = output.getvalue()
+    df = normalize_df_text(df)
     filename = f"mailing_{leads[0].produto.name}_{leads[0].estado}.csv".replace(" ", "_")
-    return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
+    return dataframe_csv_response(df, filename)
 
 @bp.route('/admin/mailings/export_all')
 @login_required
@@ -1415,11 +1438,9 @@ def export_all_mailings():
         return redirect(url_for('main.manage_mailings'))
     data_for_df = [{'Produto': lead.produto.name if lead.produto else 'N/A', 'Estado': lead.estado, 'Status': lead.status, 'Tabulação': lead.tabulation.name if lead.tabulation else 'NÃO TABULADO', 'Consultor': lead.consultor.username if lead.consultor else 'N/A', 'Nome': lead.nome, 'CPF': lead.cpf, 'Telefone 1': lead.telefone, 'Telefone 2': lead.telefone_2, **(lead.additional_data or {})} for lead in leads]
     df = pd.DataFrame(data_for_df)
-    output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
-    csv_data = output.getvalue()
+    df = normalize_df_text(df)
     filename = f"relatorio_completo_mailings_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
-    return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename={filename}"})
+    return dataframe_csv_response(df, filename)
 
 @bp.route('/admin/tabulations')
 @login_required
@@ -1527,10 +1548,8 @@ def export_tabulations():
         data_for_df = [{'Data da Ação': log.timestamp.strftime('%d/%m/%Y %H:%M:%S'), 'Tipo de Ação': log.action_type, 'Consultor': log.user.username if log.user else 'N/A', 'Cliente': log.lead.nome if log.lead else 'N/A', 'CPF': log.lead.cpf if log.lead else 'N/A', 'Produto': log.lead.produto.name if log.lead and log.lead.produto else 'N/A', 'Tabulação Escolhida': log.tabulation.name if log.tabulation else 'N/A'} for log in results]
     
     df = pd.DataFrame(data_for_df)
-    output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
-    csv_data = output.getvalue()
-    return Response(csv_data, mimetype="text/csv", headers={"Content-disposition": f"attachment; filename=relatorio_completo_atividades.csv"})
+    df = normalize_df_text(df)
+    return dataframe_csv_response(df, "relatorio_completo_atividades.csv")
 
 @bp.route('/task_status/<string:task_id>', methods=['GET'])
 @login_required
@@ -1915,15 +1934,12 @@ def admin_export_filtered_leads():
     ordered_columns = base_columns_order + [col for col in all_df_columns if col not in base_columns_order]    
     df = df[ordered_columns]  
 
-    output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
-    output.seek(0)
-
     filename = f"relatorio_leads_filtrado_{get_brasilia_time().date().strftime('%Y-%m-%d')}.csv"
+    df = normalize_df_text(df)
     log_system_action('LEAD_EXPORT_FILTERED', entity_type='Lead', 
                       description=f"Exportação de relatório de leads filtrado com {len(leads_to_export)} leads.",
                       details={'filters': request.args.to_dict(), 'total_exported': len(leads_to_export)})
-    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={filename}"})
+    return dataframe_csv_response(df, filename)
 
 # --- ROTAS DO PARCEIRO ---
 @bp.route('/parceiro/dashboard')
@@ -2093,12 +2109,9 @@ def parceiro_performance_dashboard_export():
     
     df = pd.DataFrame(performance_data)
     
-    output = io.StringIO()
-    df.to_csv(output, index=False, sep=';', encoding='utf-8-sig', quoting=csv.QUOTE_ALL)
-    output.seek(0)
-
     filename = f"desempenho_equipe_{current_user.grupo.nome.replace(' ', '_')}_{period}_{today.strftime('%Y-%m-%d')}.csv"
-    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment;filename={filename}"})
+    df = normalize_df_text(df)
+    return dataframe_csv_response(df, filename)
 
 @bp.route('/parceiro/manage_users', methods=['GET', 'POST'])
 @login_required
