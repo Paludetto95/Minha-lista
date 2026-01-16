@@ -40,13 +40,27 @@ def get_brasilia_time():
     return utc_now.astimezone(brasilia_tz)
 
 def to_brasilia(dt):
+    """Converte datetime para America/Sao_Paulo, evitando dupla-conversão.
+    Se já estiver em Brasília (offset -3/-4h), devolve como está.
+    Se ingênuo, assume UTC. Se com outro fuso, converte.
+    """
     if dt is None:
         return None
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     if isinstance(dt, datetime):
-        if dt.tzinfo is None:
+        # Se já tem fuso horário, verifica se é Brasília
+        if dt.tzinfo is not None:
+            # Offset de Brasília é -3 (standard) ou -4 (DST)
+            offset = dt.utcoffset()
+            if offset and offset.total_seconds() in [-3*3600, -4*3600]:
+                # Já está em Brasília, devolve como está
+                return dt
+            # Senão, converte para Brasília
+            return dt.astimezone(brasilia_tz)
+        else:
+            # Ingênuo: assume UTC e localiza
             dt = pytz.utc.localize(dt)
-        return dt.astimezone(brasilia_tz)
+            return dt.astimezone(brasilia_tz)
     return dt
 
 def fmt_brasilia(dt, fmt='%d/%m/%Y %H:%M'):
@@ -2527,7 +2541,8 @@ def atendimento():
             lead_id=lead.id,
             user_id=current_user.id,
             tabulation_id=tabulation.id,
-            action_type='Tabulação'
+            action_type='Tabulação',
+            timestamp=get_brasilia_time()
         )
         db.session.add(log)
         db.session.commit()
