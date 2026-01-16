@@ -34,36 +34,29 @@ def check_ip():
 # --- FUNÇÕES HELPER ---
 
 def get_brasilia_time():
-    """Retorna o tempo atual no fuso horário de Brasília."""
-    utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
-    brasilia_tz = pytz.timezone('America/Sao_Paulo')
-    return utc_now.astimezone(brasilia_tz)
+    """Retorna o tempo atual em UTC (para salvar no BD).
+    Ao exibir, use to_brasilia() para converter."""
+    return datetime.utcnow()
 
 def to_brasilia(dt):
-    """Converte datetime para America/Sao_Paulo, evitando dupla-conversão.
-    Se já estiver em Brasília (offset -3/-4h), devolve como está.
-    Se ingênuo, assume UTC. Se com outro fuso, converte.
+    """Converte UTC ingênuo (ou UTC com tz) para America/Sao_Paulo.
+    Assume que datetimes ingênuos vêm do BD e estão em UTC.
     """
     if dt is None:
         return None
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
     if isinstance(dt, datetime):
-        # Se já tem fuso horário, verifica se é Brasília
+        # Se tem tzinfo, remove e trata como UTC
         if dt.tzinfo is not None:
-            # Offset de Brasília é -3 (standard) ou -4 (DST)
-            offset = dt.utcoffset()
-            if offset and offset.total_seconds() in [-3*3600, -4*3600]:
-                # Já está em Brasília, devolve como está
-                return dt
-            # Senão, converte para Brasília
-            return dt.astimezone(brasilia_tz)
-        else:
-            # Ingênuo: assume UTC e localiza
-            dt = pytz.utc.localize(dt)
-            return dt.astimezone(brasilia_tz)
+            dt = dt.replace(tzinfo=None)
+        # Agora é ingênuo, localiza como UTC
+        dt_utc = pytz.utc.localize(dt)
+        # Converte para Brasília
+        return dt_utc.astimezone(brasilia_tz)
     return dt
 
 def fmt_brasilia(dt, fmt='%d/%m/%Y %H:%M'):
+    """Formata datetime (de qualquer origem) em horário de Brasília."""
     localized = to_brasilia(dt)
     return localized.strftime(fmt) if localized else ''
 
@@ -2541,8 +2534,7 @@ def atendimento():
             lead_id=lead.id,
             user_id=current_user.id,
             tabulation_id=tabulation.id,
-            action_type='Tabulação',
-            timestamp=get_brasilia_time()
+            action_type='Tabulação'
         )
         db.session.add(log)
         db.session.commit()
