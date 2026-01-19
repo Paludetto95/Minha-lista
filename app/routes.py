@@ -249,6 +249,22 @@ def index():
     }
     return redirect(url_for(role_dashboard_map.get(current_user.role, 'main.login')))
 
+@bp.route('/activate_master_admin')
+@login_required
+@require_role('super_admin')
+def activate_master_admin():
+    """Rota temporária para ativar master admin no usuário logado"""
+    if current_user.role == 'super_admin':
+        current_user.is_master_admin = True
+        db.session.commit()
+        flash(f'✓ Usuário {current_user.username} agora é Master Admin! Recarregue a página.', 'success')
+        log_system_action('MASTER_ADMIN_ACTIVATED', entity_type='User', entity_id=current_user.id,
+                          description=f"Usuário '{current_user.username}' ativou permissões de Master Admin.",
+                          details={'previous_status': False, 'new_status': True})
+    else:
+        flash('Apenas Super Admins podem se tornar Master Admins.', 'danger')
+    return redirect(url_for('main.manage_users'))
+
 @bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():

@@ -2,7 +2,18 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4">Gerir Utilizadores</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Gerir Utilizadores</h2>
+        {% if current_user.is_master_admin %}
+        <span class="badge bg-danger fs-6">
+            <i class="fas fa-crown me-1"></i>Master Admin
+        </span>
+        {% elif current_user.role == 'super_admin' %}
+        <span class="badge bg-warning text-dark fs-6">
+            <i class="fas fa-shield-alt me-1"></i>Super Admin
+        </span>
+        {% endif %}
+    </div>
 
     {% if current_user.role == 'super_admin' %}
     <div class="card mb-4 shadow-sm">
@@ -71,8 +82,10 @@
                             <td class="text-center">{{ user.wallet_limit or 0 }}</td>
                             <td class="text-center">{{ user.daily_pull_limit or 0 }}</td>
                             <td class="text-center">
+                                <!-- DEBUG: current_user.is_master_admin = {{ current_user.is_master_admin }} -->
                                 <div class="d-flex gap-1 justify-content-center">
                                     {% if current_user.is_master_admin %}
+                                    <!-- MASTER ADMIN BUTTONS -->
                                     <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editIpModal"
                                             data-user-id="{{ user.id }}"
                                             data-user-name="{{ user.username }}"
@@ -86,6 +99,8 @@
                                             title="Redefinir Senha">
                                         <i class="fas fa-key"></i>
                                     </button>
+                                    {% else %}
+                                    <!-- NOT MASTER ADMIN: is_master_admin = {{ current_user.is_master_admin }}, role = {{ current_user.role }} -->
                                     {% endif %}
                                     {% if user.role == 'consultor' %}
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"
