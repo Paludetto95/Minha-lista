@@ -335,13 +335,27 @@ def admin_monitor_data():
         
         current_work = Lead.query.join(Produto).filter(Lead.consultor_id == agent.id, Lead.status == 'Em Atendimento').with_entities(Produto.name).first()
         
+        # Conta leads puxados hoje
+        leads_pulled_today = LeadConsumption.query.filter(
+            LeadConsumption.user_id == agent.id,
+            LeadConsumption.timestamp >= start_of_day
+        ).count()
+        
+        # Conta leads atualmente em atendimento
+        leads_in_service = Lead.query.filter_by(
+            consultor_id=agent.id,
+            status='Em Atendimento'
+        ).count()
+        
         agents_data.append({
             'name': agent.username,
             'status': real_status,
             'last_login': agent.last_login.astimezone(brasilia_tz).strftime('%d/%m/%Y às %H:%M') if agent.last_login else 'Nunca logou',
             'local': f"{agent.grupo_nome} / {current_work[0] if current_work else 'Nenhum'}",
             'calls_today': agent.calls_today or 0,
-            'conversions_today': agent.conversions_today or 0
+            'conversions_today': agent.conversions_today or 0,
+            'leads_pulled_today': leads_pulled_today,
+            'leads_in_service': leads_in_service
         })
     
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)
@@ -2128,13 +2142,27 @@ def parceiro_monitor_data():
         calls_today = ActivityLog.query.filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day).count()
         conversions_today = ActivityLog.query.join(Tabulation).filter(ActivityLog.user_id == agent.id, ActivityLog.timestamp >= start_of_day, Tabulation.is_positive_conversion == True).count()
         
+        # Conta leads puxados hoje
+        leads_pulled_today = LeadConsumption.query.filter(
+            LeadConsumption.user_id == agent.id,
+            LeadConsumption.timestamp >= start_of_day
+        ).count()
+        
+        # Conta leads atualmente em atendimento
+        leads_in_service = Lead.query.filter_by(
+            consultor_id=agent.id,
+            status='Em Atendimento'
+        ).count()
+        
         agents_data.append({
             'name': agent.username, 
             'status': real_status,
             'local': local_str,
             'last_login': last_login_str,
             'calls_today': calls_today, 
-            'conversions_today': conversions_today
+            'conversions_today': conversions_today,
+            'leads_pulled_today': leads_pulled_today,
+            'leads_in_service': leads_in_service
         })
     
     agents_data.sort(key=lambda x: (x['conversions_today'], x['calls_today']), reverse=True)

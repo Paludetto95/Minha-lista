@@ -40,10 +40,12 @@
                     <thead class="table-secondary">
                         <tr>
                             <th style="width: 5%;" class="text-center">#</th>
-                            <th style="width: 20%;">Nome</th>
-                            <th style="width: 20%;">Equipe / Produto Atual</th>
-                            <th style="width: 25%;">Status / Último Login</th>
-                            <th class="text-center" style="width: 15%;">Acionamentos Hoje</th>
+                            <th style="width: 15%;">Nome</th>
+                            <th style="width: 15%;">Equipe / Produto Atual</th>
+                            <th style="width: 18%;">Status / Último Login</th>
+                            <th style="width: 10%;" class="text-center">Leads Puxados</th>
+                            <th style="width: 10%;" class="text-center">Em Carteira</th>
+                            <th class="text-center" style="width: 12%;">Acionamentos</th>
                             <th style="width: 15%;" class="text-center">Conversões Hoje</th>
                         </tr>
                     </thead>
@@ -88,6 +90,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <div class="ms-3 text-muted last-login-text">${agent.last_login}</div>
                                 </div>
                             </td>
+                            <td class="text-center fs-5 text-primary fw-bold">${agent.leads_pulled_today || 0}</td>
+                            <td class="text-center fs-5 text-info">${agent.leads_in_service || 0}</td>
                             <td class="text-center fs-5">${agent.calls_today}</td>
                             <td class="text-center fs-5 fw-bold text-success">${agent.conversions_today}</td>
                         </tr>
@@ -95,11 +99,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     tableBody.innerHTML += rowHtml;
                 });
             } else {
-                tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted p-5">Nenhum consultor encontrado.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted p-5">Nenhum consultor encontrado.</td></tr>';
             }
         } catch (error) {
             console.error("Erro ao atualizar os dados do monitor:", error);
-            tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger p-5">Erro ao carregar dados. Verifique o console.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger p-5">Erro ao carregar dados. Verifique o console.</td></tr>';
         }
     }
 
