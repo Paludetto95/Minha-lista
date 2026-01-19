@@ -965,20 +965,17 @@ def remove_member_from_team(group_id, user_id):
                           description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: não é membro.")
         return redirect(url_for('main.team_details', group_id=group_id))
     
-    equipe_principal = Grupo.query.filter_by(nome="Equipe Principal").first()
-    if equipe_principal:
-        user_to_remove.grupo_id = equipe_principal.id
-        user_to_remove.role = 'consultor'
-        db.session.commit()
-        flash(f'{user_to_remove.username} removido(a) da equipe {grupo.nome} e movido(a) para Equipe Principal.', 'info')
-        log_system_action(action_type='TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Usuário '{user_to_remove.username}' removido da equipe '{grupo.nome}' e movido para '{equipe_principal.nome}'.",
-                          details={'old_group_id': old_group_id, 'old_role': old_role, 
-                                   'new_group_id': equipe_principal.id, 'new_role': 'consultor'})
-    else:
-        flash('Erro: Não foi possível mover o usuário para uma equipe padrão. Crie uma "Equipe Principal".', 'danger')
-        log_system_action(action_type='TEAM_MEMBER_REMOVE_FAILED', entity_type='User', entity_id=user_to_remove.id, 
-                          description=f"Tentativa de remover '{user_to_remove.username}' da equipe '{grupo.nome}' falhou: Equipe Principal não encontrada.")
+    # Remove o usuário da equipe (define grupo como NULL)
+    old_group_name = user_to_remove.grupo.nome if user_to_remove.grupo else 'N/A'
+    user_to_remove.grupo_id = None
+    user_to_remove.role = 'consultor'
+    db.session.commit()
+    
+    flash(f'{user_to_remove.username} removido(a) da equipe {grupo.nome}.', 'info')
+    log_system_action(action_type='TEAM_MEMBER_REMOVED', entity_type='User', entity_id=user_to_remove.id, 
+                      description=f"Usuário '{user_to_remove.username}' removido da equipe '{old_group_name}'.",
+                      details={'old_group_id': old_group_id, 'old_role': old_role, 
+                               'new_group_id': None, 'new_role': 'consultor'})
     return redirect(url_for('main.team_details', group_id=group_id))
 
 @bp.route('/admin/users/add', methods=['POST'])
