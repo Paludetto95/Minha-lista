@@ -80,6 +80,12 @@
                                             title="Editar IP">
                                         <i class="fas fa-network-wired"></i>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#resetPasswordModal"
+                                            data-user-id="{{ user.id }}"
+                                            data-user-name="{{ user.username }}"
+                                            title="Redefinir Senha">
+                                        <i class="fas fa-key"></i>
+                                    </button>
                                     {% endif %}
                                     {% if user.role == 'consultor' %}
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"
@@ -184,6 +190,34 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="resetPasswordModalLabel">Redefinir Senha para</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="resetPasswordForm" action="" method="POST">
+        <div class="modal-body">
+            <div class="mb-3">
+                <label for="modalNewPassword" class="form-label">Nova Senha</label>
+                <input type="password" class="form-control" id="modalNewPassword" name="new_password" required minlength="6">
+                <small class="form-text text-muted">Mínimo de 6 caracteres</small>
+            </div>
+            <div class="mb-3">
+                <label for="modalConfirmPassword" class="form-label">Confirmar Nova Senha</label>
+                <input type="password" class="form-control" id="modalConfirmPassword" name="confirm_password" required minlength="6">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Redefinir Senha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock content %}
 
 {% block scripts %}
@@ -235,6 +269,40 @@ document.addEventListener('DOMContentLoaded', function () {
         var actionUrl = "{{ url_for('main.update_user_ip', user_id=0) }}".replace('0', userId);
         modalForm.setAttribute('action', actionUrl);
     });
+
+    var resetPasswordModal = document.getElementById('resetPasswordModal');
+    resetPasswordModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var userId = button.getAttribute('data-user-id');
+        var userName = button.getAttribute('data-user-name');
+
+        var modalTitle = resetPasswordModal.querySelector('.modal-title');
+        var modalForm = resetPasswordModal.querySelector('#resetPasswordForm');
+        var newPasswordInput = resetPasswordModal.querySelector('#modalNewPassword');
+        var confirmPasswordInput = resetPasswordModal.querySelector('#modalConfirmPassword');
+
+        modalTitle.textContent = 'Redefinir Senha para ' + userName;
+        newPasswordInput.value = '';
+        confirmPasswordInput.value = '';
+        
+        var actionUrl = "{{ url_for('main.reset_user_password', user_id=0) }}".replace('0', userId);
+        modalForm.setAttribute('action', actionUrl);
+    });
+
+    // Validação de senha no cliente
+    var resetPasswordForm = document.getElementById('resetPasswordForm');
+    if (resetPasswordForm) {
+        resetPasswordForm.addEventListener('submit', function(event) {
+            var newPassword = document.getElementById('modalNewPassword').value;
+            var confirmPassword = document.getElementById('modalConfirmPassword').value;
+            
+            if (newPassword !== confirmPassword) {
+                event.preventDefault();
+                alert('As senhas não coincidem. Por favor, tente novamente.');
+                return false;
+            }
+        });
+    }
 });
 </script>
 {% endblock scripts %}

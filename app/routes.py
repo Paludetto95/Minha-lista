@@ -999,6 +999,46 @@ def add_user():
                       details={'email': new_user.email, 'role': new_user.role, 'grupo_id': new_user.grupo_id, 'allowed_ip': new_user.allowed_ip})
     return redirect(url_for('main.manage_users'))
 
+@bp.route('/admin/users/reset_password/<int:user_id>', methods=['POST'])
+@login_required
+@require_role('super_admin')
+def reset_user_password(user_id):
+    if not current_user.is_master_admin:
+        flash('Você não tem permissão para executar esta ação.', 'danger')
+        log_system_action(action_type='PASSWORD_RESET_FAILED', entity_type='User', entity_id=user_id,
+                          description=f"Tentativa não autorizada de redefinir senha por '{current_user.username}'.",
+                          details={'reason': 'Não é master admin'})
+        return redirect(url_for('main.manage_users'))
+    
+    user = User.query.get_or_404(user_id)
+    new_password = request.form.get('new_password')
+    confirm_password = request.form.get('confirm_password')
+    
+    if not new_password or not confirm_password:
+        flash('Por favor, preencha todos os campos de senha.', 'danger')
+        return redirect(url_for('main.manage_users'))
+    
+    if new_password != confirm_password:
+        flash('As senhas não coincidem. Por favor, tente novamente.', 'danger')
+        log_system_action(action_type='PASSWORD_RESET_FAILED', entity_type='User', entity_id=user.id,
+                          description=f"Redefinição de senha de '{user.username}' falhou: senhas não coincidem.",
+                          details={'attempted_by': current_user.username})
+        return redirect(url_for('main.manage_users'))
+    
+    if len(new_password) < 6:
+        flash('A senha deve ter pelo menos 6 caracteres.', 'danger')
+        return redirect(url_for('main.manage_users'))
+    
+    user.set_password(new_password)
+    db.session.commit()
+    
+    flash(f'Senha do usuário {user.username} redefinida com sucesso!', 'success')
+    log_system_action(action_type='PASSWORD_RESET', entity_type='User', entity_id=user.id,
+                      description=f"Senha do usuário '{user.username}' foi redefinida pelo admin master '{current_user.username}'.",
+                      details={'reset_by': current_user.username, 'target_user_role': user.role})
+    
+    return redirect(url_for('main.manage_users'))
+
 @bp.route('/admin/users/update_ip/<int:user_id>', methods=['POST'])
 @login_required
 @require_role('super_admin')
@@ -2055,7 +2095,7 @@ def parceiro_monitor_data():
     consultants = User.query.filter_by(role='consultor', grupo_id=current_user.grupo_id).all()
     
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
-    now_in_brasilia = get_brasilia_time()
+    now_in_brasilia = datetime.utcnow().replace(tzinfo=pytz.UTC).astimezone(brasilia_tz)
     start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
     
     agents_data = []
@@ -2064,7 +2104,11 @@ def parceiro_monitor_data():
 
         inactivity_threshold = timedelta(minutes=2)
         if agent.last_activity_at:
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
+            # Convert last_activity_at (assumed to be UTC naive) to timezone-aware Brasilia time
+            if agent.last_activity_at.tzinfo is None:
+                aware_last_activity = pytz.UTC.localize(agent.last_activity_at).astimezone(brasilia_tz)
+            else:
+                aware_last_activity = agent.last_activity_at.astimezone(brasilia_tz)
             if (now_in_brasilia - aware_last_activity) > inactivity_threshold and agent.current_status != 'Offline':
                 real_status = 'Offline'
                 update_user_status(agent, 'Offline')
