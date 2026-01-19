@@ -82,10 +82,16 @@
                             <td class="text-center">{{ user.wallet_limit or 0 }}</td>
                             <td class="text-center">{{ user.daily_pull_limit or 0 }}</td>
                             <td class="text-center">
-                                <!-- DEBUG: current_user.is_master_admin = {{ current_user.is_master_admin }} -->
                                 <div class="d-flex gap-1 justify-content-center">
+                                    {% if current_user.role == 'super_admin' %}
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#resetPasswordModal"
+                                            data-user-id="{{ user.id }}"
+                                            data-user-name="{{ user.username }}"
+                                            title="Redefinir Senha">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                    {% endif %}
                                     {% if current_user.is_master_admin %}
-                                    <!-- MASTER ADMIN BUTTONS -->
                                     <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#editIpModal"
                                             data-user-id="{{ user.id }}"
                                             data-user-name="{{ user.username }}"
@@ -93,14 +99,6 @@
                                             title="Editar IP">
                                         <i class="fas fa-network-wired"></i>
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#resetPasswordModal"
-                                            data-user-id="{{ user.id }}"
-                                            data-user-name="{{ user.username }}"
-                                            title="Redefinir Senha">
-                                        <i class="fas fa-key"></i>
-                                    </button>
-                                    {% else %}
-                                    <!-- NOT MASTER ADMIN: is_master_admin = {{ current_user.is_master_admin }}, role = {{ current_user.role }} -->
                                     {% endif %}
                                     {% if user.role == 'consultor' %}
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editLimitsModal"

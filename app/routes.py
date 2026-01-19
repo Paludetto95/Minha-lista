@@ -1019,13 +1019,6 @@ def add_user():
 @login_required
 @require_role('super_admin')
 def reset_user_password(user_id):
-    if not current_user.is_master_admin:
-        flash('Você não tem permissão para executar esta ação.', 'danger')
-        log_system_action(action_type='PASSWORD_RESET_FAILED', entity_type='User', entity_id=user_id,
-                          description=f"Tentativa não autorizada de redefinir senha por '{current_user.username}'.",
-                          details={'reason': 'Não é master admin'})
-        return redirect(url_for('main.manage_users'))
-    
     user = User.query.get_or_404(user_id)
     new_password = request.form.get('new_password')
     confirm_password = request.form.get('confirm_password')
@@ -1050,7 +1043,7 @@ def reset_user_password(user_id):
     
     flash(f'Senha do usuário {user.username} redefinida com sucesso!', 'success')
     log_system_action(action_type='PASSWORD_RESET', entity_type='User', entity_id=user.id,
-                      description=f"Senha do usuário '{user.username}' foi redefinida pelo admin master '{current_user.username}'.",
+                      description=f"Senha do usuário '{user.username}' foi redefinida pelo super admin '{current_user.username}'.",
                       details={'reset_by': current_user.username, 'target_user_role': user.role})
     
     return redirect(url_for('main.manage_users'))
