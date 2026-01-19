@@ -291,7 +291,7 @@ def admin_dashboard():
 @require_role('super_admin')
 def admin_monitor_data():
     brasilia_tz = pytz.timezone('America/Sao_Paulo')
-    now_in_brasilia = get_brasilia_time()
+    now_in_brasilia = datetime.utcnow().replace(tzinfo=pytz.UTC).astimezone(brasilia_tz)
     start_of_day = now_in_brasilia.replace(hour=0, minute=0, second=0, microsecond=0)
 
     stats_query = db.session.query(
@@ -309,7 +309,11 @@ def admin_monitor_data():
         real_status = agent.current_status
         inactivity_threshold = timedelta(minutes=2)
         if agent.last_activity_at and agent.current_status != 'Offline':
-            aware_last_activity = brasilia_tz.localize(agent.last_activity_at) if agent.last_activity_at.tzinfo is None else agent.last_activity_at.astimezone(brasilia_tz)
+            # Convert last_activity_at (assumed to be UTC naive) to timezone-aware Brasilia time
+            if agent.last_activity_at.tzinfo is None:
+                aware_last_activity = pytz.UTC.localize(agent.last_activity_at).astimezone(brasilia_tz)
+            else:
+                aware_last_activity = agent.last_activity_at.astimezone(brasilia_tz)
             if (now_in_brasilia - aware_last_activity) > inactivity_threshold:
                 real_status = 'Offline'
         
